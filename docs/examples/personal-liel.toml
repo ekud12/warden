@@ -1,0 +1,12 @@
+# Personal rules for Liel's machine — enables git readonly + zero-trace
+# Copy to: ~/.warden/rules/personal.toml
+
+# Block all mutating git commands (add, commit, push, merge, etc.)
+git_readonly = true
+
+# Block AI attribution in code and commits
+[zero_trace]
+content_pattern = '(?i)(@author\s*(claude|ai)|co-?authored-by.*claude|generated\s+by\s+(ai|claude|copilot|llm))'
+cmd_pattern = '(?i)(\bclaude\b|\bcopilot\b|\bai[_-]?generated\b|\bllm\b)'
+write_pattern = '(echo|printf|tee|>>)'
+path_exclude = '(?i)[/\\.]claude[/\\]'

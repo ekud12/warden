@@ -1,0 +1,65 @@
+# Put this in ekud12/homebrew-tap/.github/workflows/update-formula.yml
+name: Update Formula
+
+on:
+  repository_dispatch:
+    types: [update-formula]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update warden.rb
+        run: |
+          VERSION="${{ github.event.client_payload.version }}"
+          VERSION="${VERSION#v}"
+          MAC_ARM="${{ github.event.client_payload.mac_arm_sha }}"
+          MAC_X64="${{ github.event.client_payload.mac_x64_sha }}"
+          LINUX_X64="${{ github.event.client_payload.linux_x64_sha }}"
+
+          cat > Formula/warden.rb << 'FORMULA'
+          class Warden < Formula
+            desc "AI Coding Session Guardian"
+            homepage "https://github.com/ekud12/warden"
+            version "VERSION_PLACEHOLDER"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/ekud12/warden/releases/download/vVERSION_PLACEHOLDER/warden-aarch64-apple-darwin"
+                sha256 "MAC_ARM_PLACEHOLDER"
+              else
+                url "https://github.com/ekud12/warden/releases/download/vVERSION_PLACEHOLDER/warden-x86_64-apple-darwin"
+                sha256 "MAC_X64_PLACEHOLDER"
+              end
+            end
+
+            on_linux do
+              url "https://github.com/ekud12/warden/releases/download/vVERSION_PLACEHOLDER/warden-x86_64-unknown-linux-gnu"
+              sha256 "LINUX_X64_PLACEHOLDER"
+            end
+
+            def install
+              bin.install Dir["warden*"].first => "warden"
+            end
+
+            test do
+              assert_match "warden", shell_output("#{bin}/warden version")
+            end
+          end
+          FORMULA
+
+          sed -i "s/VERSION_PLACEHOLDER/$VERSION/g" Formula/warden.rb
+          sed -i "s/MAC_ARM_PLACEHOLDER/$MAC_ARM/g" Formula/warden.rb
+          sed -i "s/MAC_X64_PLACEHOLDER/$MAC_X64/g" Formula/warden.rb
+          sed -i "s/LINUX_X64_PLACEHOLDER/$LINUX_X64/g" Formula/warden.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/warden.rb
+          git commit -m "Update warden to ${{ github.event.client_payload.version }}"
+          git push

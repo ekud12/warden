@@ -1,0 +1,26 @@
+[book]
+title = "Warden Documentation"
+authors = ["Liel Kaysari"]
+description = "Harness engineering for AI coding agents — runtime safety, intelligence, and governance"
+src = "docs"
+language = "en"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/ekud12/warden"
+edit-url-template = "https://github.com/ekud12/warden/edit/main/{path}"
+site-url = "/warden/"
+no-section-label = false
+
+[output.html.search]
+enable = true
+limit-results = 20
+use-hierarchical-headings = true
+
+[output.html.fold]
+enable = true
+level = 1

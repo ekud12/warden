@@ -1,0 +1,36 @@
+// ─── handlers — all hook handler modules ──────────────────────────────────────
+
+pub mod adaptation;
+pub mod auto_changelog;
+pub mod config_override;
+pub mod cross_session;
+pub mod describe;
+pub mod explain;
+pub mod export_sessions;
+pub mod git_guardian;
+pub mod git_summary;
+pub mod learning;
+pub mod mcp_server;
+pub mod permission_approve;
+pub mod postcompact;
+pub mod postfailure_guide;
+pub mod posttool_mcp;
+pub mod posttool_session;
+pub mod precompact_memory;
+pub mod pretool_bash;
+pub mod pretool_read;
+pub mod pretool_redirect;
+pub mod pretool_write;
+pub mod proc_mgmt;
+pub mod replay;
+pub mod session_end;
+pub mod session_start;
+pub mod smart_filter;
+pub mod stop_check;
+pub mod subagent_context;
+pub mod subagent_stop;
+pub mod task_completed;
+pub mod token_budget;
+pub mod truncate_filter;
+pub mod tui;
+pub mod userprompt_context;

@@ -1,0 +1,95 @@
+#!/usr/bin/env node
+// Warden npm/bun postinstall — downloads the platform-specific binary
+// to ~/.warden/bin/ and registers PATH.
+
+const { execSync, spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const https = require("https");
+
+const VERSION = require("../package.json").version;
+const REPO = "ekud12/warden";
+
+const PLATFORM_MAP = {
+  "win32-x64": "warden-x86_64-pc-windows-msvc.exe",
+  "win32-arm64": "warden-aarch64-pc-windows-msvc.exe",
+  "darwin-x64": "warden-x86_64-apple-darwin",
+  "darwin-arm64": "warden-aarch64-apple-darwin",
+  "linux-x64": "warden-x86_64-unknown-linux-gnu",
+  "linux-arm64": "warden-aarch64-unknown-linux-gnu",
+};
+
+async function main() {
+  const platform = `${os.platform()}-${os.arch()}`;
+  const binary = PLATFORM_MAP[platform];
+
+  if (!binary) {
+    console.error(`Unsupported platform: ${platform}`);
+    console.error("Install from source: cargo install warden-ai");
+    process.exit(0); // Don't fail npm install
+  }
+
+  const wardenHome = path.join(os.homedir(), ".warden");
+  const binDir = path.join(wardenHome, "bin");
+  const destName = os.platform() === "win32" ? "warden.exe" : "warden";
+  const dest = path.join(binDir, destName);
+
+  // Create directories
+  fs.mkdirSync(binDir, { recursive: true });
+  fs.mkdirSync(path.join(wardenHome, "rules"), { recursive: true });
+  fs.mkdirSync(path.join(wardenHome, "projects"), { recursive: true });
+
+  // Download binary from GitHub Releases
+  const url = `https://github.com/${REPO}/releases/download/v${VERSION}/${binary}`;
+  console.log(`Downloading warden v${VERSION} for ${platform}...`);
+
+  try {
+    await download(url, dest);
+    if (os.platform() !== "win32") {
+      fs.chmodSync(dest, 0o755);
+    }
+    console.log(`Installed to ${dest}`);
+
+    // Run warden init (non-interactive: just PATH + config)
+    try {
+      spawnSync(dest, ["version"], { stdio: "inherit" });
+    } catch (e) {
+      // Ignore — binary might need different setup
+    }
+
+    console.log("");
+    console.log("Run 'warden init' to complete setup (install CLI tools, configure hooks).");
+    console.log(`Or: 'warden install claude-code' / 'warden install gemini-cli'`);
+  } catch (err) {
+    console.error(`Download failed: ${err.message}`);
+    console.error("Install from source: cargo install warden-ai");
+    process.exit(0); // Don't fail npm install
+  }
+}
+
+function download(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const request = (urlStr) => {
+      https.get(urlStr, (response) => {
+        if (response.statusCode === 302 || response.statusCode === 301) {
+          request(response.headers.location);
+          return;
+        }
+        if (response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}`));
+          return;
+        }
+        response.pipe(file);
+        file.on("finish", () => { file.close(); resolve(); });
+      }).on("error", reject);
+    };
+    request(url);
+  });
+}
+
+main().catch((e) => {
+  console.error(e.message);
+  process.exit(0);
+});

@@ -1,0 +1,10 @@
+{
+  "name": "warden",
+  "version": "1.0.0",
+  "description": "AI Coding Session Guardian — safety rules, substitutions, session telemetry, adaptive thresholds, runtime analytics",
+  "author": "Liel Kaysari (ekud12)",
+  "homepage": "https://github.com/ekud12/warden",
+  "license": "MIT",
+  "keywords": ["safety", "hooks", "telemetry", "analytics", "guardian"],
+  "hooks": "hooks/"
+}

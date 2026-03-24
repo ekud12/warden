@@ -1,0 +1,86 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden pretool-bash" }]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden pretool-read" }]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden pretool-write" }]
+      },
+      {
+        "matcher": "Grep|Glob|aidex_signature",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden pretool-redirect" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden posttool-session" }]
+      },
+      {
+        "matcher": "mcp__",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden posttool-mcp" }]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden permission-approve" }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden session-start" }]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden session-end" }]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden userprompt-context" }]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden precompact-memory" }]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden stop-check" }]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden postfailure-guide" }]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden subagent-context" }]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden subagent-stop" }]
+      }
+    ]
+  }
+}

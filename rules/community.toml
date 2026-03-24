@@ -1,0 +1,21 @@
+# Warden Community Rules — Substitutions & Advisories (opt-in)
+# These rules suggest better CLI tools and patterns.
+# Disable specific rules: warden restrictions disable substitution.grep
+
+[substitutions]
+# Built-in substitutions (grep→rg, find→fd, etc.) are compiled in.
+# Add custom substitutions here:
+# patterns = [
+#   { match = '^\s*wget\b', msg = "Use xh instead of wget" },
+# ]
+
+[advisories]
+# Built-in advisories (docker CLI→MCP, symbol search→aidex) are compiled in.
+# Add custom advisories here:
+# patterns = [
+#   { match = '^\s*npm run\b', msg = "Consider using a just recipe instead" },
+# ]
+
+[auto_allow]
+# Commands auto-approved without permission prompt:
+# patterns = ["^my-safe-tool "]

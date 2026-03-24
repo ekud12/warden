@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "description": "AI Coding Session Guardian",
+  "homepage": "https://github.com/ekud12/warden",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/ekud12/warden/releases/download/v1.0.0/warden-x86_64-pc-windows-msvc.exe",
+      "hash": "PLACEHOLDER"
+    }
+  },
+  "bin": "warden-x86_64-pc-windows-msvc.exe",
+  "post_install": "Rename-Item \"$dir\\warden-x86_64-pc-windows-msvc.exe\" \"warden.exe\"",
+  "checkver": { "github": "https://github.com/ekud12/warden" },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/ekud12/warden/releases/download/v$version/warden-x86_64-pc-windows-msvc.exe"
+      }
+    }
+  }
+}

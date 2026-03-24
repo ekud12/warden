@@ -1,0 +1,87 @@
+# ~/.warden/config.toml — Full annotated example
+# Created by `warden init`. All values below show defaults.
+# See also: ~/.warden/rules/ for pattern customization.
+
+# ── Assistant Detection ──────────────────────────────────────────────────────
+[assistant]
+# How warden identifies the AI coding assistant.
+# "auto"        — detect from environment (recommended)
+# "claude-code" — force Claude Code adapter
+# "gemini-cli"  — force Gemini CLI adapter
+type = "auto"
+
+# ── Tool Integrations ────────────────────────────────────────────────────────
+[tools]
+# Auto-detected during `warden init`. Set to false to disable specific checks.
+# When true, warden enforces substitutions and just-first transforms for these.
+justfile = true    # Enable just-first: redirect raw commands to just recipes
+rg = true          # Enforce grep -> rg substitution
+fd = true          # Enforce find -> fd substitution
+bat = true         # Enforce cat -> bat substitution
+eza = true         # Enforce ls -> eza substitution
+dust = true        # Enforce du -> dust substitution
+xh = true          # Enforce curl -> xh substitution
+tsx = true         # Enforce ts-node -> tsx substitution
+huniq = true       # Enforce sort|uniq -> huniq substitution
+
+# ── Restriction Overrides ────────────────────────────────────────────────────
+[restrictions]
+# Disable specific restrictions by their ID. Only restrictions with
+# can_disable = true can be disabled. Safety restrictions cannot be disabled.
+#
+# Run `warden restrictions list` to see all restriction IDs and their status.
+# Run `warden restrictions disable <id>` to disable interactively.
+#
+# Categories: Safety, Destructive, Substitution, Governance, Hallucination,
+#             ZeroTrace, Redirect, Permission
+#
+# Examples of disableable restrictions:
+#   "substitution.cat"    — stop enforcing cat -> bat
+#   "substitution.grep"   — stop enforcing grep -> rg
+#   "substitution.sd"     — stop blocking sd on Windows
+#   "read.post-edit"      — allow re-reading files immediately after edit
+#   "read.dedup"          — allow duplicate reads of same content
+#   "read.large-file"     — allow reading files >50KB without outline first
+#   "read.progressive"    — disable turn-based read tightening
+#   "redirect.grep-tool"  — stop redirecting Grep tool to rg
+#   "redirect.glob-tool"  — stop redirecting Glob tool to fd
+disabled = []
+
+# ── Telemetry / Analytics ────────────────────────────────────────────────────
+[telemetry]
+# All analytics features are on by default. Set to false to opt out of
+# specific features. Analytics data stays local (~/.warden/projects/).
+# No data is ever sent externally.
+
+anomaly_detection = true       # Welford's online z-score flagging for unusual patterns
+quality_predictor = true       # Session quality prediction from early snapshots
+cost_tracking = true           # Token cost categorization and tracking
+error_prevention = true        # Proactive error slope detection and advisories
+token_forecast = true          # Linear regression for token budget / compaction ETA
+smart_truncation = true        # Intelligent output truncation for verbose commands
+project_dna = true             # Per-project statistical fingerprint
+rule_effectiveness = true      # Per-rule fire count + quality delta scoring
+drift_velocity = true          # Deny-rate tracking in sliding window
+compaction_optimizer = true    # Context compaction timing optimization
+command_recovery = true        # CLI knowledge base (flag fixes, install hints)
+
+# ── Threshold Overrides (advanced) ───────────────────────────────────────────
+# All thresholds have sane compiled defaults. Override only when needed.
+# These can also be set per-project in .warden/rules.toml [thresholds].
+#
+# [thresholds]
+# max_read_size_kb = 50             # Max file size for Read governance (KB)
+# max_mcp_output_kb = 15            # Max MCP tool output size (KB)
+# max_string_len = 2000             # Max string length before trimming
+# max_array_len = 30                # Max array length before trimming
+# doom_loop_threshold = 3           # Identical tool calls before warning
+# offload_threshold_kb = 8          # Output size before writing to scratch file
+# token_budget_advisory_k = 700     # Token budget warning threshold (K tokens)
+# progressive_read_deny_turn = 80   # Turn when progressive read denial activates
+# progressive_read_advisory_turn = 50 # Turn when progressive read advisory starts
+# rules_reinject_interval = 30      # Turns between rules re-injection
+# drift_threshold = 3               # Deny count in 10-turn window before advisory
+# error_slope_threshold = 0.5       # Error rate slope triggering advisory
+# stale_milestone_turns = 10        # Turns without milestone before advisory
+# token_burn_threshold_k = 15       # Token burn rate warning (K tokens/turn)
+# stagnation_turns = 3              # Consecutive stagnation snapshots before advisory

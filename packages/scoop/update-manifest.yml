@@ -1,0 +1,50 @@
+# Put this in ekud12/scoop-bucket/.github/workflows/update-manifest.yml
+name: Update Manifest
+
+on:
+  repository_dispatch:
+    types: [update-manifest]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update warden.json
+        run: |
+          VERSION="${{ github.event.client_payload.version }}"
+          VERSION="${VERSION#v}"
+          SHA="${{ github.event.client_payload.win_x64_sha }}"
+
+          cat > bucket/warden.json << EOF
+          {
+            "version": "$VERSION",
+            "description": "AI Coding Session Guardian",
+            "homepage": "https://github.com/ekud12/warden",
+            "license": "MIT",
+            "architecture": {
+              "64bit": {
+                "url": "https://github.com/ekud12/warden/releases/download/v$VERSION/warden-x86_64-pc-windows-msvc.exe",
+                "hash": "$SHA"
+              }
+            },
+            "bin": [["warden-x86_64-pc-windows-msvc.exe", "warden"]],
+            "checkver": { "github": "https://github.com/ekud12/warden" },
+            "autoupdate": {
+              "architecture": {
+                "64bit": {
+                  "url": "https://github.com/ekud12/warden/releases/download/v\$version/warden-x86_64-pc-windows-msvc.exe"
+                }
+              }
+            }
+          }
+          EOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/warden.json
+          git commit -m "Update warden to ${{ github.event.client_payload.version }}"
+          git push

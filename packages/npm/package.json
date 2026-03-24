@@ -1,0 +1,23 @@
+{
+  "name": "warden-ai",
+  "version": "1.0.0",
+  "description": "AI Coding Session Guardian — runtime intelligence layer for Claude Code, Gemini CLI, and more",
+  "keywords": ["ai", "coding", "hooks", "claude", "gemini", "guardian", "session"],
+  "author": "Liel Kaysari (ekud12)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ekud12/warden"
+  },
+  "bin": {
+    "warden": "bin/warden"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "os": ["win32", "darwin", "linux"],
+  "cpu": ["x64", "arm64"],
+  "engines": {
+    "node": ">=16"
+  }
+}

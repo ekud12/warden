@@ -1,0 +1,63 @@
+# .warden/rules.toml — Per-project rules overlay
+#
+# Place this file at <project-root>/.warden/rules.toml
+# It merges on top of: compiled defaults -> ~/.warden/rules/personal.toml -> this file
+#
+# Project rules have highest priority. Set `replace = true` on any section
+# to discard all preceding patterns and use only what's defined here.
+
+# ── Thresholds ───────────────────────────────────────────────────────────────
+# Override defaults for this specific project.
+[thresholds]
+max_read_size_kb = 100              # Allow larger files (default: 50KB)
+progressive_read_deny_turn = 100    # Delay context pressure (default: 80)
+progressive_read_advisory_turn = 70 # Delay advisory too (default: 50)
+doom_loop_threshold = 5             # More tolerance for repeated commands (default: 3)
+offload_threshold_kb = 16           # Larger offload buffer (default: 8KB)
+token_budget_advisory_k = 800       # Later token budget warning (default: 700K)
+stale_milestone_turns = 15          # More patience before stale advisory (default: 10)
+
+# ── Auto-Allow (project-specific safe commands) ──────────────────────────────
+# Bypass the permission prompt for commands safe in this project's context.
+[auto_allow]
+patterns = [
+    r"^\s*dotnet\s+(build|test|publish|restore|ef)\b",
+    r"^\s*npm\s+run\s+(dev|start|build|test|lint)\b",
+    r"^\s*docker\s+compose\s+(up|down|ps|logs)\b",
+    r"^\s*terraform\s+(init|plan|apply|destroy)\b",
+    r"^\s*kubectl\s+(get|describe|logs)\b",
+]
+
+# ── Project-Specific Advisories ──────────────────────────────────────────────
+[advisories]
+patterns = [
+    { match = '\bnpm install\b', msg = "Advisory: This project uses pnpm. Run pnpm install instead." },
+    { match = '\byarn\s', msg = "Advisory: This project uses pnpm. Run pnpm instead of yarn." },
+]
+
+# ── Project-Specific Substitutions ───────────────────────────────────────────
+# Add project-level tool enforcement on top of global substitutions.
+[substitutions]
+patterns = [
+    { match = r'\bpytest\b', msg = "BLOCKED: Use `just test` instead of pytest directly." },
+]
+
+# ── Just-First (project-specific mappings) ───────────────────────────────────
+[just]
+map = [
+    { prefix = "npm run build", recipe = "just build" },
+    { prefix = "npm run test", recipe = "just test" },
+    { prefix = "npm run lint", recipe = "just lint" },
+    { prefix = "cargo test", recipe = "just test" },
+]
+verbose = ["build", "test", "deploy", "docker-compose-up"]
+short = ["status", "version", "env", "check"]
+
+# ── Restriction Overrides (project-level) ────────────────────────────────────
+# Disable restrictions that don't make sense for this project.
+# Merges with global disabled list (union, not replace).
+[restrictions]
+disable = [
+    "substitution.cat",      # This project uses cat in scripts intentionally
+    "read.post-edit",        # Fast iteration workflow needs immediate re-reads
+]

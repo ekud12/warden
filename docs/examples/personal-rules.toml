@@ -1,0 +1,92 @@
+# ~/.warden/rules/personal.toml — Personal rules overlay
+#
+# Merge order: compiled defaults -> personal.toml -> project rules.toml
+# Each section appends to defaults unless `replace = true` is set.
+#
+# Pattern entries use Rust regex syntax (https://docs.rs/regex).
+# Every entry has:
+#   match = 'REGEX'   — pattern to match against the command
+#   msg   = "STRING"  — message shown on deny/advisory
+
+# ── Custom Safety Patterns (DENY — blocks execution) ────────────────────────
+# Append your own safety denials alongside the built-in ones.
+# Set `replace = true` to discard all compiled defaults (not recommended).
+[safety]
+# replace = false
+patterns = [
+    { match = '^\s*poweroff\b', msg = "BLOCKED: poweroff is not allowed" },
+    { match = '^\s*shutdown\b', msg = "BLOCKED: shutdown is not allowed" },
+    { match = '^\s*reboot\b', msg = "BLOCKED: reboot is not allowed" },
+]
+
+# ── Custom Substitutions (DENY — forces preferred tool) ─────────────────────
+# Built-in substitutions: grep->rg, find->fd, curl->xh, ts-node->tsx,
+#                         du->dust, sort|uniq->huniq, sd (Windows)
+[substitutions]
+patterns = [
+    { match = '\bwget\b', msg = "Use xh instead of wget. Example: xh GET https://example.com" },
+    { match = '\bhttp\b', msg = "Use xh instead of httpie. Same syntax: xh GET url" },
+]
+
+# ── Custom Advisories (non-blocking hints) ───────────────────────────────────
+# The command still runs, but an advisory message is injected.
+[advisories]
+patterns = [
+    { match = '\bnpm run\b', msg = "Advisory: Consider using a just recipe instead of npm run" },
+    { match = '\byarn\s', msg = "Advisory: This project uses pnpm. Consider pnpm instead of yarn" },
+    { match = '\bpython\s', msg = "Advisory: Consider using uv run instead of bare python" },
+]
+
+# ── Custom Hallucination Advisories (suspicious but maybe legit) ─────────────
+[hallucination_advisory]
+patterns = [
+    { match = '\bnpx\s+create-', msg = "Advisory: Scaffolding command detected. Verify this is intentional." },
+]
+
+# ── Auto-Allow Patterns (bypass permission prompt) ──────────────────────────
+# Commands matching these regexes are auto-approved without confirmation.
+# Only add genuinely safe, read-only commands.
+[auto_allow]
+patterns = [
+    "^my-safe-tool ",
+    r"^\s*az\s+(account|group|resource)\s+list\b",
+    r"^\s*kubectl\s+get\b",
+    r"^\s*terraform\s+(plan|show|state\s+list)\b",
+]
+
+# ── Just-First Configuration ────────────────────────────────────────────────
+# Map raw command prefixes to just recipes.
+# When a Justfile exists, matching commands are transformed automatically.
+[just]
+# replace_map = false   # Set true to discard compiled just mappings
+map = [
+    { prefix = "make build", recipe = "just build" },
+    { prefix = "make test", recipe = "just test" },
+    { prefix = "make lint", recipe = "just lint" },
+]
+# Recipes that produce verbose output (wrapped with truncation filter)
+verbose = ["deploy", "docker-build"]
+# Recipes that produce short output (auto-allowed)
+short = ["version", "env"]
+
+# ── Sensitive Paths (DENY writes to these paths) ────────────────────────────
+[sensitive_paths_deny]
+patterns = [
+    { match = '/\.vault/', msg = "BLOCKED: Cannot write to .vault/ directory" },
+    { match = '/secrets\.yaml$', msg = "BLOCKED: Cannot write to secrets.yaml" },
+]
+
+# ── Sensitive Paths (WARN but allow) ────────────────────────────────────────
+[sensitive_paths_warn]
+patterns = [
+    { match = '/\.config/', msg = "Warning: Modifying .config/ directory" },
+]
+
+# ── Zero-Trace Overrides ────────────────────────────────────────────────────
+# Override the default regex patterns for AI attribution blocking.
+# Usually the defaults are fine — only change if you have custom needs.
+# [zero_trace]
+# content_pattern = '(?i)generated\s+by\s+claude'
+# cmd_pattern = '(?i)(\bclaude\b|\bcopilot\b)'
+# write_pattern = '(echo|printf|tee|>>)'
+# path_exclude = '(?i)[/\\.]claude[/\\]'

@@ -1,0 +1,436 @@
+// ─── daemon — background pipe server for warden ───────────────────────────────
+//
+// Transparent daemon that compiles regexes once, holds session state in memory,
+// and responds to hook requests via named pipe IPC.
+//
+// Lifecycle:
+//   - Auto-started on session-start (if pipe not connectable)
+//   - Persists across sessions (like Docker Desktop)
+//   - Auto-stops after 1 hour idle (re-spawned on next session-start)
+//   - Auto-restarts on binary rebuild (mtime mismatch detection)
+//   - Falls back to CLI mode if daemon crashes
+//
+// Named pipe: \\.\pipe\{PIPE_PREFIX}-{username}
+// Protocol: length-prefixed JSON request → length-prefixed JSON response
+// ──────────────────────────────────────────────────────────────────────────────
+
+use crate::common;
+use crate::ipc::{self, DaemonRequest, DaemonResponse};
+use std::io::{Read, Write};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::HANDLE;
+
+/// Timeout for reading a request after client connects (prevents indefinite block)
+const READ_TIMEOUT_SECS: u64 = 30;
+
+/// Idle timeout: auto-shutdown after 1 hour with no requests
+const IDLE_TIMEOUT_SECS: u64 = 3600;
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Run the daemon server loop.
+/// `source_mtime` is the mtime of the original binary at the time
+/// this daemon copy was spawned. Used to detect rebuilds.
+pub fn run_server(source_mtime: u64) {
+    let pid = std::process::id();
+    ipc::write_pid(pid);
+
+    let startup_mtime = source_mtime;
+    let startup_rules_mtime = crate::rules::rules_mtime();
+
+    // Enable in-memory caching for session state and log buffering
+    common::enable_daemon_mode();
+
+    common::log("daemon", &format!("Starting daemon (pid={}, mtime={})", pid, startup_mtime));
+
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let last_activity = Arc::new(AtomicU64::new(now_secs()));
+
+    // Idle timeout watchdog — shuts down daemon after 1 hour of no requests
+    {
+        let last_act = Arc::clone(&last_activity);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(Duration::from_secs(60));
+                let idle_secs = now_secs().saturating_sub(last_act.load(Ordering::Relaxed));
+                if idle_secs >= IDLE_TIMEOUT_SECS {
+                    common::log("daemon", "Idle timeout (1h) — auto-shutdown");
+                    ipc::remove_pid_file();
+                    std::process::exit(0);
+                }
+            }
+        });
+    }
+
+    // Main server loop
+    loop {
+        if shutdown.load(Ordering::Relaxed) {
+            break;
+        }
+
+        match accept_connection() {
+            Some(mut pipe) => {
+                last_activity.store(now_secs(), Ordering::Relaxed);
+
+                let request = match read_request_with_timeout(&mut pipe, READ_TIMEOUT_SECS) {
+                    Some(r) => r,
+                    None => continue,
+                };
+
+                // Handle shutdown
+                if request.subcmd == "shutdown" {
+                    common::log("daemon", "Shutdown requested");
+                    shutdown.store(true, Ordering::Relaxed);
+                    let response = DaemonResponse {
+                        stdout: String::new(),
+                        exit_code: 0,
+                    };
+                    let _ = write_response(&mut pipe, &response);
+                    break;
+                }
+
+                // Handle status query
+                if request.subcmd == "daemon-status" {
+                    let response = DaemonResponse {
+                        stdout: format!("{{\"pid\":{},\"mtime\":{}}}", pid, startup_mtime),
+                        exit_code: 0,
+                    };
+                    let _ = write_response(&mut pipe, &response);
+                    continue;
+                }
+
+                // Binary rebuild detection: client mtime differs from our startup mtime
+                if request.binary_mtime != 0 && startup_mtime != 0
+                    && request.binary_mtime != startup_mtime
+                {
+                    common::log(
+                        "daemon",
+                        &format!(
+                            "Binary rebuild detected (daemon={}, client={}), shutting down",
+                            startup_mtime, request.binary_mtime
+                        ),
+                    );
+                    // Tell client to restart — don't process this request
+                    let response = DaemonResponse {
+                        stdout: String::new(),
+                        exit_code: ipc::EXIT_RESTART,
+                    };
+                    let _ = write_response(&mut pipe, &response);
+                    // Shut down so new daemon can start
+                    shutdown.store(true, Ordering::Relaxed);
+                    break;
+                }
+
+                // Rules.toml change detection: restart daemon to reload merged rules
+                if request.rules_mtime != 0 && startup_rules_mtime != 0
+                    && request.rules_mtime != startup_rules_mtime
+                {
+                    common::log(
+                        "daemon",
+                        &format!(
+                            "Rules.toml changed (daemon={}, client={}), shutting down",
+                            startup_rules_mtime, request.rules_mtime
+                        ),
+                    );
+                    let response = DaemonResponse {
+                        stdout: String::new(),
+                        exit_code: ipc::EXIT_RESTART,
+                    };
+                    let _ = write_response(&mut pipe, &response);
+                    shutdown.store(true, Ordering::Relaxed);
+                    break;
+                }
+
+                // Set per-project CWD before dispatch (thread-local for isolation)
+                if !request.cwd.is_empty() {
+                    common::set_project_cwd(&request.cwd);
+                }
+
+                // Dispatch to handler — run in-process with stdout capture
+                let response = dispatch_handler(&request.subcmd, &request.payload);
+                let _ = write_response(&mut pipe, &response);
+
+                // Flush buffered logs and debounced session state after each request
+                common::flush_daemon_buffers();
+            }
+            None => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+
+    // Cleanup — flush any remaining buffered state
+    common::log("daemon", "Daemon shutting down");
+    common::flush_daemon_buffers();
+    ipc::remove_pid_file();
+    common::log("daemon", "Daemon stopped");
+    common::flush_daemon_buffers();
+}
+
+/// Dispatch a hook subcmd to its handler in-process with stdout capture
+fn dispatch_handler(subcmd: &str, payload: &str) -> DaemonResponse {
+    let handler_start = Instant::now();
+    common::start_capture();
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        match subcmd {
+            "pretool-bash" => crate::handlers::pretool_bash::run(payload),
+            "pretool-read" => crate::handlers::pretool_read::run(payload),
+            "pretool-write" => crate::handlers::pretool_write::run(payload),
+            "pretool-redirect" => crate::handlers::pretool_redirect::run(payload),
+            "permission-approve" => crate::handlers::permission_approve::run(payload),
+            "posttool-session" => crate::handlers::posttool_session::run(payload),
+            "posttool-mcp" => crate::handlers::posttool_mcp::run(payload),
+            "session-start" => crate::handlers::session_start::run(payload),
+            "session-end" => crate::handlers::session_end::run(payload),
+            "precompact-memory" => crate::handlers::precompact_memory::run(payload),
+            "postcompact" => crate::handlers::postcompact::run(payload),
+            "stop-check" => crate::handlers::stop_check::run(payload),
+            "userprompt-context" => crate::handlers::userprompt_context::run(payload),
+            "subagent-context" => crate::handlers::subagent_context::run(payload),
+            "subagent-stop" => crate::handlers::subagent_stop::run(payload),
+            "postfailure-guide" => crate::handlers::postfailure_guide::run(payload),
+            "task-completed" => crate::handlers::task_completed::run(payload),
+            _ => {}
+        }
+    }));
+
+    let stdout = common::take_capture();
+    let elapsed_ms = handler_start.elapsed().as_millis();
+    common::log("daemon", &format!("DISPATCH {} {}ms", subcmd, elapsed_ms));
+    DaemonResponse {
+        stdout,
+        exit_code: if result.is_ok() { 0 } else { 1 },
+    }
+}
+
+// ─── Platform-specific pipe server ───────────────────────────────────────────
+
+#[cfg(windows)]
+struct ServerPipe {
+    handle: HANDLE,
+}
+
+#[cfg(windows)]
+fn accept_connection() -> Option<ServerPipe> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Pipes::{
+        ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
+    };
+
+    let pipe_path = ipc::pipe_name();
+    let wide_path: Vec<u16> = OsStr::new(&pipe_path)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    // SAFETY: wide_path is null-terminated; handle checked against INVALID_HANDLE_VALUE; closed on error paths.
+    unsafe {
+        let handle = CreateNamedPipeW(
+            wide_path.as_ptr(),
+            0x00000003, // PIPE_ACCESS_DUPLEX
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+            10,    // max instances
+            4096,  // out buffer
+            4096,  // in buffer
+            100,   // default timeout ms
+            std::ptr::null(),
+        );
+
+        if handle == INVALID_HANDLE_VALUE {
+            return None;
+        }
+
+        let connected = ConnectNamedPipe(handle, std::ptr::null_mut());
+        if connected == 0 {
+            let err = windows_sys::Win32::Foundation::GetLastError();
+            // ERROR_PIPE_CONNECTED = 535
+            if err != 535 {
+                windows_sys::Win32::Foundation::CloseHandle(handle);
+                return None;
+            }
+        }
+
+        Some(ServerPipe { handle })
+    }
+}
+
+#[cfg(windows)]
+impl Read for ServerPipe {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use windows_sys::Win32::Storage::FileSystem::ReadFile;
+        let mut bytes_read: u32 = 0;
+        // SAFETY: self.handle is a valid pipe from CreateNamedPipeW; buf is valid for buf.len() bytes.
+        let ok = unsafe {
+            ReadFile(
+                self.handle,
+                buf.as_mut_ptr(),
+                buf.len() as u32,
+                &mut bytes_read,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(bytes_read as usize)
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Write for ServerPipe {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        use windows_sys::Win32::Storage::FileSystem::WriteFile;
+        let mut bytes_written: u32 = 0;
+        // SAFETY: self.handle is a valid pipe handle; buf is valid for buf.len() bytes.
+        let ok = unsafe {
+            WriteFile(
+                self.handle,
+                buf.as_ptr(),
+                buf.len() as u32,
+                &mut bytes_written,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(bytes_written as usize)
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        use windows_sys::Win32::Storage::FileSystem::FlushFileBuffers;
+        // SAFETY: self.handle is a valid pipe handle; FlushFileBuffers only requires a valid handle.
+        let ok = unsafe { FlushFileBuffers(self.handle) };
+        if ok == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ServerPipe {
+    fn drop(&mut self) {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Pipes::DisconnectNamedPipe;
+        // SAFETY: self.handle is valid for the lifetime of ServerPipe; Drop runs exactly once.
+        unsafe {
+            DisconnectNamedPipe(self.handle);
+            CloseHandle(self.handle);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+struct ServerPipe;
+
+#[cfg(not(windows))]
+fn accept_connection() -> Option<ServerPipe> {
+    None
+}
+
+#[cfg(not(windows))]
+impl Read for ServerPipe {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+    }
+}
+
+#[cfg(not(windows))]
+impl Write for ServerPipe {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+    }
+}
+
+// ─── Protocol helpers ────────────────────────────────────────────────────────
+
+/// Read a request with a timeout to prevent indefinite blocking.
+/// Uses PeekNamedPipe on Windows to poll for data availability.
+fn read_request_with_timeout(pipe: &mut ServerPipe, timeout_secs: u64) -> Option<DaemonRequest> {
+    #[cfg(windows)]
+    {
+        wait_for_data(pipe, Duration::from_secs(timeout_secs))?;
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = timeout_secs;
+    }
+    read_request(pipe)
+}
+
+/// Wait until data is available on the pipe, or timeout.
+/// Returns Some(()) if data available, None on timeout.
+#[cfg(windows)]
+fn wait_for_data(pipe: &ServerPipe, timeout: Duration) -> Option<()> {
+    use windows_sys::Win32::System::Pipes::PeekNamedPipe;
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        let mut available: u32 = 0;
+        // SAFETY: pipe.handle is a valid server pipe; passing null buffers with size 0 is valid for peek.
+        let ok = unsafe {
+            PeekNamedPipe(
+                pipe.handle,
+                std::ptr::null_mut(),
+                0,
+                std::ptr::null_mut(),
+                &mut available,
+                std::ptr::null_mut(),
+            )
+        };
+        if ok != 0 && available > 0 {
+            return Some(());
+        }
+        if ok == 0 {
+            // Pipe error (client disconnected)
+            return None;
+        }
+        if Instant::now() >= deadline {
+            common::log("daemon", "Read timeout — client didn't send data");
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+fn read_request<R: Read>(pipe: &mut R) -> Option<DaemonRequest> {
+    let mut len_buf = [0u8; 4];
+    pipe.read_exact(&mut len_buf).ok()?;
+    let len = u32::from_le_bytes(len_buf) as usize;
+
+    if len > 1_048_576 {
+        return None;
+    }
+
+    let mut buf = vec![0u8; len];
+    pipe.read_exact(&mut buf).ok()?;
+    serde_json::from_slice(&buf).ok()
+}
+
+fn write_response<W: Write>(pipe: &mut W, response: &DaemonResponse) -> Option<()> {
+    let bytes = serde_json::to_vec(response).ok()?;
+    let len = bytes.len() as u32;
+    pipe.write_all(&len.to_le_bytes()).ok()?;
+    pipe.write_all(&bytes).ok()?;
+    pipe.flush().ok()?;
+    Some(())
+}

@@ -1,0 +1,53 @@
+# Build
+/target/
+/book/
+*.pdb
+*.exe.old
+
+# Rust
+**/*.rs.bk
+Cargo.lock.bak
+
+# User state (never commit)
+.warden/projects/
+.warden/config.toml
+.warden/rules/personal.toml
+.warden/stats.json
+.warden/providers/
+
+# Session artifacts
+session-state*.json
+session-notes.jsonl
+*.tmp
+*.lock
+
+# OS
+.DS_Store
+Desktop.ini
+Thumbs.db
+ehthumbs.db
+._*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Dev/test artifacts
+nul
+_write_test.py
+write_tests.py
+bench.ps1
+bench.sh
+test_hooks.sh
+v58-plan.md
+IMPROVMENTS.md
+deploy.ps1
+
+# Aidex (local index, regenerated)
+.aidex/
+
+# Claude Code (session-specific)
+.claude/

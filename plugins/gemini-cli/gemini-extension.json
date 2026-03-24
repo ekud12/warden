@@ -1,0 +1,40 @@
+{
+  "name": "warden",
+  "version": "1.0.0",
+  "description": "AI Coding Session Guardian — safety rules, substitutions, session telemetry, adaptive thresholds",
+  "author": "Liel Kaysari (ekud12)",
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden pretool-bash" }]
+      },
+      {
+        "matcher": "read_file",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden pretool-read" }]
+      },
+      {
+        "matcher": "write_file|replace",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden pretool-write" }]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "run_shell_command|write_file|replace",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden posttool-session" }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden session-start" }]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "~/.warden/bin/warden session-end" }]
+      }
+    ]
+  }
+}

@@ -47,19 +47,21 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Rename binary
+      - name: Package binaries
         shell: bash
         run: |
-          src="target/${{ matrix.target }}/release/${{ matrix.artifact }}"
           ext=""
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then ext=".exe"; fi
-          cp "$src" "warden-${{ matrix.target }}${ext}"
+          cp "target/${{ matrix.target }}/release/warden${ext}" "warden-${{ matrix.target }}${ext}"
+          cp "target/${{ matrix.target }}/release/warden-relay${ext}" "warden-relay-${{ matrix.target }}${ext}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: warden-${{ matrix.target }}
-          path: warden-${{ matrix.target }}*
+          path: |
+            warden-${{ matrix.target }}*
+            warden-relay-${{ matrix.target }}*
 
   # ── GitHub Release ───────────────────────────────────────────────────────
   github-release:
@@ -74,13 +76,14 @@ jobs:
 
       - name: Generate checksums
         run: |
-          sha256sum warden-* > checksums-sha256.txt
+          sha256sum warden-* warden-relay-* > checksums-sha256.txt
           cat checksums-sha256.txt
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             warden-*
+            warden-relay-*
             checksums-sha256.txt
           generate_release_notes: true
           draft: false

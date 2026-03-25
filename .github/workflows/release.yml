@@ -80,19 +80,18 @@ jobs:
           cat checksums-sha256.txt
 
       - name: Delete existing release if re-tagging
-        run: gh release delete "${{ github.ref_name }}" --yes --cleanup-tag 2>/dev/null || true
+        run: gh release delete "${{ github.ref_name }}" --yes 2>/dev/null || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            warden-*
-            warden-relay-*
-            checksums-sha256.txt
-          generate_release_notes: true
-          draft: false
-          fail_on_unmatched_files: false
+      - name: Create release and upload assets
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            warden-* warden-relay-* checksums-sha256.txt \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── Publish to crates.io ─────────────────────────────────────────────────
   crates-io:

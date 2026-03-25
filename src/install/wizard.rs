@@ -11,10 +11,10 @@
 //   8. Migrate from ~/.hookctl/ if exists
 // ──────────────────────────────────────────────────────────────────────────────
 
+use super::{ensure_dirs, home_dir, install_binary, path, tools, write_default_config};
 use crate::assistant::Assistant;
 use crate::constants;
-use super::{path, tools, ensure_dirs, install_binary, write_default_config, home_dir};
-use std::io::{self, Write, BufRead};
+use std::io::{self, BufRead, Write};
 
 /// Run the full init wizard
 pub fn run() {
@@ -60,9 +60,10 @@ pub fn run() {
         let icon = if status.installed { "+" } else { "-" };
         eprintln!("  [{}] {} ({})", icon, status.name, status.binary);
         if !status.installed
-            && let Some(tool) = tools::TOOLS.iter().find(|t| t.name == status.name) {
-                missing.push(tool);
-            }
+            && let Some(tool) = tools::TOOLS.iter().find(|t| t.name == status.name)
+        {
+            missing.push(tool);
+        }
     }
 
     // 5. Offer to install missing tools
@@ -156,15 +157,22 @@ fn detect_and_configure_assistants() {
     }
 
     if !has_claude && !has_gemini {
-        eprintln!("No AI assistant detected. Run `{} install claude-code` or `{} install gemini-cli` later.",
-            constants::NAME, constants::NAME);
+        eprintln!(
+            "No AI assistant detected. Run `{} install claude-code` or `{} install gemini-cli` later.",
+            constants::NAME,
+            constants::NAME
+        );
     }
 }
 
 /// Configure Claude Code hooks in ~/.claude/settings.json
 fn configure_claude_code() {
     let adapter = crate::assistant::claude_code::ClaudeCode;
-    let binary_name = if cfg!(windows) { "warden-relay.exe" } else { "warden" };
+    let binary_name = if cfg!(windows) {
+        "warden-relay.exe"
+    } else {
+        "warden"
+    };
     let binary = super::bin_dir().join(binary_name);
     let hooks_json = adapter.generate_hooks_config(&binary);
 
@@ -174,16 +182,21 @@ fn configure_claude_code() {
         // Merge hooks into existing settings
         if let Ok(content) = std::fs::read_to_string(&settings_path)
             && let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content)
-                && let Ok(hooks) = serde_json::from_str::<serde_json::Value>(&hooks_json)
-                    && let Some(new_hooks) = hooks.get("hooks") {
-                        settings["hooks"] = new_hooks.clone();
-                        if let Ok(merged) = serde_json::to_string_pretty(&settings)
-                            && std::fs::write(&settings_path, &merged).is_ok() {
-                                eprintln!("  Hooks configured in {}", settings_path.display());
-                                return;
-                            }
-                    }
-        eprintln!("  Could not merge hooks. Add manually from: {} install claude-code", constants::NAME);
+            && let Ok(hooks) = serde_json::from_str::<serde_json::Value>(&hooks_json)
+            && let Some(new_hooks) = hooks.get("hooks")
+        {
+            settings["hooks"] = new_hooks.clone();
+            if let Ok(merged) = serde_json::to_string_pretty(&settings)
+                && std::fs::write(&settings_path, &merged).is_ok()
+            {
+                eprintln!("  Hooks configured in {}", settings_path.display());
+                return;
+            }
+        }
+        eprintln!(
+            "  Could not merge hooks. Add manually from: {} install claude-code",
+            constants::NAME
+        );
     } else {
         // Create new settings with hooks
         if std::fs::write(&settings_path, &hooks_json).is_ok() {
@@ -195,25 +208,33 @@ fn configure_claude_code() {
 /// Configure Gemini CLI hooks
 fn configure_gemini_cli() {
     let adapter = crate::assistant::gemini_cli::GeminiCli;
-    let binary_name = if cfg!(windows) { "warden-relay.exe" } else { "warden" };
+    let binary_name = if cfg!(windows) {
+        "warden-relay.exe"
+    } else {
+        "warden"
+    };
     let binary = super::bin_dir().join(binary_name);
     let hooks_json = adapter.generate_hooks_config(&binary);
 
     let settings_path = dirs_home().join(".gemini").join("settings.json");
-    let Some(settings_dir) = settings_path.parent() else { return; };
+    let Some(settings_dir) = settings_path.parent() else {
+        return;
+    };
     let _ = std::fs::create_dir_all(settings_dir);
 
     if settings_path.exists() {
         if let Ok(content) = std::fs::read_to_string(&settings_path)
             && let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content)
-                && let Ok(hooks) = serde_json::from_str::<serde_json::Value>(&hooks_json)
-                    && let Some(new_hooks) = hooks.get("hooks") {
-                        settings["hooks"] = new_hooks.clone();
-                        if let Ok(merged) = serde_json::to_string_pretty(&settings)
-                            && std::fs::write(&settings_path, &merged).is_ok() {
-                                eprintln!("  Hooks configured in {}", settings_path.display());
-                            }
-                    }
+            && let Ok(hooks) = serde_json::from_str::<serde_json::Value>(&hooks_json)
+            && let Some(new_hooks) = hooks.get("hooks")
+        {
+            settings["hooks"] = new_hooks.clone();
+            if let Ok(merged) = serde_json::to_string_pretty(&settings)
+                && std::fs::write(&settings_path, &merged).is_ok()
+            {
+                eprintln!("  Hooks configured in {}", settings_path.display());
+            }
+        }
     } else if std::fs::write(&settings_path, &hooks_json).is_ok() {
         eprintln!("  Created {}", settings_path.display());
     }
@@ -227,7 +248,11 @@ fn migrate_from_hookctl() {
     }
 
     eprintln!();
-    eprint!("Found {}/ — migrate to {}/? [y/n] ", constants::LEGACY_DIR, constants::DIR);
+    eprint!(
+        "Found {}/ — migrate to {}/? [y/n] ",
+        constants::LEGACY_DIR,
+        constants::DIR
+    );
     if !read_line().trim().to_lowercase().starts_with('y') {
         return;
     }
@@ -265,7 +290,10 @@ fn migrate_from_hookctl() {
         let _ = copy_dir_recursive(&old_logs, &new_logs);
     }
 
-    eprintln!("  Migration complete. Old {} can be removed manually.", constants::LEGACY_DIR);
+    eprintln!(
+        "  Migration complete. Old {} can be removed manually.",
+        constants::LEGACY_DIR
+    );
 }
 
 /// Read a line from stdin (for interactive prompts)

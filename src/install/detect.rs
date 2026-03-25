@@ -12,8 +12,8 @@ use std::sync::LazyLock;
 pub static AVAILABLE_TOOLS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     let mut tools = HashSet::new();
     let checks = [
-        "rg", "fd", "bat", "eza", "dust", "just", "jq", "xh",
-        "ouch", "huniq", "procs", "sd", "tokei", "tsx",
+        "rg", "fd", "bat", "eza", "dust", "just", "jq", "xh", "ouch", "huniq", "procs", "sd",
+        "tokei", "tsx",
     ];
     for tool in checks {
         if is_on_path(tool) {

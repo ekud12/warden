@@ -7,28 +7,48 @@ use std::path::PathBuf;
 pub struct ClaudeCode;
 
 impl Assistant for ClaudeCode {
-    fn name(&self) -> &str { "claude-code" }
+    fn name(&self) -> &str {
+        "claude-code"
+    }
 
     fn parse_input(&self, raw: &str) -> Option<HookInput> {
         let v: serde_json::Value = serde_json::from_str(raw).ok()?;
         Some(HookInput {
-            tool_name: v.get("tool_name").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            tool_name: v
+                .get("tool_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             tool_input: v.get("tool_input").cloned(),
-            tool_output: v.get("tool_response")
+            tool_output: v
+                .get("tool_response")
                 .or_else(|| v.get("tool_result"))
                 .or_else(|| v.get("tool_output"))
                 .cloned(),
-            command: v.get("tool_input")
+            command: v
+                .get("tool_input")
                 .and_then(|ti| ti.get("command"))
                 .and_then(|c| c.as_str())
                 .map(|s| s.to_string()),
-            exit_code: v.get("tool_response")
+            exit_code: v
+                .get("tool_response")
                 .and_then(|tr| tr.get("exitCode"))
                 .and_then(|e| e.as_i64()),
-            session_id: v.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            reason: v.get("reason").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            hook_event: v.get("hook_event_name").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            agent_type: v.get("agent_type").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            session_id: v
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            reason: v
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            hook_event: v
+                .get("hook_event_name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            agent_type: v
+                .get("agent_type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         })
     }
 
@@ -39,7 +59,8 @@ impl Assistant for ClaudeCode {
                 "permissionDecision": "deny"
             },
             "systemMessage": message
-        }).to_string()
+        })
+        .to_string()
     }
 
     fn format_allow(&self, advisory: Option<&str>) -> String {
@@ -62,19 +83,22 @@ impl Assistant for ClaudeCode {
                 "autoApprove": true,
                 "permissionDecision": "allow"
             }
-        }).to_string()
+        })
+        .to_string()
     }
 
     fn format_context(&self, text: &str) -> String {
         serde_json::json!({
             "additionalContext": text
-        }).to_string()
+        })
+        .to_string()
     }
 
     fn format_updated_output(&self, output: &serde_json::Value) -> String {
         serde_json::json!({
             "updatedMCPToolOutput": output
-        }).to_string()
+        })
+        .to_string()
     }
 
     fn settings_path(&self) -> PathBuf {
@@ -86,7 +110,8 @@ impl Assistant for ClaudeCode {
 
     fn generate_hooks_config(&self, binary_path: &std::path::Path) -> String {
         let bin = binary_path.to_string_lossy().replace('\\', "/");
-        format!(r#"{{
+        format!(
+            r#"{{
   "hooks": {{
     "PreToolUse": [
       {{ "matcher": "Bash", "hooks": [{{ "type": "command", "command": "{bin} pretool-bash" }}] }},
@@ -120,6 +145,7 @@ impl Assistant for ClaudeCode {
       {{ "matcher": "", "hooks": [{{ "type": "command", "command": "{bin} postfailure-guide" }}] }}
     ]
   }}
-}}"#)
+}}"#
+        )
     }
 }

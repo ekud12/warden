@@ -41,8 +41,8 @@ pub fn check_loop_patterns(history: &[String]) -> Option<String> {
     // 3-gram detection: A→B→C→A→B→C (three distinct actions cycling)
     if recent.len() >= 6 {
         let w = &recent[recent.len() - 6..];
-        if w[0] == w[3] && w[1] == w[4] && w[2] == w[5]
-            && !(w[0] == w[1] && w[1] == w[2])  // skip all-same (caught by read spiral)
+        if w[0] == w[3] && w[1] == w[4] && w[2] == w[5] && !(w[0] == w[1] && w[1] == w[2])
+        // skip all-same (caught by read spiral)
         {
             return Some(format!(
                 "Repeating 3-step pattern: {} → {} → {}. Step back and reconsider.",
@@ -60,7 +60,9 @@ pub fn check_loop_patterns(history: &[String]) -> Option<String> {
 pub fn action_novelty(history: &[String]) -> f64 {
     let window_size = 10;
     let recent = &history[history.len().saturating_sub(window_size)..];
-    if recent.is_empty() { return 1.0; }
+    if recent.is_empty() {
+        return 1.0;
+    }
 
     let unique: std::collections::HashSet<&String> = recent.iter().collect();
     unique.len() as f64 / recent.len() as f64
@@ -73,8 +75,18 @@ mod tests {
     #[test]
     fn detects_2gram_loop() {
         let history: Vec<String> = vec![
-            "bash_ok", "read", "bash_fail", "read", "bash_fail", "read", "bash_fail", "read",
-        ].into_iter().map(String::from).collect();
+            "bash_ok",
+            "read",
+            "bash_fail",
+            "read",
+            "bash_fail",
+            "read",
+            "bash_fail",
+            "read",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
         let result = check_loop_patterns(&history);
         assert!(result.is_some());
         assert!(result.unwrap().contains("Repeating pattern"));
@@ -84,7 +96,10 @@ mod tests {
     fn detects_read_spiral() {
         let history: Vec<String> = vec![
             "edit", "bash_ok", "read", "read", "read", "read", "read", "read",
-        ].into_iter().map(String::from).collect();
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
         let result = check_loop_patterns(&history);
         assert!(result.is_some());
         assert!(result.unwrap().contains("consecutive reads"));
@@ -94,7 +109,10 @@ mod tests {
     fn no_loop_in_normal_history() {
         let history: Vec<String> = vec![
             "read", "edit", "bash_ok", "read", "bash_ok", "edit", "bash_ok", "read",
-        ].into_iter().map(String::from).collect();
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
         assert!(check_loop_patterns(&history).is_none());
     }
 }

@@ -52,12 +52,9 @@ pub fn predict_quality(
     let milestone_score = (milestones / n * 5.0 * 100.0).min(100.0);
 
     // Weighted ensemble
-    let quality = (
-        edit_velocity * 0.30 +
-        error_score * 0.30 +
-        efficiency * 0.20 +
-        milestone_score * 0.20
-    ).round() as u32;
+    let quality =
+        (edit_velocity * 0.30 + error_score * 0.30 + efficiency * 0.20 + milestone_score * 0.20)
+            .round() as u32;
 
     let quality = quality.min(100);
 
@@ -95,8 +92,10 @@ impl QualityPrediction {
         };
 
         if self.score < 40 {
-            format!("Session quality: {}/100{}. Consider refocusing — errors: {}, edit velocity low.",
-                self.score, comparison, self.errors_unresolved)
+            format!(
+                "Session quality: {}/100{}. Consider refocusing — errors: {}, edit velocity low.",
+                self.score, comparison, self.errors_unresolved
+            )
         } else if self.score < 60 {
             format!("Session quality: {}/100{}.", self.score, comparison)
         } else {
@@ -112,33 +111,45 @@ mod tests {
 
     #[test]
     fn quality_productive_session() {
-        let snaps: Vec<TurnSnapshot> = (1..=10).map(|t| TurnSnapshot {
-            turn: t,
-            edits_this_turn: t > 3, // editing from turn 4
-            milestones_hit: t == 7 || t == 10,
-            errors_unresolved: 0,
-            ..Default::default()
-        }).collect();
+        let snaps: Vec<TurnSnapshot> = (1..=10)
+            .map(|t| TurnSnapshot {
+                turn: t,
+                edits_this_turn: t > 3, // editing from turn 4
+                milestones_hit: t == 7 || t == 10,
+                errors_unresolved: 0,
+                ..Default::default()
+            })
+            .collect();
 
         let result = predict_quality(&snaps, 10, 0, 5000, 100000);
         assert!(result.is_some());
         let q = result.unwrap();
-        assert!(q.score > 50, "productive session should score >50, got {}", q.score);
+        assert!(
+            q.score > 50,
+            "productive session should score >50, got {}",
+            q.score
+        );
     }
 
     #[test]
     fn quality_struggling_session() {
-        let snaps: Vec<TurnSnapshot> = (1..=10).map(|t| TurnSnapshot {
-            turn: t,
-            edits_this_turn: false,
-            milestones_hit: false,
-            errors_unresolved: t,
-            ..Default::default()
-        }).collect();
+        let snaps: Vec<TurnSnapshot> = (1..=10)
+            .map(|t| TurnSnapshot {
+                turn: t,
+                edits_this_turn: false,
+                milestones_hit: false,
+                errors_unresolved: t,
+                ..Default::default()
+            })
+            .collect();
 
         let result = predict_quality(&snaps, 10, 10, 0, 100000);
         assert!(result.is_some());
         let q = result.unwrap();
-        assert!(q.score < 50, "struggling session should score <50, got {}", q.score);
+        assert!(
+            q.score < 50,
+            "struggling session should score <50, got {}",
+            q.score
+        );
     }
 }

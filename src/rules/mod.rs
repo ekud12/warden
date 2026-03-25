@@ -76,7 +76,10 @@ pub static RULES: LazyLock<MergedRules> = LazyLock::new(|| {
 fn load_toml(path: &std::path::Path) -> RulesFile {
     match std::fs::read_to_string(path) {
         Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
-            common::log("rules", &format!("TOML parse error in {}: {}", path.display(), e));
+            common::log(
+                "rules",
+                &format!("TOML parse error in {}: {}", path.display(), e),
+            );
             RulesFile::default()
         }),
         Err(_) => RulesFile::default(),
@@ -95,7 +98,9 @@ fn project_rules_path() -> std::path::PathBuf {
         // No project context — return non-existent path
         return std::path::PathBuf::from(format!("{}/rules.toml", crate::constants::DIR));
     }
-    std::path::PathBuf::from(&cwd).join(crate::constants::DIR).join("rules.toml")
+    std::path::PathBuf::from(&cwd)
+        .join(crate::constants::DIR)
+        .join("rules.toml")
 }
 
 /// Check if any rules.toml file exists (for mtime-based daemon restart)
@@ -103,15 +108,16 @@ pub fn rules_mtime() -> u64 {
     let mut max_mtime = 0u64;
     for path in [global_rules_path(), project_rules_path()] {
         if let Ok(meta) = std::fs::metadata(&path)
-            && let Ok(modified) = meta.modified() {
-                let mtime = modified
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs();
-                if mtime > max_mtime {
-                    max_mtime = mtime;
-                }
+            && let Ok(modified) = meta.modified()
+        {
+            let mtime = modified
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            if mtime > max_mtime {
+                max_mtime = mtime;
             }
+        }
     }
     max_mtime
 }
@@ -122,91 +128,188 @@ fn merge(global: RulesFile, project: RulesFile) -> MergedRules {
         safety_pairs: {
             let mut pairs = merge_pairs("safety", config::SAFETY, &global.safety, &project.safety);
             // Git readonly rules: only included when explicitly enabled
-            let git_readonly = project.git_readonly.or(global.git_readonly).unwrap_or(false);
+            let git_readonly = project
+                .git_readonly
+                .or(global.git_readonly)
+                .unwrap_or(false);
             if git_readonly {
                 for (i, (pat, msg)) in config::GIT_SAFETY.iter().enumerate() {
-                    pairs.push((format!("git_readonly.{}", i), pat.to_string(), msg.to_string(), false));
+                    pairs.push((
+                        format!("git_readonly.{}", i),
+                        pat.to_string(),
+                        msg.to_string(),
+                        false,
+                    ));
                 }
             }
             pairs
         },
-        destructive_pairs: merge_pairs("destructive", config::DESTRUCTIVE, &global.destructive, &project.destructive),
-        substitutions_pairs: merge_pairs("substitution", config::SUBSTITUTIONS, &global.substitutions, &project.substitutions),
-        advisories_pairs: merge_pairs("advisory", config::ADVISORIES, &global.advisories, &project.advisories),
-        hallucination_pairs: merge_pairs("hallucination", config::HALLUCINATION, &global.hallucination, &project.hallucination),
-        hallucination_advisory_pairs: merge_pairs("hallucination_advisory", config::HALLUCINATION_ADVISORY, &global.hallucination_advisory, &project.hallucination_advisory),
-        sensitive_deny_pairs: merge_pairs("sensitive_deny", config::SENSITIVE_PATHS_DENY, &global.sensitive_paths_deny, &project.sensitive_paths_deny),
-        sensitive_warn_pairs: merge_pairs("sensitive_warn", config::SENSITIVE_PATHS_WARN, &global.sensitive_paths_warn, &project.sensitive_paths_warn),
-        auto_allow_patterns: merge_string_list(config::AUTO_ALLOW, &global.auto_allow, &project.auto_allow),
+        destructive_pairs: merge_pairs(
+            "destructive",
+            config::DESTRUCTIVE,
+            &global.destructive,
+            &project.destructive,
+        ),
+        substitutions_pairs: merge_pairs(
+            "substitution",
+            config::SUBSTITUTIONS,
+            &global.substitutions,
+            &project.substitutions,
+        ),
+        advisories_pairs: merge_pairs(
+            "advisory",
+            config::ADVISORIES,
+            &global.advisories,
+            &project.advisories,
+        ),
+        hallucination_pairs: merge_pairs(
+            "hallucination",
+            config::HALLUCINATION,
+            &global.hallucination,
+            &project.hallucination,
+        ),
+        hallucination_advisory_pairs: merge_pairs(
+            "hallucination_advisory",
+            config::HALLUCINATION_ADVISORY,
+            &global.hallucination_advisory,
+            &project.hallucination_advisory,
+        ),
+        sensitive_deny_pairs: merge_pairs(
+            "sensitive_deny",
+            config::SENSITIVE_PATHS_DENY,
+            &global.sensitive_paths_deny,
+            &project.sensitive_paths_deny,
+        ),
+        sensitive_warn_pairs: merge_pairs(
+            "sensitive_warn",
+            config::SENSITIVE_PATHS_WARN,
+            &global.sensitive_paths_warn,
+            &project.sensitive_paths_warn,
+        ),
+        auto_allow_patterns: merge_string_list(
+            config::AUTO_ALLOW,
+            &global.auto_allow,
+            &project.auto_allow,
+        ),
         just_map: merge_just_map(&global.just, &project.just),
         just_verbose: merge_string_list_raw(
-            &config::JUST_VERBOSE.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-            &global.just.verbose, global.just.replace_verbose,
-            &project.just.verbose, project.just.replace_verbose,
+            &config::JUST_VERBOSE
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+            &global.just.verbose,
+            global.just.replace_verbose,
+            &project.just.verbose,
+            project.just.replace_verbose,
         ),
         just_short: merge_string_list_raw(
-            &config::JUST_SHORT.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-            &global.just.short, global.just.replace_short,
-            &project.just.short, project.just.replace_short,
+            &config::JUST_SHORT
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>(),
+            &global.just.short,
+            global.just.replace_short,
+            &project.just.short,
+            project.just.replace_short,
         ),
-        zero_trace_content: project.zero_trace.content_pattern
+        zero_trace_content: project
+            .zero_trace
+            .content_pattern
             .or(global.zero_trace.content_pattern)
             .unwrap_or_else(|| config::ZERO_TRACE_CONTENT.to_string()),
-        zero_trace_cmd: project.zero_trace.cmd_pattern
+        zero_trace_cmd: project
+            .zero_trace
+            .cmd_pattern
             .or(global.zero_trace.cmd_pattern)
             .unwrap_or_else(|| config::ZERO_TRACE_CMD.to_string()),
-        zero_trace_write: project.zero_trace.write_pattern
+        zero_trace_write: project
+            .zero_trace
+            .write_pattern
             .or(global.zero_trace.write_pattern)
             .unwrap_or_else(|| config::ZERO_TRACE_WRITE.to_string()),
-        zero_trace_path_exclude: project.zero_trace.path_exclude
+        zero_trace_path_exclude: project
+            .zero_trace
+            .path_exclude
             .or(global.zero_trace.path_exclude)
             .unwrap_or_else(|| config::ZERO_TRACE_PATH_EXCLUDE.to_string()),
-        max_read_size: project.thresholds.max_read_size_kb
+        max_read_size: project
+            .thresholds
+            .max_read_size_kb
             .or(global.thresholds.max_read_size_kb)
             .map(|kb| kb * 1024)
             .unwrap_or(config::MAX_READ_SIZE),
-        max_mcp_output: project.thresholds.max_mcp_output_kb
+        max_mcp_output: project
+            .thresholds
+            .max_mcp_output_kb
             .or(global.thresholds.max_mcp_output_kb)
             .map(|kb| kb * 1024)
             .unwrap_or(config::MAX_MCP_OUTPUT),
-        max_string_len: project.thresholds.max_string_len
+        max_string_len: project
+            .thresholds
+            .max_string_len
             .or(global.thresholds.max_string_len)
             .unwrap_or(config::MAX_STRING_LEN),
-        max_array_len: project.thresholds.max_array_len
+        max_array_len: project
+            .thresholds
+            .max_array_len
             .or(global.thresholds.max_array_len)
             .unwrap_or(config::MAX_ARRAY_LEN),
-        doom_loop_threshold: project.thresholds.doom_loop_threshold
+        doom_loop_threshold: project
+            .thresholds
+            .doom_loop_threshold
             .or(global.thresholds.doom_loop_threshold)
             .unwrap_or(3),
-        offload_threshold: project.thresholds.offload_threshold_kb
+        offload_threshold: project
+            .thresholds
+            .offload_threshold_kb
             .or(global.thresholds.offload_threshold_kb)
             .map(|kb| kb * 1024)
             .unwrap_or(8 * 1024),
-        token_budget_advisory: project.thresholds.token_budget_advisory_k
+        token_budget_advisory: project
+            .thresholds
+            .token_budget_advisory_k
             .or(global.thresholds.token_budget_advisory_k)
-            .unwrap_or(700) * 1000,
-        progressive_read_deny_turn: project.thresholds.progressive_read_deny_turn
+            .unwrap_or(700)
+            * 1000,
+        progressive_read_deny_turn: project
+            .thresholds
+            .progressive_read_deny_turn
             .or(global.thresholds.progressive_read_deny_turn)
             .unwrap_or(80),
-        progressive_read_advisory_turn: project.thresholds.progressive_read_advisory_turn
+        progressive_read_advisory_turn: project
+            .thresholds
+            .progressive_read_advisory_turn
             .or(global.thresholds.progressive_read_advisory_turn)
             .unwrap_or(50),
-        rules_reinject_interval: project.thresholds.rules_reinject_interval
+        rules_reinject_interval: project
+            .thresholds
+            .rules_reinject_interval
             .or(global.thresholds.rules_reinject_interval)
             .unwrap_or(30),
-        drift_threshold: project.thresholds.drift_threshold
+        drift_threshold: project
+            .thresholds
+            .drift_threshold
             .or(global.thresholds.drift_threshold)
             .unwrap_or(3),
-        error_slope_threshold: project.thresholds.error_slope_threshold
+        error_slope_threshold: project
+            .thresholds
+            .error_slope_threshold
             .or(global.thresholds.error_slope_threshold)
             .unwrap_or(0.5),
-        stale_milestone_turns: project.thresholds.stale_milestone_turns
+        stale_milestone_turns: project
+            .thresholds
+            .stale_milestone_turns
             .or(global.thresholds.stale_milestone_turns)
             .unwrap_or(10),
-        token_burn_threshold: project.thresholds.token_burn_threshold_k
+        token_burn_threshold: project
+            .thresholds
+            .token_burn_threshold_k
             .or(global.thresholds.token_burn_threshold_k)
-            .unwrap_or(15) * 1000,
-        stagnation_turns: project.thresholds.stagnation_turns
+            .unwrap_or(15)
+            * 1000,
+        stagnation_turns: project
+            .thresholds
+            .stagnation_turns
             .or(global.thresholds.stagnation_turns)
             .unwrap_or(3),
         disabled_restrictions: {
@@ -242,7 +345,14 @@ fn merge_pairs(
     let floor: Vec<RuleEntry> = compiled
         .iter()
         .enumerate()
-        .map(|(i, (p, m))| (format!("{}.{}", category, i), p.to_string(), m.to_string(), false))
+        .map(|(i, (p, m))| {
+            (
+                format!("{}.{}", category, i),
+                p.to_string(),
+                m.to_string(),
+                false,
+            )
+        })
         .collect();
 
     // User additions: global can add, project can replace global additions (not floor)
@@ -315,8 +425,10 @@ fn merge_just_map(global: &JustSection, project: &JustSection) -> Vec<(String, S
 /// Compiled defaults form an immutable floor — replace only clears user additions.
 fn merge_string_list_raw(
     compiled: &[String],
-    global: &[String], global_replace: bool,
-    project: &[String], project_replace: bool,
+    global: &[String],
+    global_replace: bool,
+    project: &[String],
+    project_replace: bool,
 ) -> Vec<String> {
     let floor: Vec<String> = compiled.to_vec();
 
@@ -338,7 +450,8 @@ fn merge_string_list_raw(
 
 /// Generate a default rules.toml template
 pub fn default_template() -> String {
-    format!(r#"# {name} rules.toml — customize hook behavior without recompiling
+    format!(
+        r#"# {name} rules.toml — customize hook behavior without recompiling
 # Merge order: compiled defaults → ~/{dir}/rules.toml → {dir}/rules.toml
 # Each section appends to defaults. Set `replace = true` to override entirely.
 
@@ -373,5 +486,8 @@ pub fn default_template() -> String {
 
 # [zero_trace]
 # content_pattern = '(?i)generated\s+by\s+claude'
-"#, name = crate::constants::NAME, dir = crate::constants::DIR)
+"#,
+        name = crate::constants::NAME,
+        dir = crate::constants::DIR
+    )
 }

@@ -54,7 +54,11 @@ pub fn run(cmd: &str, args: &[&str]) -> Option<SubprocessResult> {
 }
 
 /// Run a command with stdin data and default timeout.
-pub fn run_with_stdin(cmd: &str, args: &[&str], stdin_data: Option<&[u8]>) -> Option<SubprocessResult> {
+pub fn run_with_stdin(
+    cmd: &str,
+    args: &[&str],
+    stdin_data: Option<&[u8]>,
+) -> Option<SubprocessResult> {
     if stdin_data.is_none() {
         return run(cmd, args);
     }
@@ -100,7 +104,12 @@ pub fn run_with_stdin(cmd: &str, args: &[&str], stdin_data: Option<&[u8]>) -> Op
 
 /// Run and return first N lines of stdout, with truncation note.
 #[allow(dead_code)]
-pub fn run_capped(cmd: &str, args: &[&str], stdin_data: Option<&[u8]>, max_lines: usize) -> Option<String> {
+pub fn run_capped(
+    cmd: &str,
+    args: &[&str],
+    stdin_data: Option<&[u8]>,
+    max_lines: usize,
+) -> Option<String> {
     let result = run_with_stdin(cmd, args, stdin_data)?;
     if result.stdout.trim().is_empty() {
         return None;

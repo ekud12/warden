@@ -3,16 +3,19 @@
 // Wraps verbose commands with `warden truncate-filter --mode MODE` pipe.
 // Mode is detected from command type: test, build, install, or default.
 
+use super::PATTERNS;
 use crate::common;
 use crate::config;
-use super::PATTERNS;
 
 /// Handle truncation wrapping for verbose commands + auto-allow for safe commands
 pub fn handle_truncation(cmd: &str) {
     // If command has unquoted pipes → auto-allow (already piped, safety checks passed)
     let unquoted = strip_quoted_strings(cmd);
     if unquoted.contains('|') {
-        common::log("pretool-bash", &format!("ALLOW (piped): {}", common::truncate(cmd, 60)));
+        common::log(
+            "pretool-bash",
+            &format!("ALLOW (piped): {}", common::truncate(cmd, 60)),
+        );
         common::allow("PreToolUse");
         return;
     }
@@ -20,7 +23,10 @@ pub fn handle_truncation(cmd: &str) {
     // Check compact tools — auto-allow
     for tool in config::COMPACT_TOOLS {
         if cmd.contains(tool) {
-            common::log("pretool-bash", &format!("ALLOW (compact): {}", common::truncate(cmd, 60)));
+            common::log(
+                "pretool-bash",
+                &format!("ALLOW (compact): {}", common::truncate(cmd, 60)),
+            );
             common::allow("PreToolUse");
             return;
         }
@@ -29,7 +35,10 @@ pub fn handle_truncation(cmd: &str) {
     // Check short commands — auto-allow
     for re in &PATTERNS.short {
         if re.is_match(cmd) {
-            common::log("pretool-bash", &format!("ALLOW (short): {}", common::truncate(cmd, 60)));
+            common::log(
+                "pretool-bash",
+                &format!("ALLOW (short): {}", common::truncate(cmd, 60)),
+            );
             common::allow("PreToolUse");
             return;
         }
@@ -37,19 +46,24 @@ pub fn handle_truncation(cmd: &str) {
 
     // Check just short recipes — auto-allow
     if let Some(ref re) = PATTERNS.just_short_re
-        && re.is_match(cmd) {
-            common::log("pretool-bash", &format!("ALLOW (just-short): {}", common::truncate(cmd, 60)));
-            common::allow("PreToolUse");
-            return;
-        }
+        && re.is_match(cmd)
+    {
+        common::log(
+            "pretool-bash",
+            &format!("ALLOW (just-short): {}", common::truncate(cmd, 60)),
+        );
+        common::allow("PreToolUse");
+        return;
+    }
 
     // Check just verbose recipes — wrap with truncation (detect mode from recipe name)
     if let Some(ref re) = PATTERNS.just_verbose_re
-        && re.is_match(cmd) {
-            let mode = detect_mode(cmd);
-            wrap_with_truncation(cmd, &mode);
-            return;
-        }
+        && re.is_match(cmd)
+    {
+        let mode = detect_mode(cmd);
+        wrap_with_truncation(cmd, &mode);
+        return;
+    }
 
     // Check verbose patterns — wrap with truncation
     for re in &PATTERNS.verbose {
@@ -62,13 +76,19 @@ pub fn handle_truncation(cmd: &str) {
 
     // Final check: auto-allow known safe commands (single RegexSet pass)
     if PATTERNS.auto_allow_set.is_match(cmd) {
-        common::log("pretool-bash", &format!("ALLOW (auto): {}", common::truncate(cmd, 60)));
+        common::log(
+            "pretool-bash",
+            &format!("ALLOW (auto): {}", common::truncate(cmd, 60)),
+        );
         common::allow("PreToolUse");
         return;
     }
 
     // Truly unknown command — silent passthrough (permission system decides)
-    common::log("pretool-bash", &format!("PASS: {}", common::truncate(cmd, 60)));
+    common::log(
+        "pretool-bash",
+        &format!("PASS: {}", common::truncate(cmd, 60)),
+    );
 }
 
 /// Detect filter mode from command content
@@ -85,8 +105,7 @@ fn detect_mode(cmd: &str) -> String {
 }
 
 fn is_test_cmd(cmd: &str) -> bool {
-    config::TEST_CMDS.iter().any(|p| cmd.contains(p))
-        || cmd.contains("just test")
+    config::TEST_CMDS.iter().any(|p| cmd.contains(p)) || cmd.contains("just test")
 }
 
 fn is_build_cmd(cmd: &str) -> bool {

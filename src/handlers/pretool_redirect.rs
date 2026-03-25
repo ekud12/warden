@@ -29,7 +29,10 @@ pub fn run(raw: &str) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             record_redirect_denial();
-            common::log("pretool-redirect", &format!("DENY Grep: pattern={:?}", common::truncate(pattern, 60)));
+            common::log(
+                "pretool-redirect",
+                &format!("DENY Grep: pattern={:?}", common::truncate(pattern, 60)),
+            );
             common::deny("PreToolUse", "Grep\u{2192}rg");
         }
         "Glob" => {
@@ -40,7 +43,10 @@ pub fn run(raw: &str) {
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
             record_redirect_denial();
-            common::log("pretool-redirect", &format!("DENY Glob: pattern={:?}", common::truncate(pattern, 60)));
+            common::log(
+                "pretool-redirect",
+                &format!("DENY Glob: pattern={:?}", common::truncate(pattern, 60)),
+            );
             common::deny("PreToolUse", "Glob\u{2192}fd");
         }
         "mcp__aidex__aidex_signature" => {
@@ -82,7 +88,11 @@ fn check_aidex_extension(input: &common::HookInput) {
         record_redirect_denial();
         common::log(
             "pretool-redirect",
-            &format!("DENY aidex_signature: .{} not supported (file={:?})", ext, common::truncate(file, 60)),
+            &format!(
+                "DENY aidex_signature: .{} not supported (file={:?})",
+                ext,
+                common::truncate(file, 60)
+            ),
         );
         common::deny(
             "PreToolUse",

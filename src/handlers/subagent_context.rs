@@ -23,7 +23,8 @@ If you identify sub-tasks that could run in parallel, list them at the end.";
 
 pub fn run(raw: &str) {
     let input = common::parse_input(raw);
-    let agent_type = input.as_ref()
+    let agent_type = input
+        .as_ref()
         .and_then(|i| i.agent_type.as_deref())
         .unwrap_or("unknown");
 
@@ -35,11 +36,17 @@ pub fn run(raw: &str) {
         let mut entries: Vec<(&String, &common::FileReadEntry)> = state.files_read.iter().collect();
         entries.sort_by(|a, b| b.1.turn.cmp(&a.1.turn));
         let files: Vec<&str> = entries.iter().take(8).map(|(p, _)| shorten(p)).collect();
-        parts.push(format!("Orchestrator already read: {}. Skip re-reading these unless you need to edit them.", files.join(", ")));
+        parts.push(format!(
+            "Orchestrator already read: {}. Skip re-reading these unless you need to edit them.",
+            files.join(", ")
+        ));
     }
 
     common::additional_context(&parts.join("\n"));
-    common::log("subagent-context", &format!("Injected rules for {} agent", agent_type));
+    common::log(
+        "subagent-context",
+        &format!("Injected rules for {} agent", agent_type),
+    );
 }
 
 /// Shorten path to last 2 components

@@ -27,7 +27,11 @@ pub fn check_noop_build(cmd: &str, state: &mut common::SessionState) -> bool {
 
         common::log(
             "pretool-bash",
-            &format!("NOOP build: {} (saved ~{}tok)", common::truncate(cmd, 60), saved),
+            &format!(
+                "NOOP build: {} (saved ~{}tok)",
+                common::truncate(cmd, 60),
+                saved
+            ),
         );
         common::allow_with_advisory(
             "PreToolUse",

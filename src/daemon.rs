@@ -17,8 +17,8 @@
 use crate::common;
 use crate::ipc::{self, DaemonRequest, DaemonResponse};
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 #[cfg(windows)]
@@ -57,7 +57,10 @@ pub fn run_server(source_mtime: u64) {
         return;
     }
 
-    common::log("daemon", &format!("Starting daemon (pid={}, mtime={})", pid, startup_mtime));
+    common::log(
+        "daemon",
+        &format!("Starting daemon (pid={}, mtime={})", pid, startup_mtime),
+    );
 
     let shutdown = Arc::new(AtomicBool::new(false));
     let last_activity = Arc::new(AtomicU64::new(now_secs()));
@@ -73,7 +76,9 @@ pub fn run_server(source_mtime: u64) {
                     common::log("daemon", "Idle timeout (1h) — auto-shutdown");
                     ipc::remove_pid_file();
                     #[cfg(not(windows))]
-                    { let _ = std::fs::remove_file(ipc::pipe_name()); }
+                    {
+                        let _ = std::fs::remove_file(ipc::pipe_name());
+                    }
                     std::process::exit(0);
                 }
             }
@@ -87,7 +92,9 @@ pub fn run_server(source_mtime: u64) {
             loop {
                 std::thread::sleep(Duration::from_secs(30));
                 let idle_secs = now_secs().saturating_sub(last_act.load(Ordering::Relaxed));
-                if idle_secs < 10 { continue; } // Only dream when genuinely idle
+                if idle_secs < 10 {
+                    continue;
+                } // Only dream when genuinely idle
 
                 if let Some(batch) = crate::dream::next_batch() {
                     crate::dream::process_batch(batch);
@@ -134,7 +141,8 @@ pub fn run_server(source_mtime: u64) {
                 }
 
                 // Binary rebuild detection: client mtime differs from our startup mtime
-                if request.binary_mtime != 0 && startup_mtime != 0
+                if request.binary_mtime != 0
+                    && startup_mtime != 0
                     && request.binary_mtime != startup_mtime
                 {
                     common::log(
@@ -156,7 +164,8 @@ pub fn run_server(source_mtime: u64) {
                 }
 
                 // Rules.toml change detection: restart daemon to reload merged rules
-                if request.rules_mtime != 0 && startup_rules_mtime != 0
+                if request.rules_mtime != 0
+                    && startup_rules_mtime != 0
                     && request.rules_mtime != startup_rules_mtime
                 {
                     common::log(
@@ -214,43 +223,56 @@ fn dispatch_handler(subcmd: &str, payload: &str) -> DaemonResponse {
     let handler_start = Instant::now();
     common::start_capture();
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        match subcmd {
-            "pretool-bash" => crate::handlers::pretool_bash::run(payload),
-            "pretool-read" => crate::handlers::pretool_read::run(payload),
-            "pretool-write" => crate::handlers::pretool_write::run(payload),
-            "pretool-redirect" => crate::handlers::pretool_redirect::run(payload),
-            "permission-approve" => crate::handlers::permission_approve::run(payload),
-            "posttool-session" => crate::handlers::posttool_session::run(payload),
-            "posttool-mcp" => crate::handlers::posttool_mcp::run(payload),
-            "session-start" => crate::handlers::session_start::run(payload),
-            "session-end" => crate::handlers::session_end::run(payload),
-            "precompact-memory" => crate::handlers::precompact_memory::run(payload),
-            "postcompact" => crate::handlers::postcompact::run(payload),
-            "stop-check" => crate::handlers::stop_check::run(payload),
-            "userprompt-context" => crate::handlers::userprompt_context::run(payload),
-            "subagent-context" => crate::handlers::subagent_context::run(payload),
-            "subagent-stop" => crate::handlers::subagent_stop::run(payload),
-            "postfailure-guide" => crate::handlers::postfailure_guide::run(payload),
-            "task-completed" => crate::handlers::task_completed::run(payload),
-            _ => {}
-        }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match subcmd {
+        "pretool-bash" => crate::handlers::pretool_bash::run(payload),
+        "pretool-read" => crate::handlers::pretool_read::run(payload),
+        "pretool-write" => crate::handlers::pretool_write::run(payload),
+        "pretool-redirect" => crate::handlers::pretool_redirect::run(payload),
+        "permission-approve" => crate::handlers::permission_approve::run(payload),
+        "posttool-session" => crate::handlers::posttool_session::run(payload),
+        "posttool-mcp" => crate::handlers::posttool_mcp::run(payload),
+        "session-start" => crate::handlers::session_start::run(payload),
+        "session-end" => crate::handlers::session_end::run(payload),
+        "precompact-memory" => crate::handlers::precompact_memory::run(payload),
+        "postcompact" => crate::handlers::postcompact::run(payload),
+        "stop-check" => crate::handlers::stop_check::run(payload),
+        "userprompt-context" => crate::handlers::userprompt_context::run(payload),
+        "subagent-context" => crate::handlers::subagent_context::run(payload),
+        "subagent-stop" => crate::handlers::subagent_stop::run(payload),
+        "postfailure-guide" => crate::handlers::postfailure_guide::run(payload),
+        "task-completed" => crate::handlers::task_completed::run(payload),
+        _ => {}
     }));
 
     let stdout = common::take_capture();
     let elapsed = handler_start.elapsed();
     let elapsed_us = elapsed.as_micros();
     // Structured handler timing for latency tracking and regression detection
-    common::log_structured("daemon", common::LogLevel::Info, "handler-timing",
-        &format!("{}={}us ({}ms)", subcmd, elapsed_us, elapsed.as_millis()));
+    common::log_structured(
+        "daemon",
+        common::LogLevel::Info,
+        "handler-timing",
+        &format!("{}={}us ({}ms)", subcmd, elapsed_us, elapsed.as_millis()),
+    );
     // Warn if handler exceeds budget (pretool: 2ms, session-start: 500ms, others: 10ms)
     // session-start gets a higher budget — cold start includes redb init + file I/O
-    let budget_us = if subcmd.starts_with("pretool") { 2000 }
-        else if subcmd == "session-start" { 500_000 }
-        else { 10000 };
+    let budget_us = if subcmd.starts_with("pretool") {
+        2000
+    } else if subcmd == "session-start" {
+        500_000
+    } else {
+        10000
+    };
     if elapsed_us > budget_us {
-        common::log_structured("daemon", common::LogLevel::Info, "latency-warning",
-            &format!("{} exceeded budget: {}us > {}us", subcmd, elapsed_us, budget_us));
+        common::log_structured(
+            "daemon",
+            common::LogLevel::Info,
+            "latency-warning",
+            &format!(
+                "{} exceeded budget: {}us > {}us",
+                subcmd, elapsed_us, budget_us
+            ),
+        );
     }
     DaemonResponse {
         stdout,
@@ -271,8 +293,8 @@ fn accept_connection() -> Option<ServerPipe> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
     use windows_sys::Win32::Security::{
-        SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
-        InitializeSecurityDescriptor, SetSecurityDescriptorDacl,
+        InitializeSecurityDescriptor, SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
+        SetSecurityDescriptorDacl,
     };
     use windows_sys::Win32::System::Pipes::{
         ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
@@ -307,10 +329,10 @@ fn accept_connection() -> Option<ServerPipe> {
             wide_path.as_ptr(),
             0x00000003, // PIPE_ACCESS_DUPLEX
             PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-            10,    // max instances
-            4096,  // out buffer
-            4096,  // in buffer
-            100,   // default timeout ms
+            10,   // max instances
+            4096, // out buffer
+            4096, // in buffer
+            100,  // default timeout ms
             &mut sa as *mut _ as *const _,
         );
 
@@ -406,8 +428,9 @@ impl Drop for ServerPipe {
 struct ServerPipe(std::os::unix::net::UnixStream);
 
 #[cfg(not(windows))]
-static UNIX_LISTENER: std::sync::LazyLock<std::sync::Mutex<Option<std::os::unix::net::UnixListener>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+static UNIX_LISTENER: std::sync::LazyLock<
+    std::sync::Mutex<Option<std::os::unix::net::UnixListener>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
 
 /// Initialize the Unix domain socket listener. Called once at daemon startup.
 #[cfg(not(windows))]
@@ -443,8 +466,12 @@ fn accept_connection() -> Option<ServerPipe> {
     listener.set_nonblocking(false).ok()?;
     match listener.accept() {
         Ok((stream, _)) => {
-            stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS))).ok()?;
-            stream.set_write_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS))).ok()?;
+            stream
+                .set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)))
+                .ok()?;
+            stream
+                .set_write_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS)))
+                .ok()?;
             Some(ServerPipe(stream))
         }
         Err(_) => None,

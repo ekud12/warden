@@ -8,12 +8,26 @@ use crate::common;
 
 /// Git read-only command prefixes — safe to hard-deny duplicates
 const GIT_READONLY: &[&str] = &[
-    "git status", "git diff", "git log", "git show",
-    "git branch", "git remote", "git tag", "git ls-files",
-    "git stash list", "git describe", "git rev-parse",
-    "just status", "just log-compact", "just diff",
-    "just diff-staged", "just diff-stat", "just show",
-    "just branches", "just remotes", "just changed-files",
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "git branch",
+    "git remote",
+    "git tag",
+    "git ls-files",
+    "git stash list",
+    "git describe",
+    "git rev-parse",
+    "just status",
+    "just log-compact",
+    "just diff",
+    "just diff-staged",
+    "just diff-stat",
+    "just show",
+    "just branches",
+    "just remotes",
+    "just changed-files",
     "just last-commit",
 ];
 
@@ -25,7 +39,9 @@ pub fn check_dedup(cmd: &str) -> (bool, common::SessionState) {
 
     let mut normalized = String::with_capacity(cmd.len());
     for (i, word) in cmd.split_whitespace().enumerate() {
-        if i > 0 { normalized.push(' '); }
+        if i > 0 {
+            normalized.push(' ');
+        }
         normalized.push_str(word);
     }
 
@@ -41,7 +57,11 @@ pub fn check_dedup(cmd: &str) -> (bool, common::SessionState) {
             if is_readonly_cmd(&normalized) {
                 common::log(
                     "pretool-bash",
-                    &format!("DENY dedup-readonly: {} (saved ~{}tok)", common::truncate(cmd, 60), saved),
+                    &format!(
+                        "DENY dedup-readonly: {} (saved ~{}tok)",
+                        common::truncate(cmd, 60),
+                        saved
+                    ),
                 );
                 common::deny(
                     "PreToolUse",
@@ -56,7 +76,11 @@ pub fn check_dedup(cmd: &str) -> (bool, common::SessionState) {
             // Other commands get advisory (might have side effects)
             common::log(
                 "pretool-bash",
-                &format!("DEDUP pre-exec: {} (saved ~{}tok)", common::truncate(cmd, 60), saved),
+                &format!(
+                    "DEDUP pre-exec: {} (saved ~{}tok)",
+                    common::truncate(cmd, 60),
+                    saved
+                ),
             );
             common::allow_with_advisory(
                 "PreToolUse",
@@ -73,5 +97,7 @@ pub fn check_dedup(cmd: &str) -> (bool, common::SessionState) {
 }
 
 fn is_readonly_cmd(normalized: &str) -> bool {
-    GIT_READONLY.iter().any(|prefix| normalized.starts_with(prefix))
+    GIT_READONLY
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
 }

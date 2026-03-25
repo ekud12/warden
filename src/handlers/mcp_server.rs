@@ -41,7 +41,10 @@ pub fn run() {
             }
         };
 
-        let id = request.get("id").cloned().unwrap_or(serde_json::Value::Null);
+        let id = request
+            .get("id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
         let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
 
         match method {
@@ -105,7 +108,12 @@ pub fn run() {
             }
 
             _ => {
-                write_error(&mut out, id, -32601, &format!("Method not found: {}", method));
+                write_error(
+                    &mut out,
+                    id,
+                    -32601,
+                    &format!("Method not found: {}", method),
+                );
             }
         }
     }
@@ -182,18 +190,28 @@ fn tool_session_status() -> serde_json::Value {
     // Load project stats for anomaly context
     let project_dir = common::project_dir();
     let stats = analytics::anomaly::load_stats(&project_dir);
-    let avg_quality = if stats.quality_score.n >= 3 { Some(stats.quality_score.mean as u32) } else { None };
+    let avg_quality = if stats.quality_score.n >= 3 {
+        Some(stats.quality_score.mean as u32)
+    } else {
+        None
+    };
 
     let phase = &state.adaptive.phase;
     let quality = analytics::quality::predict_quality(
-        &state.turn_snapshots, state.turn, state.errors_unresolved,
-        state.estimated_tokens_saved, total_tokens,
+        &state.turn_snapshots,
+        state.turn,
+        state.errors_unresolved,
+        state.estimated_tokens_saved,
+        total_tokens,
     );
 
     let mut status = format!(
         "Turn: {}\nPhase: {}\nErrors unresolved: {}\nFiles edited: {}\nFiles read: {}\nTokens in: ~{}K\nTokens out: ~{}K\nTokens saved: ~{}K",
-        state.turn, phase, state.errors_unresolved,
-        state.files_edited.len(), state.files_read.len(),
+        state.turn,
+        phase,
+        state.errors_unresolved,
+        state.files_edited.len(),
+        state.files_read.len(),
         state.estimated_tokens_in / 1000,
         state.estimated_tokens_out / 1000,
         state.estimated_tokens_saved / 1000,
@@ -208,7 +226,9 @@ fn tool_session_status() -> serde_json::Value {
 
     // Anomaly alerts
     let last_snap = state.turn_snapshots.last();
-    let tokens_this_turn = last_snap.map(|s| s.tokens_in_delta + s.tokens_out_delta).unwrap_or(0);
+    let tokens_this_turn = last_snap
+        .map(|s| s.tokens_in_delta + s.tokens_out_delta)
+        .unwrap_or(0);
     let anomalies = analytics::anomaly::check_anomalies(&stats, tokens_this_turn, 2.0);
     if !anomalies.is_empty() {
         status.push_str("\n\nAnomalies:\n");
@@ -226,17 +246,19 @@ fn tool_explain_denial() -> serde_json::Value {
 
     let content = match std::fs::read_to_string(&log_path) {
         Ok(c) => c,
-        Err(_) => return text_result("No denial log found. No commands have been blocked this session."),
+        Err(_) => {
+            return text_result("No denial log found. No commands have been blocked this session.");
+        }
     };
 
     // Find the last DENY entry
-    let last_deny = content.lines().rev()
-        .find(|line| line.contains("[DENY]"));
+    let last_deny = content.lines().rev().find(|line| line.contains("[DENY]"));
 
     match last_deny {
-        Some(line) => {
-            text_result(&format!("Last denial:\n{}\n\nTo avoid this denial, follow the suggestion in the message. Most denials are substitution rules (use rg instead of grep, fd instead of find) or safety rules (dangerous commands).", line))
-        }
+        Some(line) => text_result(&format!(
+            "Last denial:\n{}\n\nTo avoid this denial, follow the suggestion in the message. Most denials are substitution rules (use rg instead of grep, fd instead of find) or safety rules (dangerous commands).",
+            line
+        )),
         None => text_result("No commands have been denied this session."),
     }
 }
@@ -294,19 +316,40 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
 
     // Check if already read
     if let Some(entry) = state.files_read.get(path) {
-        info.push(format!("Read at turn {} (hash: {})", entry.turn, entry.hash));
+        info.push(format!(
+            "Read at turn {} (hash: {})",
+            entry.turn, entry.hash
+        ));
     }
 
     // Check sensitive paths
-    let short = path.rsplit('/').next().or_else(|| path.rsplit('\\').next()).unwrap_or(path);
-    let sensitive = [".env", "credentials", "secrets", "id_rsa", "id_ed25519", ".pem", ".key"];
+    let short = path
+        .rsplit('/')
+        .next()
+        .or_else(|| path.rsplit('\\').next())
+        .unwrap_or(path);
+    let sensitive = [
+        ".env",
+        "credentials",
+        "secrets",
+        "id_rsa",
+        "id_ed25519",
+        ".pem",
+        ".key",
+    ];
     if sensitive.iter().any(|s| short.contains(s)) {
-        info.push(format!("SENSITIVE: {} matches a sensitive file pattern. Edit with caution.", short));
+        info.push(format!(
+            "SENSITIVE: {} matches a sensitive file pattern. Edit with caution.",
+            short
+        ));
     }
 
     // Check if file exists
     if !std::path::Path::new(path).exists() {
-        info.push(format!("File does not exist: {}. Will be created on write.", path));
+        info.push(format!(
+            "File does not exist: {}. Will be created on write.",
+            path
+        ));
     }
 
     if info.is_empty() {
@@ -326,7 +369,11 @@ fn tool_session_history() -> serde_json::Value {
     };
 
     let lines: Vec<&str> = content.lines().collect();
-    let recent = if lines.len() > 20 { &lines[lines.len()-20..] } else { &lines };
+    let recent = if lines.len() > 20 {
+        &lines[lines.len() - 20..]
+    } else {
+        &lines
+    };
 
     let mut history = String::from("Recent session events:\n");
     for line in recent {

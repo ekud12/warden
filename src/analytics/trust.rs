@@ -20,12 +20,18 @@ pub fn compute_trust(state: &SessionState) -> u32 {
     score -= (state.dead_ends.len() as i32) * config::TRUST_WEIGHT_DEAD_ENDS;
     score -= state.turns_since_checkpoint as i32 * config::TRUST_WEIGHT_CHECKPOINT_GAP;
 
-    let recent_denials = state.recent_denial_turns.iter()
+    let recent_denials = state
+        .recent_denial_turns
+        .iter()
         .filter(|&&t| t + 10 >= state.turn)
         .count() as i32;
     score -= recent_denials * config::TRUST_WEIGHT_RECENT_DENIALS;
 
-    let milestone_bonus = if state.last_milestone.is_empty() { 0 } else { config::TRUST_MILESTONE_BONUS };
+    let milestone_bonus = if state.last_milestone.is_empty() {
+        0
+    } else {
+        config::TRUST_MILESTONE_BONUS
+    };
     score += milestone_bonus;
 
     // Reward low exploration ratio

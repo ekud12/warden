@@ -61,7 +61,10 @@ pub fn deny(event: &str, message: &str) {
 pub fn deny_with_id(event: &str, message: &str, restriction_id: &str) {
     let full_message = format!(
         "{} [{}]\nTo disable: `{} restrictions disable {}`",
-        message, restriction_id, crate::constants::NAME, restriction_id
+        message,
+        restriction_id,
+        crate::constants::NAME,
+        restriction_id
     );
     let out = PreToolDeny {
         hook_specific_output: PreToolDenyInner {

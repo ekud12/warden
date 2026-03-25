@@ -1,172 +1,247 @@
-// ─── install::wizard — first-run interactive setup ───────────────────────────
+// ─── install::wizard — interactive first-run setup ───────────────────────────
 //
 // `warden init` flow:
-//   1. Create ~/.warden/ directory structure
-//   2. Install binary to ~/.warden/bin/
-//   3. Add ~/.warden/bin/ to PATH
-//   4. Detect available CLI tools, offer to install missing ones
-//   5. Detect AI assistant (Claude Code / Gemini CLI)
-//   6. Configure hooks for detected assistant(s)
-//   7. Write default config.toml
-//   8. Migrate from ~/.hookctl/ if exists
+//   1. Banner + welcome
+//   2. Create ~/.warden/ directory structure
+//   3. Install binary to ~/.warden/bin/
+//   4. Add ~/.warden/bin/ to PATH
+//   5. Detect available CLI tools, offer to install missing ones
+//   6. Detect AI assistant (Claude Code / Gemini CLI)
+//   7. Configure hooks for detected assistant(s)
+//   8. Write default config.toml
+//   9. Migrate from ~/.hookctl/ if exists
 // ──────────────────────────────────────────────────────────────────────────────
 
+use super::term::{self, CheckOption, SelectOption};
 use super::{ensure_dirs, home_dir, install_binary, path, tools, write_default_config};
 use crate::assistant::Assistant;
 use crate::constants;
-use std::io::{self, BufRead, Write};
 
 /// Run the full init wizard
 pub fn run() {
-    eprintln!("=== {} init ===", constants::NAME);
+    // Banner
+    term::banner();
+
+    term::print_colored(term::DIM, "  Warden is a runtime guardian for AI coding agents.\n");
+    term::print_colored(term::DIM, "  It enforces tool policies, prevents drift, and keeps sessions efficient.\n");
+    term::print_colored(term::DIM, "  Works with Claude Code, Gemini CLI, and more.\n");
     eprintln!();
 
-    // 1. Create directory structure
-    eprint!("Creating {}/ structure... ", constants::DIR);
+    // ── Step 1: Setup directories + binary ───────────────────────────────────
+
+    term::section("Setup");
+
+    let sp = term::Spinner::start("Creating directory structure...");
     match ensure_dirs() {
-        Ok(()) => eprintln!("ok"),
+        Ok(()) => sp.finish_ok(&format!("Created ~/{}/", constants::DIR)),
         Err(e) => {
-            eprintln!("FAILED: {}", e);
+            sp.finish_fail(&format!("Failed to create directories: {}", e));
             return;
         }
     }
 
-    // 2. Install binary
-    eprint!("Installing binary to {}/bin/... ", constants::DIR);
+    let sp = term::Spinner::start("Installing binary...");
     match install_binary() {
-        Ok(()) => eprintln!("ok"),
-        Err(e) => eprintln!("FAILED: {} (non-fatal)", e),
+        Ok(()) => sp.finish_ok(&format!("Binary installed to ~/{}/bin/", constants::DIR)),
+        Err(e) => sp.finish_warn(&format!("Binary install: {} (non-fatal)", e)),
     }
 
-    // 3. PATH registration
+    // PATH
     if !path::is_on_path() {
-        eprint!("Adding {}/bin/ to PATH... ", constants::DIR);
+        let sp = term::Spinner::start("Registering PATH...");
         match path::add_to_path() {
-            Ok(msg) => eprintln!("{}", msg),
-            Err(e) => eprintln!("FAILED: {} (add manually)", e),
+            Ok(msg) => sp.finish_ok(&msg),
+            Err(e) => sp.finish_warn(&format!("PATH: {} (add manually)", e)),
         }
     } else {
-        eprintln!("PATH: already configured");
+        term::status_ok("PATH already configured");
     }
 
-    // 4. Detect tools
-    eprintln!();
-    eprintln!("Detecting CLI tools:");
+    // ── Step 2: Detect and install CLI tools ─────────────────────────────────
+
+    term::section("CLI Tools");
+
+    term::print_colored(term::DIM, "  Warden works best with modern CLI tools. It automatically redirects\n");
+    term::print_colored(term::DIM, "  legacy commands (grep, find, curl) to faster alternatives.\n");
+
     let statuses = tools::detect_tools();
     let pm = tools::detect_package_manager();
-    let mut missing: Vec<&tools::ToolInfo> = Vec::new();
 
-    for status in &statuses {
-        let icon = if status.installed { "+" } else { "-" };
-        eprintln!("  [{}] {} ({})", icon, status.name, status.binary);
-        if !status.installed
-            && let Some(tool) = tools::TOOLS.iter().find(|t| t.name == status.name)
-        {
-            missing.push(tool);
-        }
+    let installed_count = statuses.iter().filter(|s| s.installed).count();
+    let total = statuses.len();
+
+    eprintln!();
+    term::info("Found:", &format!("{}/{} tools installed", installed_count, total));
+    if let Some(pm_name) = pm {
+        term::info("Package manager:", pm_name);
     }
 
-    // 5. Offer to install missing tools
-    if !missing.is_empty() {
-        if let Some(pm_name) = pm {
-            eprintln!();
-            eprintln!("Package manager detected: {}", pm_name);
-            eprintln!("Install missing tools? (y/n/select)");
+    // Build multi-select with installed tools pre-checked and disabled
+    let mut check_options: Vec<CheckOption> = statuses
+        .iter()
+        .map(|s| {
+            let tool = tools::TOOLS.iter().find(|t| t.name == s.name).unwrap();
+            if s.installed {
+                let mut opt = CheckOption::installed(
+                    tool.name,
+                    &format!("\u{2713} installed  {}", tool.description),
+                );
+                opt.checked = true;
+                opt
+            } else {
+                let rec = if tool.recommended { " (recommended)" } else { "" };
+                CheckOption::new(
+                    tool.name,
+                    &format!("{}{}", tool.description, rec),
+                    tool.recommended,
+                )
+            }
+        })
+        .collect();
 
-            let answer = read_line().to_lowercase();
-            match answer.trim() {
-                "y" | "yes" => {
-                    for tool in &missing {
-                        if let Some(cmd) = tools::install_command(tool, pm_name) {
-                            eprint!("  Installing {}... ", tool.name);
-                            match tools::install_tool(cmd) {
-                                Ok(()) => eprintln!("ok"),
-                                Err(e) => eprintln!("FAILED: {}", e),
-                            }
-                        }
+    let has_missing = statuses.iter().any(|s| !s.installed);
+
+    if has_missing {
+        if pm.is_some() {
+            let selected = term::multi_select("Select tools to install:", &mut check_options);
+
+            // Install selected tools that aren't already installed
+            let pm_name = pm.unwrap();
+            for &idx in &selected {
+                let tool_name = check_options[idx].label.as_str();
+                if statuses[idx].installed {
+                    continue; // Already installed, skip
+                }
+                if let Some(tool) = tools::TOOLS.iter().find(|t| t.name == tool_name)
+                    && let Some(cmd) = tools::install_command(tool, pm_name)
+                {
+                    let sp = term::Spinner::start(&format!("Installing {}...", tool.name));
+                    match tools::install_tool(cmd) {
+                        Ok(()) => sp.finish_ok(&format!("{} installed", tool.name)),
+                        Err(e) => sp.finish_fail(&format!("{}: {}", tool.name, e)),
                     }
                 }
-                "s" | "select" => {
-                    for tool in &missing {
-                        if let Some(cmd) = tools::install_command(tool, pm_name) {
-                            eprint!("  Install {} ({})? [y/n] ", tool.name, tool.description);
-                            let a = read_line().to_lowercase();
-                            if a.trim() == "y" || a.trim() == "yes" {
-                                eprint!("    Installing... ");
-                                match tools::install_tool(cmd) {
-                                    Ok(()) => eprintln!("ok"),
-                                    Err(e) => eprintln!("FAILED: {}", e),
-                                }
-                            }
-                        }
-                    }
-                }
-                _ => eprintln!("  Skipping tool installation"),
             }
         } else {
             eprintln!();
-            eprintln!("No package manager detected. Install tools manually:");
-            for tool in &missing {
-                if let Some(cmd) = tool.install_cargo {
-                    eprintln!("  {}: {}", tool.name, cmd);
+            term::status_warn("No package manager detected. Install tools manually:");
+            for status in &statuses {
+                if !status.installed {
+                    if let Some(tool) = tools::TOOLS.iter().find(|t| t.name == status.name) {
+                        if let Some(cmd) = tool.install_cargo {
+                            term::hint(&format!("{}: {}", tool.name, cmd));
+                        }
+                    }
                 }
             }
         }
+    } else {
+        eprintln!();
+        term::status_ok("All tools installed!");
     }
 
-    // 6. Detect and configure AI assistant
-    eprintln!();
-    detect_and_configure_assistants();
-
-    // 7. Write default config
-    eprint!("Writing default config... ");
-    match write_default_config() {
-        Ok(()) => eprintln!("ok"),
-        Err(e) => eprintln!("FAILED: {}", e),
+    // Show "why" for installed tools if user wants to know
+    if has_missing {
+        eprintln!();
+        term::print_colored(term::DIM, "  Tip: Each tool integrates with Warden's rule engine.\n");
+        term::print_colored(term::DIM, "  Run `warden describe <tool>` to learn more.\n");
     }
 
-    // 8. Migration from hookctl
-    migrate_from_hookctl();
+    // ── Step 3: AI Assistant configuration ───────────────────────────────────
 
-    // Done
-    eprintln!();
-    eprintln!("=== {} ready ===", constants::NAME);
-    eprintln!("Run `{} version` to verify.", constants::NAME);
-}
+    term::section("AI Assistant");
 
-/// Detect which AI assistants are installed and configure hooks
-fn detect_and_configure_assistants() {
     let claude_dir = dirs_home().join(".claude");
     let gemini_dir = dirs_home().join(".gemini");
 
     let has_claude = claude_dir.exists();
     let has_gemini = gemini_dir.exists();
 
-    if has_claude {
-        eprint!("Claude Code detected. Configure hooks? [y/n] ");
-        if read_line().trim().to_lowercase().starts_with('y') {
-            configure_claude_code();
-        }
-    }
-
-    if has_gemini {
-        eprint!("Gemini CLI detected. Configure hooks? [y/n] ");
-        if read_line().trim().to_lowercase().starts_with('y') {
-            configure_gemini_cli();
-        }
-    }
-
     if !has_claude && !has_gemini {
-        eprintln!(
-            "No AI assistant detected. Run `{} install claude-code` or `{} install gemini-cli` later.",
-            constants::NAME,
-            constants::NAME
-        );
+        term::status_warn("No AI assistant detected.");
+        term::hint(&format!(
+            "Run `{} install claude-code` or `{} install gemini-cli` after installing one.",
+            constants::NAME, constants::NAME
+        ));
+    } else {
+        // Build selection options based on what's detected
+        let mut options: Vec<SelectOption> = Vec::new();
+
+        if has_claude && has_gemini {
+            options.push(SelectOption::new("Both", "Configure Claude Code + Gemini CLI"));
+            options.push(SelectOption::new("Claude Code", "Anthropic's AI coding assistant"));
+            options.push(SelectOption::new("Gemini CLI", "Google's AI coding assistant"));
+            options.push(SelectOption::new("Skip", "Configure later"));
+        } else if has_claude {
+            term::status_ok("Claude Code detected");
+            options.push(SelectOption::new("Claude Code", "Configure hooks for Claude Code"));
+            options.push(SelectOption::new("Skip", "Configure later"));
+        } else {
+            term::status_ok("Gemini CLI detected");
+            options.push(SelectOption::new("Gemini CLI", "Configure hooks for Gemini CLI"));
+            options.push(SelectOption::new("Skip", "Configure later"));
+        }
+
+        if let Some(choice) = term::select("Which assistant should Warden guard?", &options) {
+            let label = &options[choice].label;
+            match label.as_str() {
+                "Both" => {
+                    configure_claude_code();
+                    configure_gemini_cli();
+                }
+                "Claude Code" => configure_claude_code(),
+                "Gemini CLI" => configure_gemini_cli(),
+                _ => term::status_skip("Skipped assistant configuration"),
+            }
+        }
     }
+
+    // ── Step 4: Config + migration ───────────────────────────────────────────
+
+    term::section("Configuration");
+
+    let sp = term::Spinner::start("Writing default config...");
+    match write_default_config() {
+        Ok(()) => sp.finish_ok(&format!(
+            "Config at ~/{}/{}",
+            constants::DIR,
+            constants::CONFIG_FILE
+        )),
+        Err(e) => sp.finish_fail(&format!("Config: {}", e)),
+    }
+
+    // Migration from hookctl
+    migrate_from_hookctl();
+
+    // Start daemon
+    let sp = term::Spinner::start("Starting daemon...");
+    if !crate::ipc::daemon_is_running() {
+        crate::ipc::spawn_daemon();
+        sp.finish_ok("Daemon started");
+    } else {
+        sp.finish_ok("Daemon already running");
+    }
+
+    // ── Done ─────────────────────────────────────────────────────────────────
+
+    eprintln!();
+    term::print_bold(term::BRAND, "  \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n");
+    eprintln!();
+    term::print_bold(term::SUCCESS, "  Warden is ready.\n");
+    eprintln!();
+    term::print_colored(term::TEXT, "  Quick reference:\n");
+    term::info("warden version     ", "Verify installation");
+    term::info("warden describe    ", "Show active rules & restrictions");
+    term::info("warden config list ", "View current configuration");
+    eprintln!();
+    term::print_colored(term::DIM, "  Warden runs automatically via hooks — no manual intervention needed.\n");
+    term::print_colored(term::DIM, "  Start a coding session and Warden will guard it silently.\n");
+    eprintln!();
 }
 
 /// Configure Claude Code hooks in ~/.claude/settings.json
 fn configure_claude_code() {
+    let sp = term::Spinner::start("Configuring Claude Code hooks...");
     let adapter = crate::assistant::claude_code::ClaudeCode;
     let binary_name = if cfg!(windows) {
         "warden-relay.exe"
@@ -179,7 +254,10 @@ fn configure_claude_code() {
     let settings_path = dirs_home().join(".claude").join("settings.json");
 
     if settings_path.exists() {
-        // Merge hooks into existing settings
+        // Backup + merge
+        let bak = settings_path.with_extension("json.bak");
+        let _ = std::fs::copy(&settings_path, &bak);
+
         if let Ok(content) = std::fs::read_to_string(&settings_path)
             && let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content)
             && let Ok(hooks) = serde_json::from_str::<serde_json::Value>(&hooks_json)
@@ -189,24 +267,23 @@ fn configure_claude_code() {
             if let Ok(merged) = serde_json::to_string_pretty(&settings)
                 && std::fs::write(&settings_path, &merged).is_ok()
             {
-                eprintln!("  Hooks configured in {}", settings_path.display());
+                sp.finish_ok("Claude Code hooks installed");
                 return;
             }
         }
-        eprintln!(
-            "  Could not merge hooks. Add manually from: {} install claude-code",
-            constants::NAME
-        );
+        sp.finish_fail("Could not merge hooks into settings.json");
     } else {
-        // Create new settings with hooks
         if std::fs::write(&settings_path, &hooks_json).is_ok() {
-            eprintln!("  Created {}", settings_path.display());
+            sp.finish_ok("Claude Code hooks created");
+        } else {
+            sp.finish_fail("Could not create settings.json");
         }
     }
 }
 
 /// Configure Gemini CLI hooks
 fn configure_gemini_cli() {
+    let sp = term::Spinner::start("Configuring Gemini CLI hooks...");
     let adapter = crate::assistant::gemini_cli::GeminiCli;
     let binary_name = if cfg!(windows) {
         "warden-relay.exe"
@@ -218,6 +295,7 @@ fn configure_gemini_cli() {
 
     let settings_path = dirs_home().join(".gemini").join("settings.json");
     let Some(settings_dir) = settings_path.parent() else {
+        sp.finish_fail("Could not determine Gemini settings path");
         return;
     };
     let _ = std::fs::create_dir_all(settings_dir);
@@ -232,11 +310,15 @@ fn configure_gemini_cli() {
             if let Ok(merged) = serde_json::to_string_pretty(&settings)
                 && std::fs::write(&settings_path, &merged).is_ok()
             {
-                eprintln!("  Hooks configured in {}", settings_path.display());
+                sp.finish_ok("Gemini CLI hooks installed");
+                return;
             }
         }
+        sp.finish_fail("Could not merge hooks into Gemini settings");
     } else if std::fs::write(&settings_path, &hooks_json).is_ok() {
-        eprintln!("  Created {}", settings_path.display());
+        sp.finish_ok("Gemini CLI hooks created");
+    } else {
+        sp.finish_fail("Could not create Gemini settings");
     }
 }
 
@@ -248,12 +330,10 @@ fn migrate_from_hookctl() {
     }
 
     eprintln!();
-    eprint!(
-        "Found {}/ — migrate to {}/? [y/n] ",
-        constants::LEGACY_DIR,
-        constants::DIR
-    );
-    if !read_line().trim().to_lowercase().starts_with('y') {
+    term::status_work(&format!("Found ~/{} (legacy)", constants::LEGACY_DIR));
+
+    if !term::confirm("Migrate data to new location?", true) {
+        term::status_skip("Migration skipped");
         return;
     }
 
@@ -263,11 +343,11 @@ fn migrate_from_hookctl() {
     let old_projects = old_dir.join("projects");
     let new_projects = new_dir.join("projects");
     if old_projects.exists() && !new_projects.exists() {
-        eprint!("  Migrating projects/... ");
+        let sp = term::Spinner::start("Migrating projects...");
         if copy_dir_recursive(&old_projects, &new_projects).is_ok() {
-            eprintln!("ok");
+            sp.finish_ok("Projects migrated");
         } else {
-            eprintln!("FAILED");
+            sp.finish_fail("Could not migrate projects");
         }
     }
 
@@ -275,11 +355,11 @@ fn migrate_from_hookctl() {
     let old_rules = old_dir.join("rules.toml");
     let new_rules = new_dir.join("rules").join(constants::PERSONAL_RULES);
     if old_rules.exists() && !new_rules.exists() {
-        eprint!("  Migrating rules.toml... ");
+        let sp = term::Spinner::start("Migrating rules...");
         if std::fs::copy(&old_rules, &new_rules).is_ok() {
-            eprintln!("ok → rules/{}", constants::PERSONAL_RULES);
+            sp.finish_ok(&format!("Rules migrated to rules/{}", constants::PERSONAL_RULES));
         } else {
-            eprintln!("FAILED");
+            sp.finish_fail("Could not migrate rules");
         }
     }
 
@@ -290,19 +370,11 @@ fn migrate_from_hookctl() {
         let _ = copy_dir_recursive(&old_logs, &new_logs);
     }
 
-    eprintln!(
-        "  Migration complete. Old {} can be removed manually.",
+    term::status_ok("Migration complete");
+    term::hint(&format!(
+        "Old ~/{} can be removed manually",
         constants::LEGACY_DIR
-    );
-}
-
-/// Read a line from stdin (for interactive prompts)
-fn read_line() -> String {
-    let _ = io::stdout().flush();
-    let stdin = io::stdin();
-    let mut line = String::new();
-    let _ = stdin.lock().read_line(&mut line);
-    line
+    ));
 }
 
 /// Get user home directory

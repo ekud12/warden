@@ -46,9 +46,27 @@ async function main() {
 
   try {
     await download(url, dest);
-    if (os.platform() !== "win32") {
+    if (os.platform() === "win32") {
+      // Remove Zone.Identifier to prevent SmartScreen "Access denied"
+      try { fs.unlinkSync(dest + ":Zone.Identifier"); } catch (e) {}
+    } else {
       fs.chmodSync(dest, 0o755);
     }
+
+    // Also download the relay binary (Windows only — prevents CMD flicker)
+    if (os.platform() === "win32") {
+      const relayBinary = binary.replace("warden-", "warden-relay-");
+      const relayDest = path.join(binDir, "warden-relay.exe");
+      const relayUrl = `https://github.com/${REPO}/releases/download/v${VERSION}/${relayBinary}`;
+      try {
+        await download(relayUrl, relayDest);
+        try { fs.unlinkSync(relayDest + ":Zone.Identifier"); } catch (e) {}
+        console.log(`Installed relay to ${relayDest}`);
+      } catch (e) {
+        // Relay is optional — warden works without it (just has CMD flicker)
+      }
+    }
+
     console.log(`Installed to ${dest}`);
 
     // Run warden init (non-interactive: just PATH + config)

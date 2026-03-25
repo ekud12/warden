@@ -41,7 +41,8 @@ static RE: LazyLock<SessionRegexes> = LazyLock::new(|| SessionRegexes {
     build_fail: Regex::new(config::BASH_BUILD_FAIL).expect("regex: build_fail"),
     perm_error: Regex::new(config::BASH_PERM_ERROR).expect("regex: perm_error"),
     missing_tool: Regex::new(config::BASH_MISSING_TOOL).expect("regex: missing_tool"),
-    missing_tool_name: Regex::new(config::BASH_MISSING_TOOL_NAME).expect("regex: missing_tool_name"),
+    missing_tool_name: Regex::new(config::BASH_MISSING_TOOL_NAME)
+        .expect("regex: missing_tool_name"),
     knip_check: Regex::new(config::BASH_KNIP_CHECK).expect("regex: knip_check"),
     knip_count: Regex::new(config::BASH_KNIP_COUNT).expect("regex: knip_count"),
     build_success: Regex::new(config::BASH_BUILD_SUCCESS).expect("regex: build_success"),
@@ -87,16 +88,17 @@ pub fn process(cmd: &str, output: &str, exit_code: Option<i64>) {
         let hash = common::string_hash(sample);
 
         if let Some(prev) = state.commands.get(&normalized)
-            && prev.hash == hash {
-                common::additional_context(&format!(
-                    "Output identical to turn {}. No new errors/changes.",
-                    prev.turn
-                ));
-                common::log(
-                    "posttool-session",
-                    &format!("DEDUP cmd: {}", common::truncate(cmd, 40)),
-                );
-            }
+            && prev.hash == hash
+        {
+            common::additional_context(&format!(
+                "Output identical to turn {}. No new errors/changes.",
+                prev.turn
+            ));
+            common::log(
+                "posttool-session",
+                &format!("DEDUP cmd: {}", common::truncate(cmd, 40)),
+            );
+        }
 
         let output_tokens = (output.len() as u64) / 4; // ~1 token per 4 chars
 
@@ -114,12 +116,7 @@ pub fn process(cmd: &str, output: &str, exit_code: Option<i64>) {
     common::write_session_state(&state);
 }
 
-fn detect_errors(
-    cmd: &str,
-    output: &str,
-    state: &mut common::SessionState,
-    re: &SessionRegexes,
-) {
+fn detect_errors(cmd: &str, output: &str, state: &mut common::SessionState, re: &SessionRegexes) {
     state.errors_unresolved += 1;
     // Track what's blocking progress
     state.goal_stack.blocked_on = format!("Error in: {}", common::truncate(cmd, 40));
@@ -140,12 +137,13 @@ fn detect_errors(
 
     // Lint errors
     if cmd_matches(cmd, config::LINT_CMDS)
-        && let Some(cap) = re.lint_count.captures(output) {
-            let n = cap.get(1).map(|m| m.as_str()).unwrap_or("?");
-            let detail = format!("{} errors | {}", n, common::truncate(cmd, 60));
-            common::add_session_note("lint-error", &detail);
-            common::log("posttool-session", &format!("ERROR lint {}", detail));
-        }
+        && let Some(cap) = re.lint_count.captures(output)
+    {
+        let n = cap.get(1).map(|m| m.as_str()).unwrap_or("?");
+        let detail = format!("{} errors | {}", n, common::truncate(cmd, 60));
+        common::add_session_note("lint-error", &detail);
+        common::log("posttool-session", &format!("ERROR lint {}", detail));
+    }
 
     // Dependency failures
     if re.dep_failure.is_match(output) {
@@ -180,10 +178,7 @@ fn detect_errors(
         // parsing hundreds of lines of build output
         let error_locations = extract_error_locations(output);
         if !error_locations.is_empty() {
-            common::additional_context(&format!(
-                "Build errors: {}",
-                error_locations.join(", ")
-            ));
+            common::additional_context(&format!("Build errors: {}", error_locations.join(", ")));
         }
     }
 
@@ -308,10 +303,7 @@ fn detect_milestones(
             .unwrap_or("?");
         let detail = format!("commit: {}", common::truncate(msg, 60));
         common::add_session_note("commit", &common::truncate(msg, 80));
-        common::log(
-            "posttool-session",
-            &format!("MILESTONE {}", detail),
-        );
+        common::log("posttool-session", &format!("MILESTONE {}", detail));
         state.errors_unresolved = 0;
         state.last_milestone = detail;
         return;
@@ -347,7 +339,9 @@ fn is_explore_command(cmd: &str) -> bool {
 fn normalize_cmd(cmd: &str) -> String {
     let mut result = String::with_capacity(cmd.len());
     for (i, word) in cmd.split_whitespace().enumerate() {
-        if i > 0 { result.push(' '); }
+        if i > 0 {
+            result.push(' ');
+        }
         result.push_str(word);
     }
     result
@@ -365,9 +359,8 @@ fn extract_error_locations(output: &str) -> Vec<String> {
     //   src/file.ts(42,5): error TS2304: ...
     //   file.cs(42,5): error CS1002: ...
     //   ERROR in src/file.ts:42:5
-    static ERROR_LOC: LazyLock<Option<Regex>> = LazyLock::new(|| {
-        Regex::new(config::BASH_ERROR_LOC).ok()
-    });
+    static ERROR_LOC: LazyLock<Option<Regex>> =
+        LazyLock::new(|| Regex::new(config::BASH_ERROR_LOC).ok());
 
     let re = match ERROR_LOC.as_ref() {
         Some(r) => r,
@@ -408,24 +401,27 @@ fn extract_error_locations(output: &str) -> Vec<String> {
 ///   "--- TEST OUTPUT (filtered: 200 lines → 15 kept, failures + summary) ---"
 ///   "--- BUILD OUTPUT (filtered: 300 lines → 20 kept, errors + warnings) ---"
 ///   "--- INSTALL OUTPUT (filtered: 150 lines → 8 kept) ---"
-static TRUNCATION_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(config::BASH_TRUNCATION_MARKER).unwrap()
-});
+static TRUNCATION_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(config::BASH_TRUNCATION_MARKER).unwrap());
 
 fn detect_truncation_savings(output: &str, state: &mut common::SessionState) {
     if let Some(caps) = TRUNCATION_RE.captures(output)
         && let Some(total_str) = caps.get(1)
-            && let Ok(total_lines) = total_str.as_str().parse::<u64>() {
-                let visible_lines = output.lines().count() as u64;
-                let dropped = total_lines.saturating_sub(visible_lines);
-                if dropped > 0 {
-                    let saved = dropped * 10;
-                    state.estimated_tokens_saved += saved;
-                    state.savings_truncation += 1;
-                    common::log(
-                        "posttool-session",
-                        &format!("TRUNCATION saved ~{} tokens ({} lines dropped)", saved, dropped),
-                    );
-                }
-            }
+        && let Ok(total_lines) = total_str.as_str().parse::<u64>()
+    {
+        let visible_lines = output.lines().count() as u64;
+        let dropped = total_lines.saturating_sub(visible_lines);
+        if dropped > 0 {
+            let saved = dropped * 10;
+            state.estimated_tokens_saved += saved;
+            state.savings_truncation += 1;
+            common::log(
+                "posttool-session",
+                &format!(
+                    "TRUNCATION saved ~{} tokens ({} lines dropped)",
+                    saved, dropped
+                ),
+            );
+        }
+    }
 }

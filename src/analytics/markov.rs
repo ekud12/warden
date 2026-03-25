@@ -16,7 +16,8 @@ pub fn record_transition(transitions: &mut HashMap<String, u32>, prev: &str, cur
 /// Get transition probability P(to | from)
 fn transition_probability(transitions: &HashMap<String, u32>, from: &str, to: &str) -> f64 {
     let prefix = format!("{}→", from);
-    let total: u32 = transitions.iter()
+    let total: u32 = transitions
+        .iter()
         .filter(|(k, _)| k.starts_with(&prefix))
         .map(|(_, &v)| v)
         .sum();
@@ -46,8 +47,12 @@ pub fn check_patterns(
         let p_read_read = transition_probability(transitions, "read", "read");
         if p_read_read > 0.7 {
             // Check if we're actually in a read chain
-            let recent_reads = action_history.iter().rev().take(3)
-                .filter(|a| a.as_str() == "read").count();
+            let recent_reads = action_history
+                .iter()
+                .rev()
+                .take(3)
+                .filter(|a| a.as_str() == "read")
+                .count();
             if recent_reads >= 3 {
                 return Some(format!(
                     "Read chains detected ({:.0}% probability of continuing). If exploring intentionally, continue. Otherwise, consider starting edits.",
@@ -95,7 +100,11 @@ mod tests {
         record_transition(&mut transitions, "read", "edit");
 
         let p = transition_probability(&transitions, "read", "read");
-        assert!((p - 0.667).abs() < 0.01, "P(read→read) should be ~0.667, got {}", p);
+        assert!(
+            (p - 0.667).abs() < 0.01,
+            "P(read→read) should be ~0.667, got {}",
+            p
+        );
     }
 
     #[test]

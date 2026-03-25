@@ -19,14 +19,18 @@ pub fn generate(state: &common::SessionState) -> Option<String> {
     sections.push(format!("# Session Summary ({})", common::now_iso()));
     sections.push(format!(
         "**Duration:** {} turns | **Phase:** {} | **Quality:** estimated from {} snapshots",
-        state.turn, state.adaptive.phase, state.turn_snapshots.len()
+        state.turn,
+        state.adaptive.phase,
+        state.turn_snapshots.len()
     ));
 
     // Files edited
     if !state.files_edited.is_empty() {
         let mut edit_section = String::from("\n## Files Modified\n");
         for file in &state.files_edited {
-            let short = file.rsplit('/').next()
+            let short = file
+                .rsplit('/')
+                .next()
                 .or_else(|| file.rsplit('\\').next())
                 .unwrap_or(file);
             edit_section.push_str(&format!("- `{}`\n", short));
@@ -40,7 +44,9 @@ pub fn generate(state: &common::SessionState) -> Option<String> {
         let mut reads: Vec<(&String, &common::FileReadEntry)> = state.files_read.iter().collect();
         reads.sort_by(|a, b| b.1.turn.cmp(&a.1.turn));
         for (path, entry) in reads.iter().take(10) {
-            let short = path.rsplit('/').next()
+            let short = path
+                .rsplit('/')
+                .next()
                 .or_else(|| path.rsplit('\\').next())
                 .unwrap_or(path);
             read_section.push_str(&format!("- `{}` (turn {})\n", short, entry.turn));
@@ -88,7 +94,10 @@ pub fn generate(state: &common::SessionState) -> Option<String> {
 
         sections.push(format!(
             "\n## Stats\n- Total edits: {}\n- Errors: {}\n- Milestones: {}\n- Tokens saved: ~{}K",
-            edits_count, errors.len(), milestones.len(), state.estimated_tokens_saved / 1000
+            edits_count,
+            errors.len(),
+            milestones.len(),
+            state.estimated_tokens_saved / 1000
         ));
     }
 
@@ -97,7 +106,10 @@ pub fn generate(state: &common::SessionState) -> Option<String> {
     // Write to project dir
     let output_path = project_dir.join("last-session.md");
     let _ = std::fs::write(&output_path, &changelog);
-    common::log("auto-changelog", &format!("Wrote session summary to {}", output_path.display()));
+    common::log(
+        "auto-changelog",
+        &format!("Wrote session summary to {}", output_path.display()),
+    );
 
     Some(changelog)
 }

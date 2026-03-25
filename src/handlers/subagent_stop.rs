@@ -62,8 +62,13 @@ pub fn run(raw: &str) {
             let saved = original_len - truncated.len();
             common::log(
                 "subagent-stop",
-                &format!("TRUNCATE {} agent: {} -> {} chars (saved {})",
-                    agent_type, original_len, truncated.len(), saved),
+                &format!(
+                    "TRUNCATE {} agent: {} -> {} chars (saved {})",
+                    agent_type,
+                    original_len,
+                    truncated.len(),
+                    saved
+                ),
             );
 
             // Track token savings
@@ -75,7 +80,9 @@ pub fn run(raw: &str) {
             // Inject truncated version as additional context for the orchestrator
             common::additional_context(&format!(
                 "[Subagent output truncated: {} -> {} chars]\n{}",
-                original_len, truncated.len(), truncated
+                original_len,
+                truncated.len(),
+                truncated
             ));
         }
         Some(text) => {
@@ -98,7 +105,8 @@ fn truncate_output(text: &str) -> String {
     // Try to cut at line boundaries for cleaner output
     let head_end = text[..KEEP_HEAD].rfind('\n').unwrap_or(KEEP_HEAD);
     let tail_start_offset = text.len() - KEEP_TAIL;
-    let tail_start = text[tail_start_offset..].find('\n')
+    let tail_start = text[tail_start_offset..]
+        .find('\n')
         .map(|i| tail_start_offset + i + 1)
         .unwrap_or(tail_start_offset);
 

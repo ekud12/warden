@@ -43,7 +43,10 @@ pub fn run() {
     let home = super::home_dir();
     if home.exists() {
         eprintln!();
-        eprintln!("Remove {}? This deletes config, rules, and cached state.", home.display());
+        eprintln!(
+            "Remove {}? This deletes config, rules, and cached state.",
+            home.display()
+        );
         eprintln!("  Type 'yes' to confirm:");
 
         let answer = read_line();
@@ -59,8 +62,12 @@ pub fn run() {
 
     eprintln!();
     eprintln!("=== {} uninstalled ===", constants::NAME);
-    eprintln!("The running binary at {} can be deleted manually.",
-        std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default());
+    eprintln!(
+        "The running binary at {} can be deleted manually.",
+        std::env::current_exe()
+            .map(|p| p.display().to_string())
+            .unwrap_or_default()
+    );
 }
 
 /// Remove Warden hooks from Claude Code settings.json
@@ -75,45 +82,48 @@ fn remove_claude_code_hooks() {
     }
 
     if let Ok(content) = fs::read_to_string(&settings_path)
-        && let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
-            // Remove hooks that reference warden
-            if let Some(hooks) = settings.get_mut("hooks")
-                && let Some(hooks_obj) = hooks.as_object_mut() {
-                    let mut cleaned = false;
-                    for (_event, hook_list) in hooks_obj.iter_mut() {
-                        if let Some(arr) = hook_list.as_array_mut() {
-                            let before = arr.len();
-                            arr.retain(|hook| {
-                                let cmd = hook.get("hooks")
-                                    .and_then(|h| h.as_array())
-                                    .and_then(|a| a.first())
-                                    .and_then(|h| h.get("command"))
-                                    .and_then(|c| c.as_str())
-                                    .unwrap_or("");
-                                !cmd.contains("warden")
-                            });
-                            if arr.len() < before { cleaned = true; }
-                        }
-                    }
-                    // Remove empty hook events
-                    hooks_obj.retain(|_, v| {
-                        v.as_array().map(|a| !a.is_empty()).unwrap_or(true)
+        && let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content)
+    {
+        // Remove hooks that reference warden
+        if let Some(hooks) = settings.get_mut("hooks")
+            && let Some(hooks_obj) = hooks.as_object_mut()
+        {
+            let mut cleaned = false;
+            for (_event, hook_list) in hooks_obj.iter_mut() {
+                if let Some(arr) = hook_list.as_array_mut() {
+                    let before = arr.len();
+                    arr.retain(|hook| {
+                        let cmd = hook
+                            .get("hooks")
+                            .and_then(|h| h.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|h| h.get("command"))
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("");
+                        !cmd.contains("warden")
                     });
-
-                    if cleaned {
-                        if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                            let _ = fs::write(&settings_path, json);
-                        }
-                        eprintln!("cleaned");
-                    } else {
-                        eprintln!("no warden hooks found");
+                    if arr.len() < before {
+                        cleaned = true;
                     }
-                } else {
-                    eprintln!("no hooks section");
                 }
+            }
+            // Remove empty hook events
+            hooks_obj.retain(|_, v| v.as_array().map(|a| !a.is_empty()).unwrap_or(true));
+
+            if cleaned {
+                if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                    let _ = fs::write(&settings_path, json);
+                }
+                eprintln!("cleaned");
+            } else {
+                eprintln!("no warden hooks found");
+            }
         } else {
-            eprintln!("could not parse settings");
+            eprintln!("no hooks section");
         }
+    } else {
+        eprintln!("could not parse settings");
+    }
 }
 
 /// Remove Warden hooks from Gemini CLI settings.json
@@ -128,43 +138,46 @@ fn remove_gemini_cli_hooks() {
     }
 
     if let Ok(content) = fs::read_to_string(&settings_path)
-        && let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content) {
-            if let Some(hooks) = settings.get_mut("hooks")
-                && let Some(hooks_obj) = hooks.as_object_mut() {
-                    let mut cleaned = false;
-                    for (_event, hook_list) in hooks_obj.iter_mut() {
-                        if let Some(arr) = hook_list.as_array_mut() {
-                            let before = arr.len();
-                            arr.retain(|hook| {
-                                let cmd = hook.get("hooks")
-                                    .and_then(|h| h.as_array())
-                                    .and_then(|a| a.first())
-                                    .and_then(|h| h.get("command"))
-                                    .and_then(|c| c.as_str())
-                                    .unwrap_or("");
-                                !cmd.contains("warden")
-                            });
-                            if arr.len() < before { cleaned = true; }
-                        }
-                    }
-                    hooks_obj.retain(|_, v| {
-                        v.as_array().map(|a| !a.is_empty()).unwrap_or(true)
+        && let Ok(mut settings) = serde_json::from_str::<serde_json::Value>(&content)
+    {
+        if let Some(hooks) = settings.get_mut("hooks")
+            && let Some(hooks_obj) = hooks.as_object_mut()
+        {
+            let mut cleaned = false;
+            for (_event, hook_list) in hooks_obj.iter_mut() {
+                if let Some(arr) = hook_list.as_array_mut() {
+                    let before = arr.len();
+                    arr.retain(|hook| {
+                        let cmd = hook
+                            .get("hooks")
+                            .and_then(|h| h.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|h| h.get("command"))
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("");
+                        !cmd.contains("warden")
                     });
-
-                    if cleaned {
-                        if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                            let _ = fs::write(&settings_path, json);
-                        }
-                        eprintln!("cleaned");
-                    } else {
-                        eprintln!("no warden hooks found");
+                    if arr.len() < before {
+                        cleaned = true;
                     }
-                } else {
-                    eprintln!("no hooks section");
                 }
+            }
+            hooks_obj.retain(|_, v| v.as_array().map(|a| !a.is_empty()).unwrap_or(true));
+
+            if cleaned {
+                if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                    let _ = fs::write(&settings_path, json);
+                }
+                eprintln!("cleaned");
+            } else {
+                eprintln!("no warden hooks found");
+            }
         } else {
-            eprintln!("could not parse settings");
+            eprintln!("no hooks section");
         }
+    } else {
+        eprintln!("could not parse settings");
+    }
 }
 
 /// Best-effort PATH removal
@@ -205,7 +218,8 @@ fn remove_from_path() {
             if let Ok(content) = fs::read_to_string(config) {
                 if content.contains(bin_str.as_ref()) {
                     // Remove the PATH line
-                    let cleaned: Vec<&str> = content.lines()
+                    let cleaned: Vec<&str> = content
+                        .lines()
                         .filter(|line| !line.contains(bin_str.as_ref()))
                         .collect();
                     let _ = fs::write(config, cleaned.join("\n"));

@@ -13,9 +13,7 @@ pub const ZERO_TRACE_CONTENT: &str = "";
 pub const ZERO_TRACE_CMD: &str = "";
 
 /// Write operation patterns (echo, printf, tee, >>)
-pub const ZERO_TRACE_WRITE: &str =
-    r"(echo|printf|tee|>>)";
+pub const ZERO_TRACE_WRITE: &str = r"(echo|printf|tee|>>)";
 
 /// Path exclusions: don't trigger zero-trace in .claude/ directories
-pub const ZERO_TRACE_PATH_EXCLUDE: &str =
-    r"(?i)[/\\.]claude[/\\]";
+pub const ZERO_TRACE_PATH_EXCLUDE: &str = r"(?i)[/\\.]claude[/\\]";

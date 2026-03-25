@@ -48,14 +48,18 @@ pub fn ensure_dirs() -> std::io::Result<()> {
 /// Install the current binary to ~/.warden/bin/
 /// Copies the running executable to the standard location.
 pub fn install_binary() -> Result<(), String> {
-    let source = std::env::current_exe()
-        .map_err(|e| format!("Cannot determine current exe: {}", e))?;
+    let source =
+        std::env::current_exe().map_err(|e| format!("Cannot determine current exe: {}", e))?;
 
     let dest_dir = bin_dir();
     fs::create_dir_all(&dest_dir)
         .map_err(|e| format!("Cannot create {}: {}", dest_dir.display(), e))?;
 
-    let binary_name = if cfg!(windows) { "warden.exe" } else { "warden" };
+    let binary_name = if cfg!(windows) {
+        "warden.exe"
+    } else {
+        "warden"
+    };
     let dest = dest_dir.join(binary_name);
 
     // Don't copy over ourselves
@@ -63,8 +67,7 @@ pub fn install_binary() -> Result<(), String> {
         return Ok(());
     }
 
-    fs::copy(&source, &dest)
-        .map_err(|e| format!("Cannot copy binary: {}", e))?;
+    fs::copy(&source, &dest).map_err(|e| format!("Cannot copy binary: {}", e))?;
 
     #[cfg(unix)]
     {
@@ -73,8 +76,15 @@ pub fn install_binary() -> Result<(), String> {
     }
 
     // Also copy the relay binary if it exists next to the source
-    let relay_name = if cfg!(windows) { "warden-relay.exe" } else { "warden-relay" };
-    let relay_src = source.parent().unwrap_or(std::path::Path::new(".")).join(relay_name);
+    let relay_name = if cfg!(windows) {
+        "warden-relay.exe"
+    } else {
+        "warden-relay"
+    };
+    let relay_src = source
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(relay_name);
     let relay_dest = dest_dir.join(relay_name);
     if relay_src.exists() && relay_src != relay_dest {
         let _ = fs::copy(&relay_src, &relay_dest);
@@ -129,7 +139,6 @@ type = "auto"
 # command_recovery = true
 "#;
 
-    fs::write(&config_path, content)
-        .map_err(|e| format!("Cannot write config: {}", e))?;
+    fs::write(&config_path, content).map_err(|e| format!("Cannot write config: {}", e))?;
     Ok(())
 }

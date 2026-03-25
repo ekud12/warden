@@ -41,15 +41,28 @@ fn run_git_status() -> Option<String> {
 }
 
 /// Wait for a child process with timeout. Kills and returns None on timeout.
-fn wait_with_timeout(mut child: std::process::Child, timeout: std::time::Duration) -> Option<std::process::Output> {
+fn wait_with_timeout(
+    mut child: std::process::Child,
+    timeout: std::time::Duration,
+) -> Option<std::process::Output> {
     let start = std::time::Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                let stdout = child.stdout.take()
-                    .map(|mut s| { let mut b = Vec::new(); let _ = std::io::Read::read_to_end(&mut s, &mut b); b })
+                let stdout = child
+                    .stdout
+                    .take()
+                    .map(|mut s| {
+                        let mut b = Vec::new();
+                        let _ = std::io::Read::read_to_end(&mut s, &mut b);
+                        b
+                    })
                     .unwrap_or_default();
-                return Some(std::process::Output { status, stdout, stderr: Vec::new() });
+                return Some(std::process::Output {
+                    status,
+                    stdout,
+                    stderr: Vec::new(),
+                });
             }
             Ok(None) => {
                 if start.elapsed() >= timeout {

@@ -63,17 +63,24 @@ pub fn check_drift(actions: &[String], has_recent_edits: bool) -> Option<String>
     if entropy < 1.0 && read_count >= 7 && edit_count == 0 && !has_recent_edits {
         return Some(format!(
             "Action entropy: {:.2} (low). {} reads, 0 edits in last {} actions. If exploring for a new task, this is expected. Otherwise, consider narrowing focus.",
-            entropy, read_count, window.len()
+            entropy,
+            read_count,
+            window.len()
         ));
     }
 
     // Very low entropy with errors = stuck
     if entropy < 0.8 {
-        let error_count = window.iter().filter(|a| a.as_str() == ACTION_BASH_FAIL || a.as_str() == ACTION_ERROR).count();
+        let error_count = window
+            .iter()
+            .filter(|a| a.as_str() == ACTION_BASH_FAIL || a.as_str() == ACTION_ERROR)
+            .count();
         if error_count >= 5 {
             return Some(format!(
                 "Action entropy: {:.2} (very low). {} errors in last {} actions. Try a different approach or ask for guidance.",
-                entropy, error_count, window.len()
+                entropy,
+                error_count,
+                window.len()
             ));
         }
     }
@@ -87,10 +94,17 @@ mod tests {
 
     #[test]
     fn entropy_uniform() {
-        let actions: Vec<String> = vec!["read", "edit", "bash_ok", "error", "milestone", "bash_fail"]
-            .into_iter().map(String::from).collect();
+        let actions: Vec<String> =
+            vec!["read", "edit", "bash_ok", "error", "milestone", "bash_fail"]
+                .into_iter()
+                .map(String::from)
+                .collect();
         let e = shannon_entropy(&actions);
-        assert!(e > 2.0, "uniform distribution should have high entropy: {}", e);
+        assert!(
+            e > 2.0,
+            "uniform distribution should have high entropy: {}",
+            e
+        );
     }
 
     #[test]
@@ -109,8 +123,12 @@ mod tests {
 
     #[test]
     fn no_drift_with_edits() {
-        let actions: Vec<String> = vec!["read", "edit", "read", "edit", "read", "bash_ok", "read", "edit", "read", "bash_ok"]
-            .into_iter().map(String::from).collect();
+        let actions: Vec<String> = vec![
+            "read", "edit", "read", "edit", "read", "bash_ok", "read", "edit", "read", "bash_ok",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
         let result = check_drift(&actions, true);
         assert!(result.is_none(), "should not detect drift with edits");
     }

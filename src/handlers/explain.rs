@@ -23,18 +23,36 @@ pub fn explain_rule(rule_id: &str) {
             eprintln!("Description: {}", r.description);
             eprintln!("Disableable: {}", if r.can_disable { "yes" } else { "no" });
             if r.can_disable {
-                eprintln!("\nDisable: {} restrictions disable {}", constants::NAME, r.id);
-                eprintln!("Re-enable: {} restrictions enable {}", constants::NAME, r.id);
+                eprintln!(
+                    "\nDisable: {} restrictions disable {}",
+                    constants::NAME,
+                    r.id
+                );
+                eprintln!(
+                    "Re-enable: {} restrictions enable {}",
+                    constants::NAME,
+                    r.id
+                );
             }
         }
         None => {
             // Try fuzzy match
-            let matches: Vec<&crate::config::restrictions::Restriction> = RESTRICTIONS.iter()
-                .filter(|r| r.id.contains(rule_id) || r.description.to_lowercase().contains(&rule_id.to_lowercase()))
+            let matches: Vec<&crate::config::restrictions::Restriction> = RESTRICTIONS
+                .iter()
+                .filter(|r| {
+                    r.id.contains(rule_id)
+                        || r.description
+                            .to_lowercase()
+                            .contains(&rule_id.to_lowercase())
+                })
                 .collect();
 
             if matches.is_empty() {
-                eprintln!("Rule '{}' not found. Run `{} restrictions list` to see all rules.", rule_id, constants::NAME);
+                eprintln!(
+                    "Rule '{}' not found. Run `{} restrictions list` to see all rules.",
+                    rule_id,
+                    constants::NAME
+                );
             } else {
                 eprintln!("No exact match for '{}'. Did you mean:\n", rule_id);
                 for r in &matches {
@@ -56,13 +74,16 @@ pub fn explain_session() {
     // Read logs
     let log_dir = project_dir.join("logs");
     let pretool_log = std::fs::read_to_string(log_dir.join("pretool-bash.log")).unwrap_or_default();
-    let session_log = std::fs::read_to_string(log_dir.join("userprompt-context.log")).unwrap_or_default();
-    let posttool_log = std::fs::read_to_string(log_dir.join("posttool-session.log")).unwrap_or_default();
+    let session_log =
+        std::fs::read_to_string(log_dir.join("userprompt-context.log")).unwrap_or_default();
+    let posttool_log =
+        std::fs::read_to_string(log_dir.join("posttool-session.log")).unwrap_or_default();
 
     println!("# Warden Session Interventions\n");
 
     // Denials from pretool-bash log
-    let denials: Vec<&str> = pretool_log.lines()
+    let denials: Vec<&str> = pretool_log
+        .lines()
         .filter(|l| l.contains("[DENY]"))
         .collect();
     if !denials.is_empty() {
@@ -74,7 +95,8 @@ pub fn explain_session() {
     }
 
     // Advisories from logs
-    let advisories: Vec<&str> = pretool_log.lines()
+    let advisories: Vec<&str> = pretool_log
+        .lines()
         .chain(session_log.lines())
         .chain(posttool_log.lines())
         .filter(|l| l.contains("[ADVISORY]") || l.contains("advisory"))

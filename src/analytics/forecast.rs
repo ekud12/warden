@@ -80,7 +80,8 @@ pub fn format_forecast(forecast: &TokenForecast) -> String {
     } else if forecast.turns_remaining <= 15 {
         format!(
             "Compaction in ~{} turns at current rate (~{}K/turn). Plan ahead.",
-            forecast.turns_remaining, forecast.tokens_per_turn / 1000
+            forecast.turns_remaining,
+            forecast.tokens_per_turn / 1000
         )
     } else {
         String::new() // No warning needed
@@ -94,12 +95,14 @@ mod tests {
 
     #[test]
     fn forecast_linear_growth() {
-        let snaps: Vec<TurnSnapshot> = (1..=10).map(|t| TurnSnapshot {
-            turn: t,
-            tokens_in_delta: 10_000,
-            tokens_out_delta: 2_000,
-            ..Default::default()
-        }).collect();
+        let snaps: Vec<TurnSnapshot> = (1..=10)
+            .map(|t| TurnSnapshot {
+                turn: t,
+                tokens_in_delta: 10_000,
+                tokens_out_delta: 2_000,
+                ..Default::default()
+            })
+            .collect();
 
         let result = predict_compaction(&snaps, 10, 120_000, 700_000);
         assert!(result.is_some());
@@ -110,7 +113,11 @@ mod tests {
 
     #[test]
     fn forecast_insufficient_data() {
-        let snaps = vec![TurnSnapshot { turn: 1, tokens_in_delta: 10_000, ..Default::default() }];
+        let snaps = vec![TurnSnapshot {
+            turn: 1,
+            tokens_in_delta: 10_000,
+            ..Default::default()
+        }];
         let result = predict_compaction(&snaps, 1, 10_000, 700_000);
         assert!(result.is_none());
     }

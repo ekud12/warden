@@ -36,7 +36,10 @@ pub fn check_revisit(state: &SessionState, file_path: &str) -> Option<String> {
 
 /// Record a failed command (for command outcome memory)
 pub fn record_command_failure(state: &mut SessionState, cmd_prefix: &str) {
-    let count = state.failed_commands.entry(cmd_prefix.to_string()).or_insert(0);
+    let count = state
+        .failed_commands
+        .entry(cmd_prefix.to_string())
+        .or_insert(0);
     *count += 1;
 
     // Bound the map

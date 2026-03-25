@@ -42,14 +42,11 @@ pub fn run(raw: &str) {
                     .unwrap_or(false)
             })
             .map(|i| i + 1) // start AFTER the previous session-end
-            .unwrap_or(0);   // no previous session-end → count everything
+            .unwrap_or(0); // no previous session-end → count everything
 
         for line in &lines[start_idx..] {
             if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-                let note_type = entry
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 match note_type {
                     "edit" => edits += 1,
                     "error" => errors += 1,
@@ -106,7 +103,10 @@ pub fn run(raw: &str) {
     let log_msg = if state.estimated_tokens_saved > 0 {
         format!(
             "Session ended: reason={}, edits={}, errors={}, milestones={}, saved=~{}K ({}%) via {}",
-            reason, edits, errors, milestones,
+            reason,
+            edits,
+            errors,
+            milestones,
             state.estimated_tokens_saved / 1000,
             savings_pct,
             savings_parts.join(", ")
@@ -140,15 +140,29 @@ pub fn run(raw: &str) {
         let mut stats = analytics::anomaly::load_stats(&project_dir);
         let avg_tokens = if state.turn > 0 {
             (state.estimated_tokens_in + state.estimated_tokens_out) / state.turn as u64
-        } else { 0 };
-        let edit_velocity = if state.turn > 0 { edits as f64 / state.turn as f64 } else { 0.0 };
+        } else {
+            0
+        };
+        let edit_velocity = if state.turn > 0 {
+            edits as f64 / state.turn as f64
+        } else {
+            0.0
+        };
         let total_actions = (edits + state.files_read.len() as u32).max(1);
         let explore_ratio = state.explore_count as f64 / total_actions as f64;
         let denial_rate = state.recent_denial_turns.len() as f64 / state.turn.max(1) as f64;
-        analytics::dna::update_stats(&mut stats, &analytics::dna::SessionMetrics {
-            turns: state.turn, quality: quality_score, avg_tokens_per_turn: avg_tokens,
-            errors, edit_velocity, explore_ratio, denial_rate,
-        });
+        analytics::dna::update_stats(
+            &mut stats,
+            &analytics::dna::SessionMetrics {
+                turns: state.turn,
+                quality: quality_score,
+                avg_tokens_per_turn: avg_tokens,
+                errors,
+                edit_velocity,
+                explore_ratio,
+                denial_rate,
+            },
+        );
         analytics::anomaly::save_stats(&project_dir, &stats);
     }
 
@@ -178,19 +192,29 @@ pub fn run(raw: &str) {
         if events.len() >= 5 {
             let replay_report = crate::handlers::replay::replay_through_rules(&events);
             common::storage::write_json("stats", "last_replay", &replay_report);
-            common::log("session-end", &crate::handlers::replay::format_replay_report(&replay_report));
+            common::log(
+                "session-end",
+                &crate::handlers::replay::format_replay_report(&replay_report),
+            );
         }
     }
 
     // Scorecard regression check (Warden repo gets logged warning)
     if is_warden_repo()
-        && let Some(prev) = common::storage::read_json::<crate::scorecard::Scorecard>("stats", "prev_scorecard") {
-            let delta = sc.overall_score as i32 - prev.overall_score as i32;
-            if delta < -5 {
-                common::log("session-end", &format!("REGRESSION: scorecard dropped {} points ({} → {})",
-                    -delta, prev.overall_score, sc.overall_score));
-            }
+        && let Some(prev) =
+            common::storage::read_json::<crate::scorecard::Scorecard>("stats", "prev_scorecard")
+    {
+        let delta = sc.overall_score as i32 - prev.overall_score as i32;
+        if delta < -5 {
+            common::log(
+                "session-end",
+                &format!(
+                    "REGRESSION: scorecard dropped {} points ({} → {})",
+                    -delta, prev.overall_score, sc.overall_score
+                ),
+            );
         }
+    }
     common::storage::write_json("stats", "prev_scorecard", &sc);
 
     // Kill all managed processes
@@ -205,7 +229,12 @@ pub fn run(raw: &str) {
 
 /// Compute and write a structured session summary to session-notes.jsonl.
 /// Quality score: productivity(30%) + milestone_rate(30%) + (1-error_rate)(20%) + efficiency(20%)
-fn compute_session_summary(edits: u32, errors: u32, milestones: u32, state: &common::SessionState) -> u32 {
+fn compute_session_summary(
+    edits: u32,
+    errors: u32,
+    milestones: u32,
+    state: &common::SessionState,
+) -> u32 {
     let turns = state.turn;
     if turns == 0 {
         return 0;
@@ -233,34 +262,57 @@ fn compute_session_summary(edits: u32, errors: u32, milestones: u32, state: &com
     let slope = userprompt_context::error_slope(&state.turn_snapshots, state.turn_snapshots.len());
 
     // Avg tokens per turn
-    let avg_tokens_per_turn = if turns > 0 { total_tokens / turns as u64 } else { 0 };
+    let avg_tokens_per_turn = if turns > 0 {
+        total_tokens / turns as u64
+    } else {
+        0
+    };
 
     // Max errors unresolved (scan snapshots)
-    let max_errors = state.turn_snapshots.iter()
+    let max_errors = state
+        .turn_snapshots
+        .iter()
         .map(|s| s.errors_unresolved)
         .max()
         .unwrap_or(state.errors_unresolved);
 
     // Total denials
-    let total_denials: u32 = state.turn_snapshots.iter()
+    let total_denials: u32 = state
+        .turn_snapshots
+        .iter()
         .map(|s| s.denials_this_turn as u32)
         .sum();
 
     // Compactions (count from session state)
-    let compactions = if state.last_compaction_turn > 0 { 1u32 } else { 0 };
+    let compactions = if state.last_compaction_turn > 0 {
+        1u32
+    } else {
+        0
+    };
 
     // Quality score (0-100)
-    let productivity = if turns > 0 { (edits as f64 / turns as f64).min(1.0) } else { 0.0 };
-    let milestone_rate = if turns > 0 { (milestones as f64 / turns as f64 * 5.0).min(1.0) } else { 0.0 };
-    let error_rate = if turns > 0 { (errors as f64 / turns as f64).min(1.0) } else { 0.0 };
+    let productivity = if turns > 0 {
+        (edits as f64 / turns as f64).min(1.0)
+    } else {
+        0.0
+    };
+    let milestone_rate = if turns > 0 {
+        (milestones as f64 / turns as f64 * 5.0).min(1.0)
+    } else {
+        0.0
+    };
+    let error_rate = if turns > 0 {
+        (errors as f64 / turns as f64).min(1.0)
+    } else {
+        0.0
+    };
     let efficiency = (savings_pct as f64 / 100.0).min(1.0);
 
-    let quality_score = (
-        productivity * 30.0 +
-        milestone_rate * 30.0 +
-        (1.0 - error_rate) * 20.0 +
-        efficiency * 20.0
-    ).round() as u32;
+    let quality_score = (productivity * 30.0
+        + milestone_rate * 30.0
+        + (1.0 - error_rate) * 20.0
+        + efficiency * 20.0)
+        .round() as u32;
 
     let data = serde_json::json!({
         "duration_turns": turns,

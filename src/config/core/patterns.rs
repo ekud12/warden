@@ -6,10 +6,7 @@
 
 /// Protected branch names — working on these triggers a warning.
 /// Override in personal.toml: [protected_branches] patterns = ["develop", "trunk"]
-pub const PROTECTED_BRANCHES: &[&str] = &[
-    "main",
-    "master",
-];
+pub const PROTECTED_BRANCHES: &[&str] = &["main", "master"];
 
 /// Build success milestone patterns (matched against Bash stdout)
 pub const MILESTONE_PATTERNS: &[&str] = &[
@@ -27,17 +24,17 @@ pub const MILESTONE_PATTERNS: &[&str] = &[
 
 /// Build/test error patterns (matched against Bash stdout+stderr)
 pub const ERROR_PATTERNS: &[&str] = &[
-    r"TS\d{4}:",                              // TypeScript errors
-    r"(?i)error\[E\d+\]",                     // Rust compiler errors
-    r"(?i)(FAIL|FAILED|failing)\b",           // Test failures
-    r"(?i)build\s+failed",                     // Build failures
-    r"(?i)(ERR!|npm\s+ERR)",                   // npm errors
-    r"(?i)permission\s+denied",                // Permission errors
-    r"(?i)command\s+not\s+found",              // Missing tools
+    r"TS\d{4}:",                                   // TypeScript errors
+    r"(?i)error\[E\d+\]",                          // Rust compiler errors
+    r"(?i)(FAIL|FAILED|failing)\b",                // Test failures
+    r"(?i)build\s+failed",                         // Build failures
+    r"(?i)(ERR!|npm\s+ERR)",                       // npm errors
+    r"(?i)permission\s+denied",                    // Permission errors
+    r"(?i)command\s+not\s+found",                  // Missing tools
     r"(?i)(SyntaxError|TypeError|ReferenceError)", // JS/TS runtime errors
-    r"(?i)panic(ked)?(\s+at)?",                // Rust panics
-    r"(?i)segmentation\s+fault",               // Segfaults
-    r"(?i)out\s+of\s+memory",                  // OOM
+    r"(?i)panic(ked)?(\s+at)?",                    // Rust panics
+    r"(?i)segmentation\s+fault",                   // Segfaults
+    r"(?i)out\s+of\s+memory",                      // OOM
 ];
 
 /// Build command detection patterns (determines last_build_turn)
@@ -60,16 +57,20 @@ pub const BUILD_COMMANDS: &[&str] = &[
 pub const TRUNCATE_FAIL: &str = r"(?i)FAIL|FAILED|ERROR|✗|✘|failing|panicked|assertion|×|BROKEN";
 
 /// Truncation filter: test summary patterns
-pub const TRUNCATE_SUMMARY: &str = r"(?i)Tests?:?\s*\d|test result:|passed|failed|ok\s*\(|Ran \d|TOTAL";
+pub const TRUNCATE_SUMMARY: &str =
+    r"(?i)Tests?:?\s*\d|test result:|passed|failed|ok\s*\(|Ran \d|TOTAL";
 
 /// Truncation filter: build-important line patterns
-pub const TRUNCATE_BUILD_IMPORTANT: &str = r"(?i)error|warning|warn\[|ERR!|FATAL|failed|succeeded|Build|Finished|Compiling.*error";
+pub const TRUNCATE_BUILD_IMPORTANT: &str =
+    r"(?i)error|warning|warn\[|ERR!|FATAL|failed|succeeded|Build|Finished|Compiling.*error";
 
 /// Truncation filter: install error patterns
-pub const TRUNCATE_INSTALL_ERROR: &str = r"(?i)error|ERR!|WARN|warning|deprecated|vulnerability|audit";
+pub const TRUNCATE_INSTALL_ERROR: &str =
+    r"(?i)error|ERR!|WARN|warning|deprecated|vulnerability|audit";
 
 /// Truncation filter: default important line patterns
-pub const TRUNCATE_DEFAULT_IMPORTANT: &str = r"(?i)error|warn(ing)?|fail(ed|ure)?|ERR!|FATAL|exception|assert|passed|succeeded|skipped";
+pub const TRUNCATE_DEFAULT_IMPORTANT: &str =
+    r"(?i)error|warn(ing)?|fail(ed|ure)?|ERR!|FATAL|exception|assert|passed|succeeded|skipped";
 
 /// Knip finding patterns (unused exports/imports)
 pub const KNIP_PATTERNS: &[&str] = &[
@@ -91,11 +92,14 @@ pub const BASH_MISSING_TOOL: &str = r"command not found|is not recognized|not fo
 pub const BASH_MISSING_TOOL_NAME: &str = r#"['"]?(\S+)['"]?:?\s*(?:command )?not found"#;
 pub const BASH_KNIP_CHECK: &str = r"(?i)unused|unresolved";
 pub const BASH_KNIP_COUNT: &str = r"(\d+) (?:unused|unresolved)";
-pub const BASH_BUILD_SUCCESS: &str = r"(?i)success|completed|done|Build succeeded|Finished.*profile";
+pub const BASH_BUILD_SUCCESS: &str =
+    r"(?i)success|completed|done|Build succeeded|Finished.*profile";
 pub const BASH_TEST_PASS: &str = r"pass|✓|✔|\d+ passing|Tests:\s*\d+ passed";
 pub const BASH_KNIP_DIRTY: &str = r"(?i)unused|unresolved|error";
 pub const BASH_NO_CIRCULAR: &str = r"(?i)no circular";
 pub const BASH_GIT_COMMIT: &str = r"git\s+commit";
 pub const BASH_COMMIT_MSG: &str = r#"-m\s+["']([^"']+)"#;
-pub const BASH_ERROR_LOC: &str = r"(?m)^.*?(\S+\.\w+)[:\(](\d+)[,:\)].*?(?:error|Error)\S*:?\s*(.{0,60})";
-pub const BASH_TRUNCATION_MARKER: &str = r"--- (?:TRUNCATED|TEST OUTPUT|BUILD OUTPUT|INSTALL OUTPUT) \((?:filtered: )?(\d+) lines";
+pub const BASH_ERROR_LOC: &str =
+    r"(?m)^.*?(\S+\.\w+)[:\(](\d+)[,:\)].*?(?:error|Error)\S*:?\s*(.{0,60})";
+pub const BASH_TRUNCATION_MARKER: &str =
+    r"--- (?:TRUNCATED|TEST OUTPUT|BUILD OUTPUT|INSTALL OUTPUT) \((?:filtered: )?(\d+) lines";

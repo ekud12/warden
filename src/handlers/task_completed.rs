@@ -9,7 +9,8 @@ use crate::common;
 
 pub fn run(raw: &str) {
     let v: serde_json::Value = serde_json::from_str(raw).unwrap_or_default();
-    let description = v.get("description")
+    let description = v
+        .get("description")
         .or(v.get("task_id"))
         .and_then(|v| v.as_str())
         .unwrap_or("task completed");

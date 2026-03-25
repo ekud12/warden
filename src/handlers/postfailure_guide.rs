@@ -19,10 +19,9 @@ static HINTS: LazyLock<Vec<CompiledHint>> = LazyLock::new(|| {
     config::ERROR_HINTS
         .iter()
         .filter_map(|(pattern, hint)| {
-            Regex::new(pattern).ok().map(|re| CompiledHint {
-                pattern: re,
-                hint,
-            })
+            Regex::new(pattern)
+                .ok()
+                .map(|re| CompiledHint { pattern: re, hint })
         })
         .collect()
 });
@@ -37,7 +36,9 @@ pub fn run(raw: &str) {
     }
 
     // CLI command recovery: check for "command not found" or bad flags
-    let cmd = input.tool_input.as_ref()
+    let cmd = input
+        .tool_input
+        .as_ref()
         .and_then(|ti| ti.get("command"))
         .and_then(|c| c.as_str())
         .unwrap_or("");
@@ -77,21 +78,24 @@ pub fn run(raw: &str) {
 fn extract_error_text(input: &common::HookInput, raw: &str) -> String {
     // Check explicit error field
     if let Some(ref err) = input.error
-        && !err.is_empty() {
-            return err.clone();
-        }
+        && !err.is_empty()
+    {
+        return err.clone();
+    }
 
     // Check tool_output.stderr
     if let Some(ref output) = input.tool_output {
         if let Some(stderr) = output.get("stderr").and_then(|v| v.as_str())
-            && !stderr.is_empty() {
-                return stderr.to_string();
-            }
+            && !stderr.is_empty()
+        {
+            return stderr.to_string();
+        }
         // Check tool_output.error
         if let Some(err) = output.get("error").and_then(|v| v.as_str())
-            && !err.is_empty() {
-                return err.to_string();
-            }
+            && !err.is_empty()
+        {
+            return err.to_string();
+        }
     }
 
     // Fallback: search the raw JSON for error-like content (limited to 2KB)

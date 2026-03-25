@@ -28,30 +28,78 @@ pub static CLI_KNOWLEDGE: &[CliTool] = &[
         name: "eza",
         install: &["cargo install eza", "brew install eza", "scoop install eza"],
         common_mistakes: &[
-            FlagFix { wrong: "--dirs-only", correct: "-D", hint: "Use -D or --only-dirs" },
-            FlagFix { wrong: "--tree-level", correct: "--level", hint: "Use --level N" },
-            FlagFix { wrong: "--all-files", correct: "-a", hint: "Use -a or --all" },
-            FlagFix { wrong: "--directories", correct: "-D", hint: "Use -D or --only-dirs" },
+            FlagFix {
+                wrong: "--dirs-only",
+                correct: "-D",
+                hint: "Use -D or --only-dirs",
+            },
+            FlagFix {
+                wrong: "--tree-level",
+                correct: "--level",
+                hint: "Use --level N",
+            },
+            FlagFix {
+                wrong: "--all-files",
+                correct: "-a",
+                hint: "Use -a or --all",
+            },
+            FlagFix {
+                wrong: "--directories",
+                correct: "-D",
+                hint: "Use -D or --only-dirs",
+            },
         ],
         alternatives: &["ls", "exa"],
     },
     CliTool {
         name: "rg",
-        install: &["cargo install ripgrep", "brew install ripgrep", "scoop install ripgrep"],
+        install: &[
+            "cargo install ripgrep",
+            "brew install ripgrep",
+            "scoop install ripgrep",
+        ],
         common_mistakes: &[
-            FlagFix { wrong: "--include", correct: "-g", hint: "Use -g '*.ext' for file glob" },
-            FlagFix { wrong: "--recursive", correct: "", hint: "rg is recursive by default" },
-            FlagFix { wrong: "-r", correct: "", hint: "rg is recursive by default; -r is for replace" },
+            FlagFix {
+                wrong: "--include",
+                correct: "-g",
+                hint: "Use -g '*.ext' for file glob",
+            },
+            FlagFix {
+                wrong: "--recursive",
+                correct: "",
+                hint: "rg is recursive by default",
+            },
+            FlagFix {
+                wrong: "-r",
+                correct: "",
+                hint: "rg is recursive by default; -r is for replace",
+            },
         ],
         alternatives: &["grep"],
     },
     CliTool {
         name: "fd",
-        install: &["cargo install fd-find", "brew install fd", "scoop install fd"],
+        install: &[
+            "cargo install fd-find",
+            "brew install fd",
+            "scoop install fd",
+        ],
         common_mistakes: &[
-            FlagFix { wrong: "--name", correct: "", hint: "fd matches names by default: fd PATTERN" },
-            FlagFix { wrong: "-iname", correct: "", hint: "fd is case-insensitive by default" },
-            FlagFix { wrong: "--type file", correct: "--type f", hint: "Use -t f (short form)" },
+            FlagFix {
+                wrong: "--name",
+                correct: "",
+                hint: "fd matches names by default: fd PATTERN",
+            },
+            FlagFix {
+                wrong: "-iname",
+                correct: "",
+                hint: "fd is case-insensitive by default",
+            },
+            FlagFix {
+                wrong: "--type file",
+                correct: "--type f",
+                hint: "Use -t f (short form)",
+            },
         ],
         alternatives: &["find"],
     },
@@ -59,41 +107,71 @@ pub static CLI_KNOWLEDGE: &[CliTool] = &[
         name: "bat",
         install: &["cargo install bat", "brew install bat", "scoop install bat"],
         common_mistakes: &[
-            FlagFix { wrong: "--numbers", correct: "-n", hint: "Use -n or --number" },
-            FlagFix { wrong: "--syntax", correct: "-l", hint: "Use -l LANG or --language LANG" },
+            FlagFix {
+                wrong: "--numbers",
+                correct: "-n",
+                hint: "Use -n or --number",
+            },
+            FlagFix {
+                wrong: "--syntax",
+                correct: "-l",
+                hint: "Use -l LANG or --language LANG",
+            },
         ],
         alternatives: &["cat"],
     },
     CliTool {
         name: "dust",
-        install: &["cargo install du-dust", "brew install dust", "scoop install dust"],
-        common_mistakes: &[
-            FlagFix { wrong: "--human-readable", correct: "", hint: "dust is human-readable by default" },
+        install: &[
+            "cargo install du-dust",
+            "brew install dust",
+            "scoop install dust",
         ],
+        common_mistakes: &[FlagFix {
+            wrong: "--human-readable",
+            correct: "",
+            hint: "dust is human-readable by default",
+        }],
         alternatives: &["du"],
     },
     CliTool {
         name: "just",
-        install: &["cargo install just", "brew install just", "scoop install just"],
-        common_mistakes: &[
-            FlagFix { wrong: "--file", correct: "-f", hint: "Use -f or --justfile" },
+        install: &[
+            "cargo install just",
+            "brew install just",
+            "scoop install just",
         ],
+        common_mistakes: &[FlagFix {
+            wrong: "--file",
+            correct: "-f",
+            hint: "Use -f or --justfile",
+        }],
         alternatives: &["make"],
     },
     CliTool {
         name: "xh",
         install: &["cargo install xh", "brew install xh", "scoop install xh"],
-        common_mistakes: &[
-            FlagFix { wrong: "--data", correct: "", hint: "xh sends data as request body directly" },
-        ],
+        common_mistakes: &[FlagFix {
+            wrong: "--data",
+            correct: "",
+            hint: "xh sends data as request body directly",
+        }],
         alternatives: &["curl", "httpie"],
     },
     CliTool {
         name: "ouch",
         install: &["cargo install ouch", "brew install ouch"],
         common_mistakes: &[
-            FlagFix { wrong: "--extract", correct: "d", hint: "Use: ouch d archive.tar.gz (d = decompress)" },
-            FlagFix { wrong: "--compress", correct: "c", hint: "Use: ouch c files... output.tar.gz" },
+            FlagFix {
+                wrong: "--extract",
+                correct: "d",
+                hint: "Use: ouch d archive.tar.gz (d = decompress)",
+            },
+            FlagFix {
+                wrong: "--compress",
+                correct: "c",
+                hint: "Use: ouch c files... output.tar.gz",
+            },
         ],
         alternatives: &["tar", "zip", "unzip"],
     },
@@ -105,16 +183,22 @@ pub static CLI_KNOWLEDGE: &[CliTool] = &[
     },
     CliTool {
         name: "procs",
-        install: &["cargo install procs", "brew install procs", "scoop install procs"],
+        install: &[
+            "cargo install procs",
+            "brew install procs",
+            "scoop install procs",
+        ],
         common_mistakes: &[],
         alternatives: &["ps"],
     },
     CliTool {
         name: "sd",
         install: &["cargo install sd", "brew install sd"],
-        common_mistakes: &[
-            FlagFix { wrong: "", correct: "", hint: "sd is blocked on Windows (mangles newlines). Use Edit tool instead." },
-        ],
+        common_mistakes: &[FlagFix {
+            wrong: "",
+            correct: "",
+            hint: "sd is blocked on Windows (mangles newlines). Use Edit tool instead.",
+        }],
         alternatives: &["sed"],
     },
     CliTool {
@@ -125,7 +209,11 @@ pub static CLI_KNOWLEDGE: &[CliTool] = &[
     },
     CliTool {
         name: "tokei",
-        install: &["cargo install tokei", "brew install tokei", "scoop install tokei"],
+        install: &[
+            "cargo install tokei",
+            "brew install tokei",
+            "scoop install tokei",
+        ],
         common_mistakes: &[],
         alternatives: &["cloc", "scc"],
     },
@@ -144,7 +232,11 @@ pub fn check_not_found(stderr: &str) -> Option<String> {
                     "'{}' is not installed. Install: {}\nAlternative: {}",
                     cmd_name,
                     tool.install[0],
-                    if !tool.alternatives.is_empty() { tool.alternatives[0] } else { "none" },
+                    if !tool.alternatives.is_empty() {
+                        tool.alternatives[0]
+                    } else {
+                        "none"
+                    },
                 ));
             }
         }
@@ -177,7 +269,10 @@ pub fn check_bad_flag(cmd: &str, stderr: &str) -> Option<String> {
                 return if fix.correct.is_empty() {
                     Some(format!("{}: {}", tool.name, fix.hint))
                 } else {
-                    Some(format!("{}: '{}' → '{}'. {}", tool.name, fix.wrong, fix.correct, fix.hint))
+                    Some(format!(
+                        "{}: '{}' → '{}'. {}",
+                        tool.name, fix.wrong, fix.correct, fix.hint
+                    ))
                 };
             }
         }
@@ -196,7 +291,9 @@ fn extract_missing_command(stderr: &str) -> Option<&str> {
     // Pattern: "foo: command not found"
     if let Some(idx) = stderr.find(": command not found") {
         let before = &stderr[..idx];
-        return before.split_whitespace().last()
+        return before
+            .split_whitespace()
+            .last()
             .map(|s| s.trim_matches('\'').trim_matches('"'));
     }
     // Pattern: "'foo' is not recognized"
@@ -210,7 +307,9 @@ fn extract_missing_command(stderr: &str) -> Option<&str> {
     }
     // Pattern: "not found in PATH"
     if stderr.contains("not found in PATH") || stderr.contains("No such file") {
-        return stderr.split_whitespace().next()
+        return stderr
+            .split_whitespace()
+            .next()
             .map(|s| s.trim_matches('\'').trim_matches('"'));
     }
     None

@@ -64,10 +64,7 @@ pub fn now_iso() -> String {
     let s = time_of_day % 60;
 
     let (y, mo, d) = days_to_ymd(days);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        y, mo, d, h, m, s
-    )
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, mo, d, h, m, s)
 }
 
 fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
@@ -84,7 +81,16 @@ fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
     let mdays: [u64; 12] = [
         31,
         if leap { 29 } else { 28 },
-        31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     let mut mo = 0usize;
     while mo < 12 && days >= mdays[mo] {
@@ -100,7 +106,8 @@ fn is_leap(y: u64) -> bool {
 
 /// Get file modification time as seconds since epoch (for stale-read detection)
 pub fn file_mtime(path: &std::path::Path) -> Option<u64> {
-    fs::metadata(path).ok()
+    fs::metadata(path)
+        .ok()
         .and_then(|m| m.modified().ok())
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs())
@@ -115,7 +122,9 @@ pub fn detect_suspicious_chars(s: &str) -> Option<String> {
         // Control chars except tab(0x09), newline(0x0A), carriage return(0x0D)
         if b <= 0x08 || b == 0x0B || b == 0x0C || (0x0E..=0x1F).contains(&b) {
             found.push(format!("control char 0x{:02x} at byte {}", b, i));
-            if found.len() >= 3 { break; }
+            if found.len() >= 3 {
+                break;
+            }
         }
     }
 
@@ -132,10 +141,16 @@ pub fn detect_suspicious_chars(s: &str) -> Option<String> {
             }
             _ => {}
         }
-        if found.len() >= 3 { break; }
+        if found.len() >= 3 {
+            break;
+        }
     }
 
-    if found.is_empty() { None } else { Some(found.join(", ")) }
+    if found.is_empty() {
+        None
+    } else {
+        Some(found.join(", "))
+    }
 }
 
 /// Normalize path separators for comparison (backslash → forward slash)

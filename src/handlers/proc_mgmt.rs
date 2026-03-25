@@ -61,11 +61,11 @@ fn write_proc_state(state: &ProcState) {
     let tmp_path = path.with_extension("json.tmp");
     if let Ok(json) = serde_json::to_string_pretty(state)
         && fs::write(&tmp_path, &json).is_ok()
-            && fs::rename(&tmp_path, &path).is_err()
-        {
-            let _ = fs::write(&path, &json);
-            let _ = fs::remove_file(&tmp_path);
-        }
+        && fs::rename(&tmp_path, &path).is_err()
+    {
+        let _ = fs::write(&path, &json);
+        let _ = fs::remove_file(&tmp_path);
+    }
 }
 
 /// Proc logs directory
@@ -85,7 +85,10 @@ pub fn run(args: &[String]) {
         "wait" => cmd_wait(args),
         "logs" => cmd_logs(args),
         _ => {
-            eprintln!("Usage: {} proc <start|stop|restart|status|wait|logs>", crate::constants::NAME);
+            eprintln!(
+                "Usage: {} proc <start|stop|restart|status|wait|logs>",
+                crate::constants::NAME
+            );
             std::process::exit(1);
         }
     }
@@ -163,7 +166,15 @@ fn cmd_start(args: &[String]) {
     state.processes.insert(name.clone(), info);
     write_proc_state(&state);
 
-    common::log("proc", &format!("START {} (pid={}, cmd={})", name, pid, common::truncate(&cmd, 60)));
+    common::log(
+        "proc",
+        &format!(
+            "START {} (pid={}, cmd={})",
+            name,
+            pid,
+            common::truncate(&cmd, 60)
+        ),
+    );
     println!("Started '{}' (pid={})", name, pid);
 }
 
@@ -212,10 +223,7 @@ fn cmd_status() {
     }
 
     for (name, info) in &state.processes {
-        let port_str = info
-            .port
-            .map(|p| format!(":{}", p))
-            .unwrap_or_default();
+        let port_str = info.port.map(|p| format!(":{}", p)).unwrap_or_default();
         println!(
             "{:<15} pid={:<8} health={:<10} {}{}",
             name, info.pid, info.health, info.cmd, port_str
@@ -330,7 +338,9 @@ fn check_health(info: &ProcessInfo) -> String {
 /// Check if a TCP port is open
 fn check_port(port: u16) -> bool {
     TcpStream::connect_timeout(
-        &format!("127.0.0.1:{}", port).parse().expect("valid loopback addr"),
+        &format!("127.0.0.1:{}", port)
+            .parse()
+            .expect("valid loopback addr"),
         Duration::from_millis(200),
     )
     .is_ok()
@@ -346,7 +356,9 @@ fn check_http_health(url: &str) -> bool {
     let host_port = stripped.split('/').next().unwrap_or(stripped);
 
     TcpStream::connect_timeout(
-        &host_port.parse().unwrap_or_else(|_| "127.0.0.1:80".parse().expect("valid fallback addr")),
+        &host_port
+            .parse()
+            .unwrap_or_else(|_| "127.0.0.1:80".parse().expect("valid fallback addr")),
         Duration::from_millis(200),
     )
     .is_ok()

@@ -135,9 +135,15 @@ pub struct CommandFilter {
     pub max_lines: usize,
 }
 
-fn default_strategy() -> String { "strip_matching".to_string() }
-fn default_keep_n() -> usize { 3 }
-fn default_max_lines() -> usize { 40 }
+fn default_strategy() -> String {
+    "strip_matching".to_string()
+}
+fn default_keep_n() -> usize {
+    3
+}
+fn default_max_lines() -> usize {
+    40
+}
 
 /// Restriction disable list — allows selectively disabling restrictions by ID
 #[derive(Deserialize, Debug, Default)]

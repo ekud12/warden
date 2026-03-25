@@ -44,7 +44,7 @@ pub fn add_to_path() -> Result<String, String> {
 
     #[cfg(not(windows))]
     {
-        return add_to_path_unix(&bin_str);
+        add_to_path_unix(&bin_str)
     }
 }
 

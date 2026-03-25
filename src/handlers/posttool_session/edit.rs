@@ -7,7 +7,9 @@ pub fn update_edit_state(file_path: &str) {
     let mut state = common::read_session_state();
 
     // Premature execution detection: editing before enough evidence gathered
-    if state.turn <= 5 && state.files_read.len() < 3 && state.files_edited.is_empty() {
+    // Skip for continued sessions (files_read carries over) or if files were already read
+    if state.turn <= 5 && state.files_read.len() < 3 && state.files_edited.is_empty()
+        && state.last_compaction_turn == 0 {
         common::log("intelligence", &format!(
             "Early editing: only {} files examined before first edit at turn {}",
             state.files_read.len(), state.turn

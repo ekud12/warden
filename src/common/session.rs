@@ -118,6 +118,9 @@ pub struct SessionState {
     /// Turn at which last compaction occurred (0 = never compacted)
     #[serde(default)]
     pub last_compaction_turn: u32,
+    /// Turn at which rules were last reinjected (cooldown tracking)
+    #[serde(default)]
+    pub last_rules_reinject_turn: u32,
     /// Last file path edited (for post-edit read suppression)
     #[serde(default)]
     pub last_edited_file: String,

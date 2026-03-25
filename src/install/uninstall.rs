@@ -56,7 +56,10 @@ pub fn run() {
     }
 
     eprintln!();
-    term::print_bold(term::DIM, &format!("  {} has been uninstalled.\n", constants::NAME));
+    term::print_bold(
+        term::DIM,
+        &format!("  {} has been uninstalled.\n", constants::NAME),
+    );
     term::hint(&format!(
         "The running binary at {} can be deleted manually.",
         std::env::current_exe()

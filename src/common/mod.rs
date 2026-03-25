@@ -3,14 +3,14 @@
 // Re-exports from sub-modules so all `common::` paths remain valid.
 // ──────────────────────────────────────────────────────────────────────────────
 
-mod io;
 pub mod events;
+mod io;
 mod output;
 pub mod sanitize;
 pub mod scratch;
-pub mod storage;
 mod session;
 pub mod shell_parse;
+pub mod storage;
 pub mod subprocess;
 pub mod types;
 pub mod util;
@@ -26,8 +26,8 @@ pub use output::{
 
 // ─── io ──────────────────────────────────────────────────────────────────────
 pub use io::{
-    add_session_note, add_session_note_ext, assistant_rules_dir, hooks_dir, is_ci, log,
-    log_structured, parse_input, project_dir, read_tail, set_project_cwd, LogLevel,
+    LogLevel, add_session_note, add_session_note_ext, assistant_rules_dir, hooks_dir, is_ci, log,
+    log_structured, parse_input, project_dir, read_tail, set_project_cwd,
 };
 
 /// Parse input or return early from handler (used by 10+ handlers)
@@ -48,8 +48,8 @@ pub fn io_get_project_cwd() -> String {
 
 // ─── session ─────────────────────────────────────────────────────────────────
 pub use session::{
-    read_session_state, write_session_state, CommandEntry, FileReadEntry, SessionState,
-    TurnSnapshot,
+    CommandEntry, FileReadEntry, SessionState, TurnSnapshot, read_session_state,
+    write_session_state,
 };
 
 /// Enable all daemon-mode optimizations (session cache + log buffering)
@@ -65,4 +65,7 @@ pub fn flush_daemon_buffers() {
 }
 
 // ─── util ────────────────────────────────────────────────────────────────────
-pub use util::{content_hash, detect_suspicious_chars, file_mtime, normalize_path, now_iso, string_hash, strip_ansi, truncate};
+pub use util::{
+    content_hash, detect_suspicious_chars, file_mtime, normalize_path, now_iso, string_hash,
+    strip_ansi, truncate,
+};

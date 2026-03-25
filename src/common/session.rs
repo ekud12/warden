@@ -9,20 +9,18 @@ use std::collections::BTreeMap;
 type HashMap<K, V> = BTreeMap<K, V>;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Whether we're running in daemon mode (in-memory cache active)
 static DAEMON_MODE: AtomicBool = AtomicBool::new(false);
 
 /// In-memory session state cache (daemon mode only), keyed by hash8 of CWD.
 /// DashMap provides lock-free concurrent access — no Mutex contention.
-static SESSION_CACHE: LazyLock<DashMap<String, SessionState>> =
-    LazyLock::new(DashMap::new);
+static SESSION_CACHE: LazyLock<DashMap<String, SessionState>> = LazyLock::new(DashMap::new);
 
 /// Which cache keys have unsaved changes needing disk flush
-static CACHE_DIRTY_KEYS: LazyLock<DashMap<String, ()>> =
-    LazyLock::new(DashMap::new);
+static CACHE_DIRTY_KEYS: LazyLock<DashMap<String, ()>> = LazyLock::new(DashMap::new);
 
 /// Per-file read tracking entry
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -234,10 +232,12 @@ impl SessionState {
     /// Check if an advisory category is on cooldown. If not, marks it as emitted.
     pub fn advisory_ready(&mut self, category: &str) -> bool {
         if let Some(&last_turn) = self.advisory_cooldowns.get(category)
-            && self.turn.saturating_sub(last_turn) < ADVISORY_COOLDOWN {
-                return false;
-            }
-        self.advisory_cooldowns.insert(category.to_string(), self.turn);
+            && self.turn.saturating_sub(last_turn) < ADVISORY_COOLDOWN
+        {
+            return false;
+        }
+        self.advisory_cooldowns
+            .insert(category.to_string(), self.turn);
         true
     }
 
@@ -245,14 +245,18 @@ impl SessionState {
     pub fn record_denial(&mut self) {
         self.recent_denial_turns.push(self.turn);
         if self.recent_denial_turns.len() > 20 {
-            self.recent_denial_turns.drain(..self.recent_denial_turns.len() - 20);
+            self.recent_denial_turns
+                .drain(..self.recent_denial_turns.len() - 20);
         }
     }
 
     /// Count denials in the last N turns
     pub fn denial_rate(&self, window: u32) -> u32 {
         let cutoff = self.turn.saturating_sub(window);
-        self.recent_denial_turns.iter().filter(|&&t| t > cutoff).count() as u32
+        self.recent_denial_turns
+            .iter()
+            .filter(|&&t| t > cutoff)
+            .count() as u32
     }
 
     /// Enforce collection bounds by evicting oldest entries.
@@ -289,7 +293,11 @@ impl SessionState {
         // tool_fingerprints: evict lowest-count entries
         if self.tool_fingerprints.len() > MAX_FINGERPRINTS {
             let excess = self.tool_fingerprints.len() - MAX_FINGERPRINTS;
-            let mut entries: Vec<_> = self.tool_fingerprints.iter().map(|(&k, &v)| (k, v)).collect();
+            let mut entries: Vec<_> = self
+                .tool_fingerprints
+                .iter()
+                .map(|(&k, &v)| (k, v))
+                .collect();
             entries.sort_by_key(|(_, count)| *count);
             for (key, _) in entries.into_iter().take(excess) {
                 self.tool_fingerprints.remove(&key);
@@ -317,7 +325,11 @@ impl SessionState {
         }
         // action_transitions: keep top 50 by count
         if self.action_transitions.len() > 50 {
-            let mut entries: Vec<_> = self.action_transitions.iter().map(|(k, &v)| (k.clone(), v)).collect();
+            let mut entries: Vec<_> = self
+                .action_transitions
+                .iter()
+                .map(|(k, &v)| (k.clone(), v))
+                .collect();
             entries.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
             self.action_transitions = entries.into_iter().take(50).collect();
         }
@@ -340,7 +352,9 @@ impl SessionState {
         self.action_history.truncate(10);
         self.rolling_working_set.truncate(5);
         if self.action_transitions.len() > 25 {
-            let mut entries: Vec<_> = std::mem::take(&mut self.action_transitions).into_iter().collect();
+            let mut entries: Vec<_> = std::mem::take(&mut self.action_transitions)
+                .into_iter()
+                .collect();
             entries.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
             self.action_transitions = entries.into_iter().take(25).collect();
         }
@@ -351,21 +365,27 @@ impl SessionState {
 pub fn session_state_path() -> PathBuf {
     let base = project_dir();
     if let Ok(sid) = std::env::var("CLAUDE_SESSION_ID")
-        && !sid.is_empty() {
-            let short = &cwd_hash8(&sid)[..4];
-            return base.join(format!("session-state-{}.json", short));
-        }
+        && !sid.is_empty()
+    {
+        let short = &cwd_hash8(&sid)[..4];
+        return base.join(format!("session-state-{}.json", short));
+    }
     base.join("session-state.json")
 }
 
 /// Cache key for the current project (hash8 of CWD + session ID if available)
 fn cache_key() -> String {
     let cwd = get_project_cwd();
-    let base = if cwd.is_empty() { "global".to_string() } else { cwd_hash8(&cwd) };
+    let base = if cwd.is_empty() {
+        "global".to_string()
+    } else {
+        cwd_hash8(&cwd)
+    };
     if let Ok(sid) = std::env::var("CLAUDE_SESSION_ID")
-        && !sid.is_empty() {
-            return format!("{}-{}", base, &cwd_hash8(&sid)[..4]);
-        }
+        && !sid.is_empty()
+    {
+        return format!("{}-{}", base, &cwd_hash8(&sid)[..4]);
+    }
     base
 }
 
@@ -393,9 +413,10 @@ pub fn read_session_state() -> SessionState {
 fn read_session_state_from_disk() -> SessionState {
     // Try redb first (primary storage)
     if super::storage::is_available()
-        && let Some(state) = super::storage::read_json::<SessionState>("session_state", "current") {
-            return state;
-        }
+        && let Some(state) = super::storage::read_json::<SessionState>("session_state", "current")
+    {
+        return state;
+    }
     // Fall back to JSON file (pre-migration or redb unavailable)
     let path = session_state_path();
     match fs::read_to_string(&path) {
@@ -407,7 +428,9 @@ fn read_session_state_from_disk() -> SessionState {
 /// Write session state — updates cache in daemon mode, debounces disk write.
 /// No-op in CI environments (no state persistence needed).
 pub fn write_session_state(state: &SessionState) {
-    if crate::common::is_ci() { return; }
+    if crate::common::is_ci() {
+        return;
+    }
     if DAEMON_MODE.load(Ordering::Relaxed) {
         let key = cache_key();
         SESSION_CACHE.insert(key.clone(), state.clone());
@@ -419,7 +442,8 @@ pub fn write_session_state(state: &SessionState) {
 
 /// Flush cached session state to disk (called after each daemon request)
 pub fn flush_session_cache() {
-    let dirty_keys: Vec<String> = CACHE_DIRTY_KEYS.iter()
+    let dirty_keys: Vec<String> = CACHE_DIRTY_KEYS
+        .iter()
         .map(|entry| entry.key().clone())
         .collect();
     CACHE_DIRTY_KEYS.clear();
@@ -448,7 +472,10 @@ fn write_session_state_to_disk(state: &SessionState) {
     let state = {
         let json_size = serde_json::to_string(state).map(|j| j.len()).unwrap_or(0);
         if json_size > 50_000 {
-            crate::common::log("session", &format!("State size {}KB > 50KB, pruning", json_size / 1024));
+            crate::common::log(
+                "session",
+                &format!("State size {}KB > 50KB, pruning", json_size / 1024),
+            );
             let mut pruned = state.clone();
             pruned.aggressive_prune();
             pruned
@@ -459,9 +486,10 @@ fn write_session_state_to_disk(state: &SessionState) {
 
     // Try redb first (primary storage)
     if super::storage::is_available()
-        && super::storage::write_json("session_state", "current", &state).is_some() {
-            return;
-        }
+        && super::storage::write_json("session_state", "current", &state).is_some()
+    {
+        return;
+    }
 
     // Fall back to JSON file
     let path = session_state_path();
@@ -470,9 +498,7 @@ fn write_session_state_to_disk(state: &SessionState) {
         Ok(j) => j,
         Err(_) => return,
     };
-    if fs::write(&tmp_path, &json).is_ok()
-        && fs::rename(&tmp_path, &path).is_err()
-    {
+    if fs::write(&tmp_path, &json).is_ok() && fs::rename(&tmp_path, &path).is_err() {
         let _ = fs::write(&path, &json);
         let _ = fs::remove_file(&tmp_path);
     }

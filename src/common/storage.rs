@@ -170,31 +170,35 @@ fn resolve_table(name: &str) -> Option<TableDefinition<'static, &'static str, &'
 pub fn migrate_from_json(project_dir: &Path) {
     let state_path = project_dir.join("session-state.json");
     if state_path.exists()
-        && let Ok(content) = std::fs::read(&state_path) {
-            let _ = write_key("session_state", "current", &content);
-        }
+        && let Ok(content) = std::fs::read(&state_path)
+    {
+        let _ = write_key("session_state", "current", &content);
+    }
 
     let stats_path = project_dir.join("stats.json");
     if stats_path.exists()
-        && let Ok(content) = std::fs::read(&stats_path) {
-            let _ = write_key("stats", "project", &content);
-        }
+        && let Ok(content) = std::fs::read(&stats_path)
+    {
+        let _ = write_key("stats", "project", &content);
+    }
 
     let eff_path = project_dir.join("rule-effectiveness.json");
     if eff_path.exists()
-        && let Ok(content) = std::fs::read(&eff_path) {
-            let _ = write_key("effectiveness", "rules", &content);
-        }
+        && let Ok(content) = std::fs::read(&eff_path)
+    {
+        let _ = write_key("effectiveness", "rules", &content);
+    }
 
     let notes_path = project_dir.join("session-notes.jsonl");
     if notes_path.exists()
-        && let Ok(content) = std::fs::read_to_string(&notes_path) {
-            for line in content.lines() {
-                if !line.trim().is_empty() {
-                    let _ = append_event(line.as_bytes());
-                }
+        && let Ok(content) = std::fs::read_to_string(&notes_path)
+    {
+        for line in content.lines() {
+            if !line.trim().is_empty() {
+                let _ = append_event(line.as_bytes());
             }
         }
+    }
 }
 
 #[cfg(test)]

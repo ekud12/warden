@@ -41,7 +41,10 @@ pub fn run() {
             "max_array_len": config::MAX_ARRAY_LEN,
         },
     });
-    println!("{}", serde_json::to_string_pretty(&output).unwrap_or_default());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&output).unwrap_or_default()
+    );
 }
 
 fn serialize_pairs(pairs: &[(&str, &str)]) -> Vec<serde_json::Value> {

@@ -34,7 +34,9 @@ impl WelfordAccumulator {
 
     /// Population variance
     pub fn variance(&self) -> f64 {
-        if self.n < 2 { return 0.0; }
+        if self.n < 2 {
+            return 0.0;
+        }
         self.m2 / self.n as f64
     }
 
@@ -80,8 +82,11 @@ pub struct AnomalyAlert {
 
 impl std::fmt::Display for AnomalyAlert {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Anomaly: {} = {:.0} ({:.1}σ above mean {:.0})",
-            self.metric, self.value, self.z_score, self.mean)
+        write!(
+            f,
+            "Anomaly: {} = {:.0} ({:.1}σ above mean {:.0})",
+            self.metric, self.value, self.z_score, self.mean
+        )
     }
 }
 

@@ -47,7 +47,10 @@ pub fn run(raw: &str) {
 
     // Read-only tools: always approve
     if ALWAYS_APPROVE_TOOLS.contains(&tool_name) {
-        common::log("permission-approve", &format!("APPROVE read-only: {}", tool_name));
+        common::log(
+            "permission-approve",
+            &format!("APPROVE read-only: {}", tool_name),
+        );
         common::permission_approve();
         return;
     }
@@ -71,7 +74,11 @@ pub fn run(raw: &str) {
             if re.is_match(file_path) {
                 common::log(
                     "permission-approve",
-                    &format!("DENY sensitive path: {} ({})", tool_name, common::truncate(file_path, 60)),
+                    &format!(
+                        "DENY sensitive path: {} ({})",
+                        tool_name,
+                        common::truncate(file_path, 60)
+                    ),
                 );
                 // Fall through — no output means permission dialog shows
                 return;
@@ -97,12 +104,18 @@ pub fn run(raw: &str) {
             .unwrap_or("");
 
         if is_readonly_bash(cmd) {
-            common::log("permission-approve", &format!("APPROVE read-only bash: {}", common::truncate(cmd, 60)));
+            common::log(
+                "permission-approve",
+                &format!("APPROVE read-only bash: {}", common::truncate(cmd, 60)),
+            );
             common::permission_approve();
             return;
         }
         // Not recognized as read-only — fall through to permission dialog
-        common::log("permission-approve", &format!("PASS bash: {}", common::truncate(cmd, 40)));
+        common::log(
+            "permission-approve",
+            &format!("PASS bash: {}", common::truncate(cmd, 40)),
+        );
         return;
     }
 
@@ -119,21 +132,60 @@ pub fn run(raw: &str) {
 
 /// Read-only command prefixes that are always safe to auto-approve.
 const READONLY_PREFIXES: &[&str] = &[
-    "ls", "eza", "exa", "dir",
-    "head ", "tail ", "wc ", "stat ", "file ",
-    "which ", "type ", "command -v",
-    "readlink ", "basename ", "dirname ", "realpath ",
-    "diff ", "cmp ", "comm ",
-    "env", "printenv",
-    "whoami", "id ", "hostname", "uname",
-    "date", "cal",
-    "rg ", "fd ", "bat ", "fzf ",
-    "dust ", "procs ", "tokei", "tldr ",
-    "jq ", "yq ", "mdq ", "glow ",
-    "git status", "git log", "git diff", "git show", "git branch",
-    "git remote", "git blame", "git shortlog", "git stash list",
-    "cargo --version", "rustc --version", "node --version",
-    "python --version", "go version", "dotnet --version",
+    "ls",
+    "eza",
+    "exa",
+    "dir",
+    "head ",
+    "tail ",
+    "wc ",
+    "stat ",
+    "file ",
+    "which ",
+    "type ",
+    "command -v",
+    "readlink ",
+    "basename ",
+    "dirname ",
+    "realpath ",
+    "diff ",
+    "cmp ",
+    "comm ",
+    "env",
+    "printenv",
+    "whoami",
+    "id ",
+    "hostname",
+    "uname",
+    "date",
+    "cal",
+    "rg ",
+    "fd ",
+    "bat ",
+    "fzf ",
+    "dust ",
+    "procs ",
+    "tokei",
+    "tldr ",
+    "jq ",
+    "yq ",
+    "mdq ",
+    "glow ",
+    "git status",
+    "git log",
+    "git diff",
+    "git show",
+    "git branch",
+    "git remote",
+    "git blame",
+    "git shortlog",
+    "git stash list",
+    "cargo --version",
+    "rustc --version",
+    "node --version",
+    "python --version",
+    "go version",
+    "dotnet --version",
 ];
 
 /// Check if a bash command is read-only and safe to auto-approve.

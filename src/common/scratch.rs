@@ -37,7 +37,13 @@ pub fn offload(content: &str, tool_name: &str) -> Option<(String, PathBuf)> {
     // Sanitize tool name for filename
     let safe_name: String = tool_name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .take(30)
         .collect();
 

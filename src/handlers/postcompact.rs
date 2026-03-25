@@ -20,6 +20,12 @@ pub fn run(raw: &str) {
     state.last_compaction_turn = state.turn;
 
     common::write_session_state(&state);
-    common::add_session_note("compaction", &format!("Context compacted at turn {}", state.turn));
-    common::log("postcompact", &format!("State reset at turn {}", state.turn));
+    common::add_session_note(
+        "compaction",
+        &format!("Context compacted at turn {}", state.turn),
+    );
+    common::log(
+        "postcompact",
+        &format!("State reset at turn {}", state.turn),
+    );
 }

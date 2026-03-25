@@ -31,10 +31,7 @@ pub fn run(raw: &str) {
         None => return,
     };
 
-    let file_path = ti
-        .get("file_path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let file_path = ti.get("file_path").and_then(|v| v.as_str()).unwrap_or("");
 
     if file_path.is_empty() {
         return;
@@ -48,7 +45,12 @@ pub fn run(raw: &str) {
         || ti.get("line_range").is_some();
 
     if has_range {
-        common::log_structured("pretool-read", common::LogLevel::Allow, "ranged-read", truncate_path(file_path));
+        common::log_structured(
+            "pretool-read",
+            common::LogLevel::Allow,
+            "ranged-read",
+            truncate_path(file_path),
+        );
         return;
     }
 
@@ -59,11 +61,19 @@ pub fn run(raw: &str) {
     // The Edit tool requires a prior Read — blocking it creates a deadlock
     // where Claude can't re-read files it needs to edit further.
     let norm_path = common::normalize_path(file_path);
-    let is_edited_file = state.files_edited.iter().any(|f| common::normalize_path(f) == norm_path);
+    let is_edited_file = state
+        .files_edited
+        .iter()
+        .any(|f| common::normalize_path(f) == norm_path);
     if is_edited_file {
         let size = fs::metadata(file_path).map(|m| m.len()).unwrap_or(0);
         track_read(file_path, size);
-        common::log_structured("pretool-read", common::LogLevel::Allow, "edit-intent", truncate_path(file_path));
+        common::log_structured(
+            "pretool-read",
+            common::LogLevel::Allow,
+            "edit-intent",
+            truncate_path(file_path),
+        );
         return;
     }
 
@@ -75,8 +85,16 @@ pub fn run(raw: &str) {
         && norm_path == common::normalize_path(&state.last_edited_file)
         && state.turn.saturating_sub(state.last_edit_turn) <= 2
     {
-        track_read(file_path, fs::metadata(file_path).map(|m| m.len()).unwrap_or(0));
-        common::log_structured("pretool-read", common::LogLevel::Advisory, "post-edit", truncate_path(file_path));
+        track_read(
+            file_path,
+            fs::metadata(file_path).map(|m| m.len()).unwrap_or(0),
+        );
+        common::log_structured(
+            "pretool-read",
+            common::LogLevel::Advisory,
+            "post-edit",
+            truncate_path(file_path),
+        );
         common::allow_with_advisory(
             "PreToolUse",
             &format!(
@@ -91,30 +109,44 @@ pub fn run(raw: &str) {
     // Advisory-only: false denies (post-compaction, edit-intent) cause more
     // harm than the ~200 tokens saved per blocked read.
     if let Some(msg) = check_read_dedup(file_path, &state) {
-        track_read(file_path, fs::metadata(file_path).map(|m| m.len()).unwrap_or(0));
-        common::log_structured("pretool-read", common::LogLevel::Advisory, "read-dedup", truncate_path(file_path));
+        track_read(
+            file_path,
+            fs::metadata(file_path).map(|m| m.len()).unwrap_or(0),
+        );
+        common::log_structured(
+            "pretool-read",
+            common::LogLevel::Advisory,
+            "read-dedup",
+            truncate_path(file_path),
+        );
         common::allow_with_advisory("PreToolUse", &msg);
         return;
     }
 
     // ── 3. Size + extension checks ──
-    let ext = file_path
-        .rsplit('.')
-        .next()
-        .unwrap_or("")
-        .to_lowercase();
+    let ext = file_path.rsplit('.').next().unwrap_or("").to_lowercase();
 
     if !config::CODE_EXTS.contains(&ext.as_str()) {
         let size = fs::metadata(file_path).map(|m| m.len()).unwrap_or(0);
         track_read(file_path, size);
-        common::log_structured("pretool-read", common::LogLevel::Allow, "non-code-ext", truncate_path(file_path));
+        common::log_structured(
+            "pretool-read",
+            common::LogLevel::Allow,
+            "non-code-ext",
+            truncate_path(file_path),
+        );
         return;
     }
 
     let size = match fs::metadata(file_path) {
         Ok(m) => m.len(),
         Err(_) => {
-            common::log_structured("pretool-read", common::LogLevel::Allow, "no-stat", truncate_path(file_path));
+            common::log_structured(
+                "pretool-read",
+                common::LogLevel::Allow,
+                "no-stat",
+                truncate_path(file_path),
+            );
             return;
         }
     };
@@ -123,11 +155,18 @@ pub fn run(raw: &str) {
     if size > rules::RULES.max_read_size {
         let kb = size / 1024;
         let hint = large_file_hint(&ext);
-        common::log_structured("pretool-read", common::LogLevel::Allow, "large-file-advisory",
-            &format!("~{}KB {}", kb, truncate_path(file_path)));
+        common::log_structured(
+            "pretool-read",
+            common::LogLevel::Allow,
+            "large-file-advisory",
+            &format!("~{}KB {}", kb, truncate_path(file_path)),
+        );
         common::allow_with_advisory(
             "PreToolUse",
-            &format!("~{}KB file. {} Consider using offset+limit for targeted reads.", kb, hint),
+            &format!(
+                "~{}KB file. {} Consider using offset+limit for targeted reads.",
+                kb, hint
+            ),
         );
         return;
     }
@@ -140,13 +179,23 @@ pub fn run(raw: &str) {
         match action {
             ProgressiveAction::Deny(msg) => {
                 record_deny_savings(size / 3); // estimate ~1/3 of file size in tokens
-                common::log_structured("pretool-read", common::LogLevel::Deny, "progressive", truncate_path(file_path));
+                common::log_structured(
+                    "pretool-read",
+                    common::LogLevel::Deny,
+                    "progressive",
+                    truncate_path(file_path),
+                );
                 common::deny("PreToolUse", &msg);
                 return;
             }
             ProgressiveAction::Advisory(msg) => {
                 track_read(file_path, size);
-                common::log_structured("pretool-read", common::LogLevel::Advisory, "progressive", truncate_path(file_path));
+                common::log_structured(
+                    "pretool-read",
+                    common::LogLevel::Advisory,
+                    "progressive",
+                    truncate_path(file_path),
+                );
                 common::allow_with_advisory("PreToolUse", &msg);
                 return;
             }
@@ -155,7 +204,12 @@ pub fn run(raw: &str) {
 
     // Track and allow
     track_read(file_path, size);
-    common::log_structured("pretool-read", common::LogLevel::Allow, "pass", truncate_path(file_path));
+    common::log_structured(
+        "pretool-read",
+        common::LogLevel::Allow,
+        "pass",
+        truncate_path(file_path),
+    );
 }
 
 /// Track a file read in session state — called from PreToolUse since PostToolUse
@@ -292,9 +346,5 @@ fn large_file_hint(ext: &str) -> &'static str {
 }
 
 fn truncate_path(p: &str) -> &str {
-    if p.len() > 80 {
-        &p[p.len() - 80..]
-    } else {
-        p
-    }
+    if p.len() > 80 { &p[p.len() - 80..] } else { p }
 }

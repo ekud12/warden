@@ -48,10 +48,16 @@ enum Strategy {
 
 fn compile_filter(rule: CommandFilter) -> Option<CompiledFilter> {
     let cmd_match = Regex::new(&rule.cmd_match).ok()?;
-    let keep: Vec<Regex> = rule.keep_patterns.iter()
-        .filter_map(|p| Regex::new(p).ok()).collect();
-    let strip: Vec<Regex> = rule.strip_patterns.iter()
-        .filter_map(|p| Regex::new(p).ok()).collect();
+    let keep: Vec<Regex> = rule
+        .keep_patterns
+        .iter()
+        .filter_map(|p| Regex::new(p).ok())
+        .collect();
+    let strip: Vec<Regex> = rule
+        .strip_patterns
+        .iter()
+        .filter_map(|p| Regex::new(p).ok())
+        .collect();
     let strategy = match rule.strategy.as_str() {
         "keep_matching" => Strategy::KeepMatching,
         "dedup" => Strategy::Dedup,
@@ -60,7 +66,9 @@ fn compile_filter(rule: CommandFilter) -> Option<CompiledFilter> {
         _ => Strategy::StripMatching,
     };
     Some(CompiledFilter {
-        cmd_match, keep, strip,
+        cmd_match,
+        keep,
+        strip,
         keep_first: rule.keep_first,
         keep_last: rule.keep_last,
         summary_template: rule.summary_template,
@@ -129,7 +137,11 @@ fn apply_strip_matching(f: &CompiledFilter, lines: &[&str], max: usize) -> Strin
     }
 
     // Process middle lines
-    for &line in lines.iter().skip(f.keep_first).take(lines.len().saturating_sub(f.keep_first + f.keep_last)) {
+    for &line in lines
+        .iter()
+        .skip(f.keep_first)
+        .take(lines.len().saturating_sub(f.keep_first + f.keep_last))
+    {
         let should_strip = !line.trim().is_empty() && f.strip.iter().any(|re| re.is_match(line));
         let should_keep = f.keep.iter().any(|re| re.is_match(line));
 
@@ -138,12 +150,16 @@ fn apply_strip_matching(f: &CompiledFilter, lines: &[&str], max: usize) -> Strin
         } else {
             stripped += 1;
         }
-        if kept.len() >= max { break; }
+        if kept.len() >= max {
+            break;
+        }
     }
 
     // Always keep last N
     for &line in lines.iter().skip(lines.len().saturating_sub(f.keep_last)) {
-        if kept.len() < max { kept.push(line); }
+        if kept.len() < max {
+            kept.push(line);
+        }
     }
 
     format_output(&f.summary_template, &kept, lines.len(), stripped)
@@ -163,12 +179,16 @@ fn apply_keep_matching(f: &CompiledFilter, lines: &[&str], max: usize) -> String
         if f.keep.iter().any(|re| re.is_match(line)) {
             kept.push(line);
         }
-        if kept.len() >= max { break; }
+        if kept.len() >= max {
+            break;
+        }
     }
 
     // Last N
     for &line in lines.iter().skip(lines.len().saturating_sub(f.keep_last)) {
-        if kept.len() < max { kept.push(line); }
+        if kept.len() < max {
+            kept.push(line);
+        }
     }
 
     let stripped = lines.len() - kept.len();
@@ -194,7 +214,9 @@ fn apply_dedup(lines: &[&str], max: usize) -> String {
             last = line;
             count = 1;
         }
-        if kept.len() >= max { break; }
+        if kept.len() >= max {
+            break;
+        }
     }
     if count > 1 {
         kept.push(format!("  ... repeated {} times", count));

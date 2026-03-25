@@ -15,8 +15,8 @@
 //   Turn 31+:   max 40 lines
 // ──────────────────────────────────────────────────────────────────────────────
 
-use crate::common;
 use super::smart_filter;
+use crate::common;
 use regex::Regex;
 use std::collections::HashSet;
 use std::io::{self, BufRead, Write};
@@ -24,25 +24,20 @@ use std::sync::LazyLock;
 
 // ── Compiled regex patterns (initialized once, reused across daemon requests) ──
 
-static FAIL_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(crate::config::TRUNCATE_FAIL).unwrap()
-});
+static FAIL_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(crate::config::TRUNCATE_FAIL).unwrap());
 
-static SUMMARY_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(crate::config::TRUNCATE_SUMMARY).unwrap()
-});
+static SUMMARY_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(crate::config::TRUNCATE_SUMMARY).unwrap());
 
-static BUILD_IMPORTANT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(crate::config::TRUNCATE_BUILD_IMPORTANT).unwrap()
-});
+static BUILD_IMPORTANT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(crate::config::TRUNCATE_BUILD_IMPORTANT).unwrap());
 
-static INSTALL_ERROR_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(crate::config::TRUNCATE_INSTALL_ERROR).unwrap()
-});
+static INSTALL_ERROR_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(crate::config::TRUNCATE_INSTALL_ERROR).unwrap());
 
-static DEFAULT_IMPORTANT_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(crate::config::TRUNCATE_DEFAULT_IMPORTANT).unwrap()
-});
+static DEFAULT_IMPORTANT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(crate::config::TRUNCATE_DEFAULT_IMPORTANT).unwrap());
 
 struct Thresholds {
     max_lines: usize,
@@ -72,7 +67,12 @@ fn get_thresholds() -> Thresholds {
     let tail = head;
     let important = (max_lines * 20 / 80).max(5);
 
-    Thresholds { max_lines, head, tail, important }
+    Thresholds {
+        max_lines,
+        head,
+        tail,
+        important,
+    }
 }
 
 /// Parse --cmd from CLI args (the command being filtered)
@@ -92,9 +92,10 @@ pub fn parse_mode() -> String {
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
         if args[i] == "--mode"
-            && let Some(mode) = args.get(i + 1) {
-                return mode.clone();
-            }
+            && let Some(mode) = args.get(i + 1)
+        {
+            return mode.clone();
+        }
     }
     "default".to_string()
 }
@@ -203,7 +204,12 @@ fn filter_test(lines: &[String], out: &mut impl Write) {
         }
     }
 
-    let _ = writeln!(out, "--- TEST OUTPUT (filtered: {} lines -> {} kept, failures + summary) ---", lines.len(), kept.len());
+    let _ = writeln!(
+        out,
+        "--- TEST OUTPUT (filtered: {} lines -> {} kept, failures + summary) ---",
+        lines.len(),
+        kept.len()
+    );
     for line in &kept {
         let _ = writeln!(out, "{}", line);
     }
@@ -233,7 +239,10 @@ fn filter_build(lines: &[String], out: &mut impl Write) {
 
     // Error/warning lines
     for line in lines.iter() {
-        if BUILD_IMPORTANT_RE.is_match(line) && kept.len() < t.max_lines && !kept_set.contains(line.as_str()) {
+        if BUILD_IMPORTANT_RE.is_match(line)
+            && kept.len() < t.max_lines
+            && !kept_set.contains(line.as_str())
+        {
             kept.push(line);
             kept_set.insert(line);
         }
@@ -247,7 +256,12 @@ fn filter_build(lines: &[String], out: &mut impl Write) {
         }
     }
 
-    let _ = writeln!(out, "--- BUILD OUTPUT (filtered: {} lines -> {} kept, errors + warnings) ---", lines.len(), kept.len());
+    let _ = writeln!(
+        out,
+        "--- BUILD OUTPUT (filtered: {} lines -> {} kept, errors + warnings) ---",
+        lines.len(),
+        kept.len()
+    );
     for line in &kept {
         let _ = writeln!(out, "{}", line);
     }
@@ -285,7 +299,12 @@ fn filter_install(lines: &[String], out: &mut impl Write) {
         }
     }
 
-    let _ = writeln!(out, "--- INSTALL OUTPUT (filtered: {} lines -> {} kept) ---", lines.len(), kept.len());
+    let _ = writeln!(
+        out,
+        "--- INSTALL OUTPUT (filtered: {} lines -> {} kept) ---",
+        lines.len(),
+        kept.len()
+    );
     for line in &kept {
         let _ = writeln!(out, "{}", line);
     }
@@ -318,8 +337,7 @@ fn filter_default(lines: &[String], out: &mut impl Write) {
         .map(|s| s.as_str())
         .collect();
 
-    let seen: std::collections::HashSet<&str> =
-        head.iter().chain(tail.iter()).copied().collect();
+    let seen: std::collections::HashSet<&str> = head.iter().chain(tail.iter()).copied().collect();
     let unique_important: Vec<&str> = important
         .iter()
         .filter(|l| !seen.contains(**l))
@@ -379,7 +397,9 @@ fn relevance_score(line: &str, edited_files: &[String]) -> i32 {
     }
 
     // Boost: stack traces, line numbers
-    if line.contains("at ") && (line.contains(".rs:") || line.contains(".ts:") || line.contains(".js:")) {
+    if line.contains("at ")
+        && (line.contains(".rs:") || line.contains(".ts:") || line.contains(".js:"))
+    {
         score += 4;
     }
 
@@ -408,7 +428,8 @@ fn filter_smart(lines: &[String], out: &mut impl Write, max_lines: usize) {
     let edited_files = state.files_edited.clone();
 
     // Score all lines
-    let mut scored: Vec<(usize, i32)> = lines.iter()
+    let mut scored: Vec<(usize, i32)> = lines
+        .iter()
         .enumerate()
         .map(|(i, line)| {
             let mut s = relevance_score(line, &edited_files);
@@ -428,15 +449,17 @@ fn filter_smart(lines: &[String], out: &mut impl Write, max_lines: usize) {
 
     // Sort by score descending, take top N
     scored.sort_by(|a, b| b.1.cmp(&a.1));
-    let mut kept_indices: Vec<usize> = scored.iter()
-        .take(max_lines)
-        .map(|(i, _)| *i)
-        .collect();
+    let mut kept_indices: Vec<usize> = scored.iter().take(max_lines).map(|(i, _)| *i).collect();
 
     // Re-sort by original position for output order
     kept_indices.sort();
 
-    let _ = writeln!(out, "--- SMART TRUNCATED ({} lines → {} by relevance) ---", lines.len(), kept_indices.len());
+    let _ = writeln!(
+        out,
+        "--- SMART TRUNCATED ({} lines → {} by relevance) ---",
+        lines.len(),
+        kept_indices.len()
+    );
     for &i in &kept_indices {
         let _ = writeln!(out, "{}", lines[i]);
     }
@@ -453,7 +476,8 @@ fn cluster_errors(lines: Vec<String>) -> Vec<String> {
     });
 
     // Count errors per file
-    let mut file_counts: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+    let mut file_counts: std::collections::HashMap<String, Vec<usize>> =
+        std::collections::HashMap::new();
     for (i, line) in lines.iter().enumerate() {
         if let Some(caps) = ERROR_RE.captures(line) {
             let file = caps.get(1).map_or("", |m| m.as_str()).to_string();
@@ -490,11 +514,19 @@ fn cluster_errors(lines: Vec<String>) -> Vec<String> {
             if let Some(caps) = ERROR_RE.captures(line) {
                 let file = caps.get(1).map_or("", |m| m.as_str()).to_string();
                 if let Some(indices) = file_counts.get(&file)
-                    && indices.len() >= 3 && indices[0] < i && !cluster_summaries_inserted.contains(&file) {
-                        let severity = caps.get(3).map_or("error", |m| m.as_str());
-                        result.push(format!("  ... [{} more {}s in {}]", indices.len() - 2, severity, file));
-                        cluster_summaries_inserted.insert(file);
-                    }
+                    && indices.len() >= 3
+                    && indices[0] < i
+                    && !cluster_summaries_inserted.contains(&file)
+                {
+                    let severity = caps.get(3).map_or("error", |m| m.as_str());
+                    result.push(format!(
+                        "  ... [{} more {}s in {}]",
+                        indices.len() - 2,
+                        severity,
+                        file
+                    ));
+                    cluster_summaries_inserted.insert(file);
+                }
             }
             continue;
         }

@@ -1,6 +1,6 @@
 [package]
 name = "warden-ai"
-version = "1.1.0"
+version = "1.1.1"
 edition = "2024"
 description = "Runtime control layer for AI coding agents: policy enforcement, drift reduction, and context efficiency"
 license = "MIT"
@@ -52,4 +52,5 @@ path = "src/main.rs"
 [[bin]]
 name = "warden-relay"
 path = "src/bin/relay.rs"
+
 

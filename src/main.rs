@@ -58,7 +58,10 @@ fn main() {
                 "claude-code" => {
                     use install::term;
                     eprintln!();
-                    term::print_bold(term::BRAND, &format!("  {} install claude-code\n", constants::NAME));
+                    term::print_bold(
+                        term::BRAND,
+                        &format!("  {} install claude-code\n", constants::NAME),
+                    );
                     eprintln!();
 
                     let sp = term::Spinner::start("Setting up directories...");
@@ -90,13 +93,19 @@ fn main() {
 
                     eprintln!();
                     term::print_bold(term::SUCCESS, "  Ready! ");
-                    term::print_colored(term::DIM, "Start a Claude Code session and Warden will guard it.\n");
+                    term::print_colored(
+                        term::DIM,
+                        "Start a Claude Code session and Warden will guard it.\n",
+                    );
                     eprintln!();
                 }
                 "gemini-cli" => {
                     use install::term;
                     eprintln!();
-                    term::print_bold(term::BRAND, &format!("  {} install gemini-cli\n", constants::NAME));
+                    term::print_bold(
+                        term::BRAND,
+                        &format!("  {} install gemini-cli\n", constants::NAME),
+                    );
                     eprintln!();
 
                     let sp = term::Spinner::start("Setting up directories...");
@@ -128,7 +137,10 @@ fn main() {
 
                     eprintln!();
                     term::print_bold(term::SUCCESS, "  Ready! ");
-                    term::print_colored(term::DIM, "Start a Gemini CLI session and Warden will guard it.\n");
+                    term::print_colored(
+                        term::DIM,
+                        "Start a Gemini CLI session and Warden will guard it.\n",
+                    );
                     eprintln!();
                 }
                 _ => eprintln!(
@@ -682,8 +694,14 @@ fn print_help() {
     term::println_colored(term::DIM, "Print version");
     eprintln!();
     term::print_bold(term::TEXT, "  GETTING STARTED\n");
-    term::print_colored(term::DIM, "    1. warden init              Run the setup wizard\n");
-    term::print_colored(term::DIM, "    2. Start a coding session    Warden activates automatically\n");
+    term::print_colored(
+        term::DIM,
+        "    1. warden init              Run the setup wizard\n",
+    );
+    term::print_colored(
+        term::DIM,
+        "    2. Start a coding session    Warden activates automatically\n",
+    );
     eprintln!();
     term::print_colored(term::DIM, "  https://github.com/ekud12/warden\n");
     eprintln!();

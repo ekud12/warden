@@ -5,23 +5,50 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 use crossterm::{
-    ExecutableCommand,
-    cursor,
-    event::{self, Event, KeyCode, KeyEvent},
-    style::{Attribute, Color, Print, SetAttribute, SetForegroundColor, ResetColor},
+    ExecutableCommand, cursor,
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
     terminal::{self, ClearType},
 };
 use std::io::{self, Write};
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
 
-pub const BRAND:    Color = Color::Rgb { r: 220, g: 38, b: 38 };   // Warden red (logo)
-pub const ACCENT:   Color = Color::Rgb { r: 153, g: 27, b: 27 };   // Dark crimson
-pub const SUCCESS:  Color = Color::Rgb { r: 34, g: 197, b: 94 };   // Green
-pub const WARN:     Color = Color::Rgb { r: 234, g: 179, b: 8 };   // Yellow
-pub const ERROR:    Color = Color::Rgb { r: 239, g: 68, b: 68 };   // Red
-pub const DIM:      Color = Color::Rgb { r: 107, g: 114, b: 128 }; // Gray
-pub const TEXT:     Color = Color::Rgb { r: 229, g: 231, b: 235 }; // Light gray
+pub const BRAND: Color = Color::Rgb {
+    r: 220,
+    g: 38,
+    b: 38,
+}; // Warden red (logo)
+pub const ACCENT: Color = Color::Rgb {
+    r: 153,
+    g: 27,
+    b: 27,
+}; // Dark crimson
+pub const SUCCESS: Color = Color::Rgb {
+    r: 34,
+    g: 197,
+    b: 94,
+}; // Green
+pub const WARN: Color = Color::Rgb {
+    r: 234,
+    g: 179,
+    b: 8,
+}; // Yellow
+pub const ERROR: Color = Color::Rgb {
+    r: 239,
+    g: 68,
+    b: 68,
+}; // Red
+pub const DIM: Color = Color::Rgb {
+    r: 107,
+    g: 114,
+    b: 128,
+}; // Gray
+pub const TEXT: Color = Color::Rgb {
+    r: 229,
+    g: 231,
+    b: 235,
+}; // Light gray
 
 // ─── Styled print helpers ────────────────────────────────────────────────────
 
@@ -65,11 +92,21 @@ pub fn status(icon: &str, color: Color, msg: &str) {
     eprintln!();
 }
 
-pub fn status_ok(msg: &str) { status("\u{2713}", SUCCESS, msg); }
-pub fn status_skip(msg: &str) { status("\u{2013}", DIM, msg); }
-pub fn status_fail(msg: &str) { status("\u{2717}", ERROR, msg); }
-pub fn status_warn(msg: &str) { status("!", WARN, msg); }
-pub fn status_work(msg: &str) { status("\u{25cb}", ACCENT, msg); }
+pub fn status_ok(msg: &str) {
+    status("\u{2713}", SUCCESS, msg);
+}
+pub fn status_skip(msg: &str) {
+    status("\u{2013}", DIM, msg);
+}
+pub fn status_fail(msg: &str) {
+    status("\u{2717}", ERROR, msg);
+}
+pub fn status_warn(msg: &str) {
+    status("!", WARN, msg);
+}
+pub fn status_work(msg: &str) {
+    status("\u{25cb}", ACCENT, msg);
+}
 
 /// Print a section header
 pub fn section(title: &str) {
@@ -79,7 +116,10 @@ pub fn section(title: &str) {
     eprintln!();
     let mut out = io::stderr();
     let _ = out.execute(SetForegroundColor(DIM));
-    let _ = out.execute(Print(format!("  {}\n", "\u{2500}".repeat(title.len().min(50)))));
+    let _ = out.execute(Print(format!(
+        "  {}\n",
+        "\u{2500}".repeat(title.len().min(50))
+    )));
     let _ = out.execute(ResetColor);
 }
 
@@ -90,19 +130,18 @@ pub fn banner() {
     eprintln!();
 
     // Angular W inspired by the crystalline red logo
-    print_bold(BRAND, "        \\\\        //  \n");
-    print_bold(BRAND, "         \\\\      //   \n");
-    print_bold(BRAND, "          \\\\    //    \n");
-    print_bold(BRAND, "           \\\\  //     \n");
-    print_bold(BRAND, "            \\\\//      \n");
-    print_bold(BRAND, "     \\\\      \\/      //\n");
-    print_bold(BRAND, "      \\\\            //\n");
-    print_bold(BRAND, "       \\\\          //\n");
-    print_bold(BRAND, "        \\\\        //\n");
-    print_bold(BRAND, "         \\/      \\/\n");
+    print_bold(BRAND, "     \\\\        //\n");
+    print_bold(BRAND, "      \\\\      //\n");
+    print_bold(BRAND, "       \\\\    //\n");
+    print_bold(BRAND, "        \\\\  //\n");
+    print_bold(BRAND, "         \\\\//\n");
+    print_bold(BRAND, "    \\\\    \\/    //\n");
+    print_bold(BRAND, "     \\\\        //\n");
+    print_bold(BRAND, "      \\\\      //\n");
+    print_bold(BRAND, "       \\/    \\/\n");
 
     eprintln!();
-    print_bold(TEXT,  "     W A R D E N");
+    print_bold(TEXT, "     W A R D E N");
     print_colored(DIM, &format!("  v{}\n", ver));
     print_colored(DIM, "     Runtime guardian for AI coding agents\n");
     eprintln!();
@@ -119,108 +158,126 @@ pub struct SelectOption {
 
 impl SelectOption {
     pub fn new(label: &str, desc: &str) -> Self {
-        Self { label: label.to_string(), description: desc.to_string(), enabled: true }
+        Self {
+            label: label.to_string(),
+            description: desc.to_string(),
+            enabled: true,
+        }
     }
     pub fn disabled(label: &str, desc: &str) -> Self {
-        Self { label: label.to_string(), description: desc.to_string(), enabled: false }
+        Self {
+            label: label.to_string(),
+            description: desc.to_string(),
+            enabled: false,
+        }
     }
 }
 
 /// Show an arrow-key single-select menu. Returns the index of the selected option.
 pub fn select(prompt: &str, options: &[SelectOption]) -> Option<usize> {
-    if options.is_empty() { return None; }
+    if options.is_empty() {
+        return None;
+    }
 
+    let n = options.len();
+    let mut selected = options.iter().position(|o| o.enabled).unwrap_or(0);
     let mut out = io::stderr();
+
     eprintln!();
     print_bold(ACCENT, "  ? ");
     print_bold(TEXT, prompt);
     eprintln!();
     print_colored(DIM, "    Use arrow keys to navigate, Enter to select\n");
 
+    // Print initial options (reserves N lines on screen)
+    render_menu(&mut out, options, selected);
+
     let _ = terminal::enable_raw_mode();
-    let _ = out.execute(cursor::Hide);
-
-    let mut selected = options.iter().position(|o| o.enabled).unwrap_or(0);
-    let start_row = get_cursor_row() + 1;
-
-    // Initial render
-    render_select(&mut out, options, selected, start_row);
+    let _ = write!(out, "\x1b[?25l"); // hide cursor
+    let _ = out.flush();
 
     let result = loop {
-        if let Ok(Event::Key(KeyEvent { code, .. })) = event::read() {
+        if let Ok(Event::Key(KeyEvent { code, kind, .. })) = event::read() {
+            // Windows sends both Press and Release — only react to Press
+            if kind != KeyEventKind::Press {
+                continue;
+            }
             match code {
                 KeyCode::Up | KeyCode::Char('k') => {
-                    // Find previous enabled option
-                    let mut next = if selected == 0 { options.len() - 1 } else { selected - 1 };
+                    let mut next = if selected == 0 { n - 1 } else { selected - 1 };
                     let mut attempts = 0;
-                    while !options[next].enabled && attempts < options.len() {
-                        next = if next == 0 { options.len() - 1 } else { next - 1 };
+                    while !options[next].enabled && attempts < n {
+                        next = if next == 0 { n - 1 } else { next - 1 };
                         attempts += 1;
                     }
-                    if options[next].enabled { selected = next; }
+                    if options[next].enabled {
+                        selected = next;
+                    }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    let mut next = (selected + 1) % options.len();
+                    let mut next = (selected + 1) % n;
                     let mut attempts = 0;
-                    while !options[next].enabled && attempts < options.len() {
-                        next = (next + 1) % options.len();
+                    while !options[next].enabled && attempts < n {
+                        next = (next + 1) % n;
                         attempts += 1;
                     }
-                    if options[next].enabled { selected = next; }
+                    if options[next].enabled {
+                        selected = next;
+                    }
                 }
                 KeyCode::Enter => break Some(selected),
                 KeyCode::Esc | KeyCode::Char('q') => break None,
-                _ => {}
+                _ => continue,
             }
-            render_select(&mut out, options, selected, start_row);
+            let _ = write!(out, "\x1b[{}A\r", n);
+            let _ = out.flush();
+            render_menu(&mut out, options, selected);
         }
     };
 
-    let _ = out.execute(cursor::Show);
+    let _ = write!(out, "\x1b[?25h"); // show cursor
+    let _ = out.flush();
     let _ = terminal::disable_raw_mode();
-
-    // Move cursor past the menu
-    let _ = out.execute(cursor::MoveTo(0, start_row as u16 + options.len() as u16));
-    eprintln!();
 
     if let Some(idx) = result {
         print_colored(DIM, "    Selected: ");
         println_colored(ACCENT, &options[idx].label);
     }
+    eprintln!();
 
     result
 }
 
-fn render_select(out: &mut io::Stderr, options: &[SelectOption], selected: usize, start_row: u32) {
+/// Render menu options. Each line: clear entire line + content + \r\n.
+fn render_menu(out: &mut io::Stderr, options: &[SelectOption], selected: usize) {
     for (i, opt) in options.iter().enumerate() {
-        let _ = out.execute(cursor::MoveTo(0, start_row as u16 + i as u16));
-        let _ = out.execute(terminal::Clear(ClearType::CurrentLine));
-
+        let _ = write!(out, "\x1b[2K\r");
         if !opt.enabled {
             let _ = out.execute(SetForegroundColor(DIM));
-            let _ = out.execute(Print(format!("      {} {}", opt.label, opt.description)));
+            let _ = write!(out, "      {} {}", opt.label, opt.description);
         } else if i == selected {
             let _ = out.execute(SetForegroundColor(BRAND));
-            let _ = out.execute(Print("  \u{25b8} "));
+            let _ = write!(out, "  \u{25b8} ");
             let _ = out.execute(SetAttribute(Attribute::Bold));
             let _ = out.execute(SetForegroundColor(TEXT));
-            let _ = out.execute(Print(&opt.label));
+            let _ = write!(out, "{}", opt.label);
             let _ = out.execute(SetAttribute(Attribute::Reset));
             if !opt.description.is_empty() {
                 let _ = out.execute(SetForegroundColor(DIM));
-                let _ = out.execute(Print(format!("  {}", opt.description)));
+                let _ = write!(out, "  {}", opt.description);
             }
         } else {
             let _ = out.execute(SetForegroundColor(DIM));
-            let _ = out.execute(Print("    "));
+            let _ = write!(out, "    ");
             let _ = out.execute(SetForegroundColor(TEXT));
-            let _ = out.execute(Print(&opt.label));
+            let _ = write!(out, "{}", opt.label);
             if !opt.description.is_empty() {
                 let _ = out.execute(SetForegroundColor(DIM));
-                let _ = out.execute(Print(format!("  {}", opt.description)));
+                let _ = write!(out, "  {}", opt.description);
             }
         }
         let _ = out.execute(ResetColor);
+        let _ = write!(out, "\r\n");
     }
     let _ = out.flush();
 }
@@ -236,56 +293,80 @@ pub struct CheckOption {
 
 impl CheckOption {
     pub fn new(label: &str, desc: &str, default: bool) -> Self {
-        Self { label: label.to_string(), description: desc.to_string(), checked: default, enabled: true }
+        Self {
+            label: label.to_string(),
+            description: desc.to_string(),
+            checked: default,
+            enabled: true,
+        }
     }
     pub fn installed(label: &str, desc: &str) -> Self {
-        Self { label: label.to_string(), description: desc.to_string(), checked: true, enabled: false }
+        Self {
+            label: label.to_string(),
+            description: desc.to_string(),
+            checked: true,
+            enabled: false,
+        }
     }
 }
 
-/// Show an arrow-key multi-select with checkboxes. Returns which items are checked.
-pub fn multi_select(prompt: &str, options: &mut [CheckOption]) -> Vec<usize> {
-    if options.is_empty() { return vec![]; }
+/// Show an arrow-key multi-select with checkboxes.
+/// Returns None on Esc, Some(indices) on Enter.
+pub fn multi_select(prompt: &str, options: &mut [CheckOption]) -> Option<Vec<usize>> {
+    if options.is_empty() {
+        return Some(vec![]);
+    }
 
+    let n = options.len();
+    let mut cur = options.iter().position(|o| o.enabled).unwrap_or(0);
     let mut out = io::stderr();
+
     eprintln!();
     print_bold(ACCENT, "  ? ");
     print_bold(TEXT, prompt);
     eprintln!();
-    print_colored(DIM, "    Space to toggle, a to select all, Enter to confirm\n");
+    print_colored(
+        DIM,
+        "    Space to toggle, a to select all, Enter to confirm\n",
+    );
+
+    render_checks_menu(&mut out, options, cur);
 
     let _ = terminal::enable_raw_mode();
-    let _ = out.execute(cursor::Hide);
-
-    let mut cursor = options.iter().position(|o| o.enabled).unwrap_or(0);
-    let start_row = get_cursor_row() + 1;
-
-    render_checks(&mut out, options, cursor, start_row);
+    let _ = write!(out, "\x1b[?25l");
+    let _ = out.flush();
 
     let confirmed = loop {
-        if let Ok(Event::Key(KeyEvent { code, .. })) = event::read() {
+        if let Ok(Event::Key(KeyEvent { code, kind, .. })) = event::read() {
+            if kind != KeyEventKind::Press {
+                continue;
+            }
             match code {
                 KeyCode::Up | KeyCode::Char('k') => {
-                    let mut next = if cursor == 0 { options.len() - 1 } else { cursor - 1 };
+                    let mut next = if cur == 0 { n - 1 } else { cur - 1 };
                     let mut attempts = 0;
-                    while !options[next].enabled && attempts < options.len() {
-                        next = if next == 0 { options.len() - 1 } else { next - 1 };
+                    while !options[next].enabled && attempts < n {
+                        next = if next == 0 { n - 1 } else { next - 1 };
                         attempts += 1;
                     }
-                    if options[next].enabled { cursor = next; }
+                    if options[next].enabled {
+                        cur = next;
+                    }
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
-                    let mut next = (cursor + 1) % options.len();
+                    let mut next = (cur + 1) % n;
                     let mut attempts = 0;
-                    while !options[next].enabled && attempts < options.len() {
-                        next = (next + 1) % options.len();
+                    while !options[next].enabled && attempts < n {
+                        next = (next + 1) % n;
                         attempts += 1;
                     }
-                    if options[next].enabled { cursor = next; }
+                    if options[next].enabled {
+                        cur = next;
+                    }
                 }
                 KeyCode::Char(' ') => {
-                    if options[cursor].enabled {
-                        options[cursor].checked = !options[cursor].checked;
+                    if options[cur].enabled {
+                        options[cur].checked = !options[cur].checked;
                     }
                 }
                 KeyCode::Char('a') => {
@@ -296,72 +377,84 @@ pub fn multi_select(prompt: &str, options: &mut [CheckOption]) -> Vec<usize> {
                 }
                 KeyCode::Enter => break true,
                 KeyCode::Esc | KeyCode::Char('q') => break false,
-                _ => {}
+                _ => continue,
             }
-            render_checks(&mut out, options, cursor, start_row);
+            let _ = write!(out, "\x1b[{}A\r", n);
+            let _ = out.flush();
+            render_checks_menu(&mut out, options, cur);
         }
     };
 
-    let _ = out.execute(cursor::Show);
+    let _ = write!(out, "\x1b[?25h");
+    let _ = out.flush();
     let _ = terminal::disable_raw_mode();
 
-    let _ = out.execute(cursor::MoveTo(0, start_row as u16 + options.len() as u16));
-    eprintln!();
+    if !confirmed {
+        eprintln!();
+        return None;
+    }
 
-    if !confirmed { return vec![]; }
-
-    let selected: Vec<usize> = options.iter().enumerate()
+    let selected: Vec<usize> = options
+        .iter()
+        .enumerate()
         .filter(|(_, o)| o.checked)
         .map(|(i, _)| i)
         .collect();
 
-    let names: Vec<&str> = selected.iter()
+    let names: Vec<&str> = selected
+        .iter()
         .map(|&i| options[i].label.as_str())
         .collect();
     print_colored(DIM, "    Selected: ");
     println_colored(ACCENT, &names.join(", "));
+    eprintln!();
 
-    selected
+    Some(selected)
 }
 
-fn render_checks(out: &mut io::Stderr, options: &[CheckOption], cursor: usize, start_row: u32) {
+/// Render checkbox options. Each line: clear + content + \r\n.
+fn render_checks_menu(out: &mut io::Stderr, options: &[CheckOption], cur: usize) {
     for (i, opt) in options.iter().enumerate() {
-        let _ = out.execute(cursor::MoveTo(0, start_row as u16 + i as u16));
-        let _ = out.execute(terminal::Clear(ClearType::CurrentLine));
+        let _ = write!(out, "\x1b[2K\r");
 
-        let pointer = if i == cursor && opt.enabled { "\u{25b8}" } else { " " };
+        let pointer = if i == cur && opt.enabled {
+            "\u{25b8}"
+        } else {
+            " "
+        };
         let checkbox = if opt.checked { "\u{25a3}" } else { "\u{25a1}" };
 
         if !opt.enabled {
             let _ = out.execute(SetForegroundColor(DIM));
-            let _ = out.execute(Print(format!("    {} {} {}", checkbox, opt.label, opt.description)));
-        } else if i == cursor {
+            let _ = write!(out, "    {} {} {}", checkbox, opt.label, opt.description);
+        } else if i == cur {
             let _ = out.execute(SetForegroundColor(BRAND));
-            let _ = out.execute(Print(format!("  {} ", pointer)));
+            let _ = write!(out, "  {} ", pointer);
             let check_color = if opt.checked { SUCCESS } else { DIM };
             let _ = out.execute(SetForegroundColor(check_color));
-            let _ = out.execute(Print(format!("{} ", checkbox)));
+            let _ = write!(out, "{} ", checkbox);
             let _ = out.execute(SetAttribute(Attribute::Bold));
             let _ = out.execute(SetForegroundColor(TEXT));
-            let _ = out.execute(Print(&opt.label));
+            let _ = write!(out, "{}", opt.label);
             let _ = out.execute(SetAttribute(Attribute::Reset));
             if !opt.description.is_empty() {
                 let _ = out.execute(SetForegroundColor(DIM));
-                let _ = out.execute(Print(format!("  {}", opt.description)));
+                let _ = write!(out, "  {}", opt.description);
             }
         } else {
             let check_color = if opt.checked { SUCCESS } else { DIM };
-            let _ = out.execute(Print("    "));
+            let _ = write!(out, "    ");
             let _ = out.execute(SetForegroundColor(check_color));
-            let _ = out.execute(Print(format!("{} ", checkbox)));
+            let _ = write!(out, "{} ", checkbox);
             let _ = out.execute(SetForegroundColor(TEXT));
-            let _ = out.execute(Print(&opt.label));
+            let _ = write!(out, "{}", opt.label);
             if !opt.description.is_empty() {
                 let _ = out.execute(SetForegroundColor(DIM));
-                let _ = out.execute(Print(format!("  {}", opt.description)));
+                let _ = write!(out, "  {}", opt.description);
             }
         }
         let _ = out.execute(ResetColor);
+        let _ = write!(out, "\r\n");
     }
     let _ = out.flush();
 }
@@ -386,13 +479,20 @@ pub fn confirm(prompt: &str, default: bool) -> bool {
             "" => default,
             _ => default,
         };
-        if result { println_colored(SUCCESS, "yes"); } else { println_colored(DIM, "no"); }
+        if result {
+            println_colored(SUCCESS, "yes");
+        } else {
+            println_colored(DIM, "no");
+        }
         return result;
     }
 
     let _ = terminal::enable_raw_mode();
     let result = loop {
-        if let Ok(Event::Key(KeyEvent { code, .. })) = event::read() {
+        if let Ok(Event::Key(KeyEvent { code, kind, .. })) = event::read() {
+            if kind != KeyEventKind::Press {
+                continue;
+            }
             match code {
                 KeyCode::Char('y') | KeyCode::Char('Y') => break true,
                 KeyCode::Char('n') | KeyCode::Char('N') => break false,
@@ -424,16 +524,17 @@ fn is_tty() -> bool {
         let handle = io::stdin().as_raw_handle();
         let mut mode = 0u32;
         // SAFETY: GetConsoleMode on stdin handle — returns 0 if not a console
-        unsafe {
-            windows_sys::Win32::System::Console::GetConsoleMode(handle as _, &mut mode) != 0
-        }
+        unsafe { windows_sys::Win32::System::Console::GetConsoleMode(handle as _, &mut mode) != 0 }
     }
     #[cfg(not(windows))]
     {
         // On Unix, crossterm's enable_raw_mode will fail if not a TTY,
         // but we can also just check if raw mode enable/disable succeeds
         terminal::enable_raw_mode()
-            .map(|_| { let _ = terminal::disable_raw_mode(); true })
+            .map(|_| {
+                let _ = terminal::disable_raw_mode();
+                true
+            })
             .unwrap_or(false)
     }
 }
@@ -453,7 +554,9 @@ impl Spinner {
         let _ = out.execute(Print(format!("  \u{25cb} {}", msg)));
         let _ = out.execute(ResetColor);
         let _ = out.flush();
-        Self { _msg: msg.to_string() }
+        Self {
+            _msg: msg.to_string(),
+        }
     }
 
     pub fn finish_ok(self, msg: &str) {
@@ -480,10 +583,6 @@ impl Spinner {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-fn get_cursor_row() -> u32 {
-    crossterm::cursor::position().map(|(_, r)| r as u32).unwrap_or(0)
-}
 
 /// Print key=value info line
 pub fn info(key: &str, value: &str) {

@@ -15,17 +15,21 @@ use crate::config;
 use schema::*;
 use std::sync::LazyLock;
 
+/// A single rule entry with ID, pattern, message, and shadow flag.
+pub type RuleEntry = (String, String, String, bool); // (id, regex, msg, shadow)
+
 /// Merged rules from all 3 tiers, ready for consumption by handlers.
 pub struct MergedRules {
     // Pattern pair sections: compiled defaults + TOML overrides
-    pub safety_pairs: Vec<(String, String)>,
-    pub destructive_pairs: Vec<(String, String)>,
-    pub substitutions_pairs: Vec<(String, String)>,
-    pub advisories_pairs: Vec<(String, String)>,
-    pub hallucination_pairs: Vec<(String, String)>,
-    pub hallucination_advisory_pairs: Vec<(String, String)>,
-    pub sensitive_deny_pairs: Vec<(String, String)>,
-    pub sensitive_warn_pairs: Vec<(String, String)>,
+    // Tuple: (rule_id, regex_pattern, message, shadow_mode)
+    pub safety_pairs: Vec<RuleEntry>,
+    pub destructive_pairs: Vec<RuleEntry>,
+    pub substitutions_pairs: Vec<RuleEntry>,
+    pub advisories_pairs: Vec<RuleEntry>,
+    pub hallucination_pairs: Vec<RuleEntry>,
+    pub hallucination_advisory_pairs: Vec<RuleEntry>,
+    pub sensitive_deny_pairs: Vec<RuleEntry>,
+    pub sensitive_warn_pairs: Vec<RuleEntry>,
     pub auto_allow_patterns: Vec<String>,
     // Just config
     pub just_map: Vec<(String, String)>,
@@ -58,6 +62,8 @@ pub struct MergedRules {
     // Disabled restrictions (checked by handlers at deny points)
     #[allow(dead_code)] // handlers will query this when restriction toggling lands
     pub disabled_restrictions: std::collections::HashSet<String>,
+    /// User-defined command filter rules (from TOML, merged with compiled defaults)
+    pub command_filters: Vec<crate::rules::schema::CommandFilter>,
 }
 
 pub static RULES: LazyLock<MergedRules> = LazyLock::new(|| {
@@ -114,23 +120,23 @@ pub fn rules_mtime() -> u64 {
 fn merge(global: RulesFile, project: RulesFile) -> MergedRules {
     MergedRules {
         safety_pairs: {
-            let mut pairs = merge_pairs(config::SAFETY, &global.safety, &project.safety);
+            let mut pairs = merge_pairs("safety", config::SAFETY, &global.safety, &project.safety);
             // Git readonly rules: only included when explicitly enabled
             let git_readonly = project.git_readonly.or(global.git_readonly).unwrap_or(false);
             if git_readonly {
-                for (pat, msg) in config::GIT_SAFETY {
-                    pairs.push((pat.to_string(), msg.to_string()));
+                for (i, (pat, msg)) in config::GIT_SAFETY.iter().enumerate() {
+                    pairs.push((format!("git_readonly.{}", i), pat.to_string(), msg.to_string(), false));
                 }
             }
             pairs
         },
-        destructive_pairs: merge_pairs(config::DESTRUCTIVE, &global.destructive, &project.destructive),
-        substitutions_pairs: merge_pairs(config::SUBSTITUTIONS, &global.substitutions, &project.substitutions),
-        advisories_pairs: merge_pairs(config::ADVISORIES, &global.advisories, &project.advisories),
-        hallucination_pairs: merge_pairs(config::HALLUCINATION, &global.hallucination, &project.hallucination),
-        hallucination_advisory_pairs: merge_pairs(config::HALLUCINATION_ADVISORY, &global.hallucination_advisory, &project.hallucination_advisory),
-        sensitive_deny_pairs: merge_pairs(config::SENSITIVE_PATHS_DENY, &global.sensitive_paths_deny, &project.sensitive_paths_deny),
-        sensitive_warn_pairs: merge_pairs(config::SENSITIVE_PATHS_WARN, &global.sensitive_paths_warn, &project.sensitive_paths_warn),
+        destructive_pairs: merge_pairs("destructive", config::DESTRUCTIVE, &global.destructive, &project.destructive),
+        substitutions_pairs: merge_pairs("substitution", config::SUBSTITUTIONS, &global.substitutions, &project.substitutions),
+        advisories_pairs: merge_pairs("advisory", config::ADVISORIES, &global.advisories, &project.advisories),
+        hallucination_pairs: merge_pairs("hallucination", config::HALLUCINATION, &global.hallucination, &project.hallucination),
+        hallucination_advisory_pairs: merge_pairs("hallucination_advisory", config::HALLUCINATION_ADVISORY, &global.hallucination_advisory, &project.hallucination_advisory),
+        sensitive_deny_pairs: merge_pairs("sensitive_deny", config::SENSITIVE_PATHS_DENY, &global.sensitive_paths_deny, &project.sensitive_paths_deny),
+        sensitive_warn_pairs: merge_pairs("sensitive_warn", config::SENSITIVE_PATHS_WARN, &global.sensitive_paths_warn, &project.sensitive_paths_warn),
         auto_allow_patterns: merge_string_list(config::AUTO_ALLOW, &global.auto_allow, &project.auto_allow),
         just_map: merge_just_map(&global.just, &project.just),
         just_verbose: merge_string_list_raw(
@@ -213,38 +219,50 @@ fn merge(global: RulesFile, project: RulesFile) -> MergedRules {
             }
             set
         },
+        command_filters: {
+            let mut filters = Vec::new();
+            filters.extend(global.command_filters.iter().cloned());
+            filters.extend(project.command_filters.iter().cloned());
+            filters
+        },
     }
 }
 
-/// Merge pattern pairs: compiled defaults + global TOML + project TOML.
-/// If a tier has `replace = true`, it replaces everything before it.
+/// Merge pattern pairs: compiled defaults form an immutable safety floor.
+/// `replace = true` only clears user-added patterns from the previous tier,
+/// never the compiled defaults. This prevents a malicious project rules.toml
+/// from disabling built-in safety patterns.
 fn merge_pairs(
+    category: &str,
     compiled: &[(&str, &str)],
     global: &PatternSection,
     project: &PatternSection,
-) -> Vec<(String, String)> {
-    // Start with compiled defaults
-    let mut result: Vec<(String, String)> = compiled
+) -> Vec<RuleEntry> {
+    // Compiled defaults are the immutable safety floor — auto-generate IDs
+    let floor: Vec<RuleEntry> = compiled
         .iter()
-        .map(|(p, m)| (p.to_string(), m.to_string()))
+        .enumerate()
+        .map(|(i, (p, m))| (format!("{}.{}", category, i), p.to_string(), m.to_string(), false))
         .collect();
 
-    // Apply global
-    if global.replace {
-        result.clear();
-    }
-    for entry in &global.patterns {
-        result.push((entry.regex.clone(), entry.msg.clone()));
+    // User additions: global can add, project can replace global additions (not floor)
+    let mut user_additions: Vec<RuleEntry> = Vec::new();
+    for (i, entry) in global.patterns.iter().enumerate() {
+        let id = format!("{}.global_{}", category, i);
+        user_additions.push((id, entry.regex.clone(), entry.msg.clone(), entry.shadow));
     }
 
-    // Apply project
+    // Project replace only clears user additions (global patterns), not compiled floor
     if project.replace {
-        result.clear();
+        user_additions.clear();
     }
-    for entry in &project.patterns {
-        result.push((entry.regex.clone(), entry.msg.clone()));
+    for (i, entry) in project.patterns.iter().enumerate() {
+        let id = format!("{}.project_{}", category, i);
+        user_additions.push((id, entry.regex.clone(), entry.msg.clone(), entry.shadow));
     }
 
+    let mut result = floor;
+    result.extend(user_additions);
     result
 }
 
@@ -294,23 +312,27 @@ fn merge_just_map(global: &JustSection, project: &JustSection) -> Vec<(String, S
 }
 
 /// Generic string list merge with replace flags.
+/// Compiled defaults form an immutable floor — replace only clears user additions.
 fn merge_string_list_raw(
     compiled: &[String],
     global: &[String], global_replace: bool,
     project: &[String], project_replace: bool,
 ) -> Vec<String> {
-    let mut result: Vec<String> = compiled.to_vec();
+    let floor: Vec<String> = compiled.to_vec();
 
-    if global_replace {
-        result.clear();
+    let mut user_additions: Vec<String> = Vec::new();
+    if !global_replace {
+        // nothing extra to keep — global patterns are the first user layer
     }
-    result.extend(global.iter().cloned());
+    user_additions.extend(global.iter().cloned());
 
     if project_replace {
-        result.clear();
+        user_additions.clear();
     }
-    result.extend(project.iter().cloned());
+    user_additions.extend(project.iter().cloned());
 
+    let mut result = floor;
+    result.extend(user_additions);
     result
 }
 

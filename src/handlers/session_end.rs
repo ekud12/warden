@@ -155,8 +155,49 @@ pub fn run(raw: &str) {
     // Generate auto-changelog for the session
     crate::handlers::auto_changelog::generate(&state);
 
+    // ── Auto-scorecard (A.1) ──
+    let sc = crate::scorecard::compute_from_redb();
+    common::storage::write_json("stats", "last_scorecard", &sc);
+    common::add_session_note_ext("scorecard", &format!("score={}", sc.overall_score), None);
+
+    // ── Auto-archive (A.3) ──
+    let summary = serde_json::json!({
+        "ts": common::now_iso(),
+        "turns": state.turn,
+        "edits": edits,
+        "errors": errors,
+        "milestones": milestones,
+        "quality": quality_score,
+        "scorecard": sc.overall_score,
+    });
+    common::storage::write_json("stats", &format!("session_{}", common::now_iso()), &summary);
+
+    // ── Auto-replay (Phase 2) — always run, store report for dream state ──
+    {
+        let events = common::storage::read_last_events(200);
+        if events.len() >= 5 {
+            let replay_report = crate::handlers::replay::replay_through_rules(&events);
+            common::storage::write_json("stats", "last_replay", &replay_report);
+            common::log("session-end", &crate::handlers::replay::format_replay_report(&replay_report));
+        }
+    }
+
+    // Scorecard regression check (Warden repo gets logged warning)
+    if is_warden_repo()
+        && let Some(prev) = common::storage::read_json::<crate::scorecard::Scorecard>("stats", "prev_scorecard") {
+            let delta = sc.overall_score as i32 - prev.overall_score as i32;
+            if delta < -5 {
+                common::log("session-end", &format!("REGRESSION: scorecard dropped {} points ({} → {})",
+                    -delta, prev.overall_score, sc.overall_score));
+            }
+        }
+    common::storage::write_json("stats", "prev_scorecard", &sc);
+
     // Kill all managed processes
     proc_mgmt::kill_all();
+
+    // Close redb storage (flush pending writes)
+    common::storage::close();
 
     // Daemon stays alive across sessions (like Docker Desktop).
     // It only restarts on binary rebuild (mtime mismatch detection).
@@ -244,4 +285,11 @@ fn compute_session_summary(edits: u32, errors: u32, milestones: u32, state: &com
     let detail = format!("quality={} turns={} edits={}", quality_score, turns, edits);
     common::add_session_note_ext("session-summary", &detail, Some(&data));
     quality_score
+}
+
+/// Detect if current project is the Warden repo itself (for auto-replay regression checks)
+fn is_warden_repo() -> bool {
+    std::fs::read_to_string("Cargo.toml")
+        .map(|c| c.contains("name = \"warden\""))
+        .unwrap_or(false)
 }

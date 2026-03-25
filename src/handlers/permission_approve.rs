@@ -13,34 +13,23 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 use crate::common;
+use crate::rules;
 use regex::Regex;
 use std::sync::LazyLock;
 
 struct CompiledRules {
-    /// Paths that are NEVER auto-approved (sensitive files/dirs)
+    /// Compiled sensitive path deny patterns — sourced from config/core/sensitive_paths.rs
+    /// via rules::RULES (single source of truth, not duplicated here)
     deny_paths: Vec<Regex>,
 }
 
-static RULES: LazyLock<CompiledRules> = LazyLock::new(|| CompiledRules {
-    deny_paths: DENY_PATH_PATTERNS
+static COMPILED: LazyLock<CompiledRules> = LazyLock::new(|| CompiledRules {
+    deny_paths: rules::RULES
+        .sensitive_deny_pairs
         .iter()
-        .filter_map(|p| Regex::new(p).ok())
+        .filter_map(|(_id, p, _msg, _shadow)| Regex::new(p).ok())
         .collect(),
 });
-
-/// Path patterns that should NEVER be auto-approved for writes
-const DENY_PATH_PATTERNS: &[&str] = &[
-    r"(?i)(^|[/\\])\.env($|\.)",
-    r"(?i)(^|[/\\])\.git[/\\]",
-    r"(?i)(^|[/\\])node_modules[/\\]",
-    r"(?i)(^|[/\\])(credentials|secrets?|tokens?|keys?)\.(json|yaml|yml|toml|ini|cfg|conf|txt)$",
-    r"(?i)(^|[/\\])\.ssh[/\\]",
-    r"(?i)(^|[/\\])\.aws[/\\]",
-    r"(?i)(^|[/\\])\.npmrc$",
-    r"(?i)(^|[/\\])\.netrc$",
-    r"(?i)(^|[/\\])id_rsa",
-    r"(?i)(^|[/\\])\.kube[/\\]",
-];
 
 /// Tools that are always safe to auto-approve (read-only)
 const ALWAYS_APPROVE_TOOLS: &[&str] = &["Read", "Glob", "Grep", "WebFetch", "WebSearch"];
@@ -78,7 +67,7 @@ pub fn run(raw: &str) {
         }
 
         // Check deny list first
-        for re in &RULES.deny_paths {
+        for re in &COMPILED.deny_paths {
             if re.is_match(file_path) {
                 common::log(
                     "permission-approve",
@@ -128,34 +117,55 @@ pub fn run(raw: &str) {
     common::log("permission-approve", &format!("PASS: {}", tool_name));
 }
 
+/// Read-only command prefixes that are always safe to auto-approve.
+const READONLY_PREFIXES: &[&str] = &[
+    "ls", "eza", "exa", "dir",
+    "head ", "tail ", "wc ", "stat ", "file ",
+    "which ", "type ", "command -v",
+    "readlink ", "basename ", "dirname ", "realpath ",
+    "diff ", "cmp ", "comm ",
+    "env", "printenv",
+    "whoami", "id ", "hostname", "uname",
+    "date", "cal",
+    "rg ", "fd ", "bat ", "fzf ",
+    "dust ", "procs ", "tokei", "tldr ",
+    "jq ", "yq ", "mdq ", "glow ",
+    "git status", "git log", "git diff", "git show", "git branch",
+    "git remote", "git blame", "git shortlog", "git stash list",
+    "cargo --version", "rustc --version", "node --version",
+    "python --version", "go version", "dotnet --version",
+];
+
 /// Check if a bash command is read-only and safe to auto-approve.
 /// Conservative: only matches commands that cannot modify state.
 fn is_readonly_bash(cmd: &str) -> bool {
     let trimmed = cmd.trim();
 
+    // Quick check: if command contains output redirection, never auto-approve
+    if trimmed.contains('>') {
+        return false;
+    }
+
+    // Check against known read-only prefixes
+    for prefix in READONLY_PREFIXES {
+        if trimmed.starts_with(prefix) {
+            return true;
+        }
+    }
+
     // sed -n (print-only mode, no -i flag)
-    if trimmed.starts_with("sed -n") || trimmed.starts_with("sed -n") {
+    if trimmed.starts_with("sed -n") {
         return !trimmed.contains("-i");
     }
 
-    // awk (read-only by default unless redirecting)
+    // awk (read-only by default)
     if trimmed.starts_with("awk ") || trimmed.starts_with("gawk ") {
-        return !trimmed.contains('>');
-    }
-
-    // diff / cmp (comparison tools)
-    if trimmed.starts_with("diff ") || trimmed.starts_with("cmp ") {
         return true;
     }
 
-    // env / printenv (read-only)
-    if trimmed.starts_with("env") || trimmed.starts_with("printenv") {
-        return true;
-    }
-
-    // cat (read-only unless redirecting)
+    // cat (read-only — redirection already checked above)
     if trimmed.starts_with("cat ") {
-        return !trimmed.contains('>');
+        return true;
     }
 
     false

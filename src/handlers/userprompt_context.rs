@@ -1,16 +1,18 @@
 // ─── userprompt_context — per-turn context grounding ────────────────────────
 //
 // UserPromptSubmit handler. Runs before Claude processes each user message.
-// Responsibilities:
-//   1. Increment turn counter in session-state.json
-//   2. Inject lightweight context (recent errors, edited files)
-//   3. Git-aware grounding (branch + working tree summary)
-//   4. Files-in-context reminder (reduces redundant re-reads)
-//   5. Exploration budget advisory (>= 8 explores without editing)
-//   6. Token budget threshold advisory (configurable, default 700K)
-//   7. Late-session compactness mode (configurable turn thresholds)
-//   8. Periodic rule re-injection (every N turns, default 30)
-//   9. Drift detection warning (deny density exceeds threshold)
+//
+// 7 consolidated advisory signals (candidates for injection):
+//   1. Safety  (1.0) — drift detection
+//   2. Loop    (0.9) — loop pattern detection
+//   3. Verify  (0.8) — verification debt, read drift, checkpoint
+//   4. Phase   (0.7) — adaptation phase change
+//   5. Recovery(0.6) — error prevention
+//   6. Focus   (0.5) — focus score, explore hint
+//   7. Pressure(0.4) — context pressure, token/cost budget
+//
+// All other analytics compute + write redb silently (never candidates).
+// Budget: trust > 85 → top 1, > 50 → top 3, > 25 → top 5, else → 15.
 //
 // Performance target: < 5ms (git subprocess only on cache miss ~50ms)
 // ──────────────────────────────────────────────────────────────────────────────
@@ -124,7 +126,7 @@ pub fn run(_raw: &str) {
     };
 
     // Git-aware grounding (cached unless edits happened)
-    let git_line = git_summary::get_or_refresh(&mut state);
+    let _git_line = git_summary::get_or_refresh(&mut state);
 
     // Token budget check (rate-limited)
     let token_advisory = if state.advisory_ready("token_budget") {
@@ -136,10 +138,11 @@ pub fn run(_raw: &str) {
     // Heuristic advisories from turn snapshots
     let heuristic_parts = heuristic_advisories(&mut state);
 
-    // ── Runtime analytics (all fire automatically, opt-out via config) ──
+    // ── Runtime analytics (gated by config.toml telemetry flags) ──
+    let tel = &crate::config::CONFIG.telemetry;
 
     // Anomaly detection: check current turn against project baselines
-    let anomaly_alerts = {
+    let anomaly_alerts = if tel.anomaly_detection {
         let project_dir = common::project_dir();
         let stats = analytics::anomaly::load_stats(&project_dir);
         let last_snap = state.turn_snapshots.last();
@@ -147,33 +150,43 @@ pub fn run(_raw: &str) {
             .map(|s| s.tokens_in_delta + s.tokens_out_delta)
             .unwrap_or(0);
         analytics::anomaly::check_anomalies(&stats, tokens_this_turn, 2.0)
+    } else {
+        Vec::new()
     };
 
     // Token budget forecasting: predict compaction ETA
-    let forecast_msg = analytics::forecast::predict_compaction(
-        &state.turn_snapshots,
-        state.turn,
-        state.estimated_tokens_in + state.estimated_tokens_out,
-        rules::RULES.token_budget_advisory,
-    ).map(|f| analytics::forecast::format_forecast(&f))
-     .filter(|s| !s.is_empty());
+    let forecast_msg = if tel.token_forecast {
+        analytics::forecast::predict_compaction(
+            &state.turn_snapshots,
+            state.turn,
+            state.estimated_tokens_in + state.estimated_tokens_out,
+            rules::RULES.token_budget_advisory,
+        ).map(|f| analytics::forecast::format_forecast(&f))
+         .filter(|s| !s.is_empty())
+    } else {
+        None
+    };
 
     // Quality prediction: fires at turn 10, then every 5 turns
-    let quality_msg = analytics::quality::predict_quality(
-        &state.turn_snapshots,
-        state.turn,
-        state.errors_unresolved,
-        state.estimated_tokens_saved,
-        state.estimated_tokens_in + state.estimated_tokens_out,
-    ).map(|q| {
-        let project_dir = common::project_dir();
-        let stats = analytics::anomaly::load_stats(&project_dir);
-        let avg = if stats.quality_score.n >= 3 { Some(stats.quality_score.mean as u32) } else { None };
-        q.format(avg)
-    }).filter(|s| !s.is_empty());
+    let quality_msg = if tel.quality_predictor {
+        analytics::quality::predict_quality(
+            &state.turn_snapshots,
+            state.turn,
+            state.errors_unresolved,
+            state.estimated_tokens_saved,
+            state.estimated_tokens_in + state.estimated_tokens_out,
+        ).map(|q| {
+            let project_dir = common::project_dir();
+            let stats = analytics::anomaly::load_stats(&project_dir);
+            let avg = if stats.quality_score.n >= 3 { Some(stats.quality_score.mean as u32) } else { None };
+            q.format(avg)
+        }).filter(|s| !s.is_empty())
+    } else {
+        None
+    };
 
     // Error prevention: check current edit patterns against Bayesian priors
-    let error_prevention_msg = {
+    let error_prevention_msg = if tel.error_prevention {
         let project_dir = common::project_dir();
         let priors = analytics::error_prevention::load_priors(&project_dir);
         let edits_since_build = state.turn.saturating_sub(state.last_build_turn);
@@ -182,177 +195,201 @@ pub fn run(_raw: &str) {
             .collect::<std::collections::HashSet<_>>().len() as u32;
         let turns_since_test = state.turn.saturating_sub(state.last_build_turn);
         analytics::error_prevention::check_patterns(&priors, edits_since_build, edited_dirs, turns_since_test, 0.6)
+    } else {
+        None
     };
 
     // Git guardian: uncommitted changes duration check
     let git_uncommitted = crate::handlers::git_guardian::check_uncommitted_duration(&state);
 
+    // ── New intelligence modules ──
+
+    // Verification debt: edits since last build/test
+    let verification_msg = analytics::verification::check_debt(&state);
+    let read_drift_msg = analytics::verification::check_read_drift(&state);
+
+    // Focus score: composite metric
+    let focus_report = analytics::focus::compute_focus(&state);
+
+    // Loop pattern detection: 2-gram, 3-gram, read spirals
+    let loop_msg = analytics::loop_patterns::check_loop_patterns(&state.action_history);
+
+    // Checkpoint enforcement: turns since last milestone/verification
+    state.turns_since_checkpoint += 1;
+    let checkpoint_msg = if state.turns_since_checkpoint >= 8 {
+        Some(format!(
+            "{} turns without a milestone or verification. Run a build/test.",
+            state.turns_since_checkpoint
+        ))
+    } else {
+        None
+    };
+
     // Files-in-context: last 5 files read, sorted by turn (most recent first)
-    let files_in_context = build_files_in_context(&state);
+    let _files_in_context = build_files_in_context(&state);
 
     // Read session-notes.jsonl for recent context
     let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
+    let _session_path = project_dir.join("session-notes.jsonl");
 
-    let mut parts = Vec::with_capacity(10);
-    parts.extend(heuristic_parts);
+    // ── Injection Budget System ──
+    // All analytics still compute and write state. The budget controls what gets
+    // injected into the agent's context. Signals below the budget cutoff are
+    // logged silently to redb — nothing is lost, just quieted.
 
-    // Inject analytics advisories
-    for alert in &anomaly_alerts {
-        parts.push(alert.to_string());
-    }
-    if let Some(msg) = forecast_msg {
-        parts.push(msg);
-    }
-    if let Some(msg) = quality_msg {
-        parts.push(msg);
-    }
-    if let Some(msg) = error_prevention_msg {
-        parts.push(msg);
-    }
-    if let Some(msg) = git_uncommitted {
-        parts.push(msg);
-    }
-    if let Some(msg) = goal_anchor {
-        parts.push(msg);
-    }
-    if let Some(msg) = entropy_advisory {
-        parts.push(msg);
-    }
-    if let Some(msg) = markov_advisory {
-        parts.push(msg);
-    }
-    if let Some(msg) = coherence_advisory {
-        parts.push(msg);
+    let trust = crate::analytics::trust::compute_trust(&state);
+
+    // Budget: how many advisories to inject based on trust level
+    let advisory_budget = if trust > crate::config::TRUST_BUDGET_HIGH { 1 }
+        else if trust > crate::config::TRUST_BUDGET_NORMAL { 3 }
+        else if trust > crate::config::TRUST_BUDGET_DEGRADED { 5 }
+        else { 15 };
+
+    // Collect ALL candidates with utility scores
+    let mut candidates: Vec<(f32, &str, String)> = Vec::new(); // (utility, category, message)
+
+    // ── 7 Consolidated Signals (candidates for injection) ──
+    // All analytics still compute + write state. Only 7 categories compete for budget.
+
+    // 1. Safety (1.0): drift detection
+    let drift_threshold: u32 = state.adaptive.params.drift_threshold;
+    if drift_threshold > 0 && state.denial_rate(10) >= drift_threshold {
+        candidates.push((1.0, "safety", format!(
+            "DRIFT: {} denials in 10 turns. Check: grep→rg, find→fd, cat→bat, curl→xh.",
+            state.denial_rate(10)
+        )));
+        common::log_structured("userprompt-context", common::LogLevel::Info, "drift-warning", &format!("turn {}", turn));
+        state.recent_denial_turns.clear();
     }
 
-    // Adaptation context injection (phase change notification)
+    // 2. Loop (0.9): loop patterns
+    if let Some(msg) = loop_msg {
+        candidates.push((0.9, "loop", msg));
+    }
+
+    // 3. Verification (0.8): verification debt, read drift, checkpoint
+    if let Some(msg) = verification_msg {
+        candidates.push((0.8, "verification", msg));
+    } else if let Some(msg) = read_drift_msg {
+        candidates.push((0.8, "verification", msg));
+    } else if let Some(msg) = checkpoint_msg {
+        candidates.push((0.8, "verification", msg));
+    }
+
+    // 4. Phase (0.7): adaptation
     if let Some(msg) = adaptation_msg {
-        parts.push(msg);
+        candidates.push((0.7, "phase", msg));
     }
 
-    let reinject_interval: u32 = state.adaptive.params.rules_reinject_interval;
-    if reinject_interval > 0 && turn > 0 && turn.is_multiple_of(reinject_interval) {
+    // 5. Recovery (0.6): error prevention
+    if let Some(msg) = error_prevention_msg {
+        candidates.push((0.6, "recovery", msg));
+    }
+
+    // 6. Focus (0.5): focus score + explore hint
+    if let Some(msg) = focus_report.advisory {
+        candidates.push((0.5, "focus", msg));
+    } else if explore_ready {
+        candidates.push((0.5, "focus", format!(
+            "{} exploration ops without editing. Commit to an approach.", explore_count
+        )));
+    }
+
+    // 7. Pressure (0.4): context pressure + token budget + cost
+    {
+        let deny_turn = rules::RULES.progressive_read_deny_turn;
+        let advisory_turn = rules::RULES.progressive_read_advisory_turn;
+        if turn >= deny_turn && state.advisory_ready("context_pressure") {
+            candidates.push((0.4, "pressure", "Context pressure: HIGH. Use targeted reads with offset+limit.".to_string()));
+        } else if let Some(advisory) = token_advisory {
+            candidates.push((0.4, "pressure", advisory));
+        } else if turn >= advisory_turn && state.advisory_ready("context_pressure") {
+            candidates.push((0.4, "pressure", "Context pressure: moderate. Prefer targeted reads.".to_string()));
+        } else {
+            let total_tokens = state.estimated_tokens_in + state.estimated_tokens_out;
+            let estimated_cost = total_tokens as f64 / 1_000_000.0 * 9.0;
+            if estimated_cost > 5.0 && state.advisory_ready("cost_budget") {
+                candidates.push((0.4, "pressure", format!("Cost: ${:.2}/$5.00. Focus on high-impact changes.", estimated_cost)));
+            }
+        }
+    }
+
+    // ── Silent signals (logged to redb, never candidates) ──
+    for (cat, msg) in [
+        ("anomaly", anomaly_alerts.first().map(|s| s.to_string())),
+        ("forecast", forecast_msg),
+        ("quality", quality_msg),
+        ("entropy", entropy_advisory),
+        ("markov", markov_advisory),
+        ("coherence", coherence_advisory),
+        ("goal", goal_anchor),
+        ("git", git_uncommitted),
+    ] {
+        if let Some(m) = msg {
+            common::log_structured("userprompt-context", common::LogLevel::Info, cat,
+                &format!("silent {}", common::truncate(&m, 80)));
+        }
+    }
+    for msg in &heuristic_parts {
+        common::log_structured("userprompt-context", common::LogLevel::Info, "session_health",
+            &format!("silent {}", common::truncate(msg, 80)));
+    }
+
+    // E.1: Intent-based dedup — keep only highest-utility candidate per category
+    {
+        let mut seen_categories: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        candidates.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.retain(|(_, cat, _)| seen_categories.insert(cat));
+    }
+
+    // Phase 5.1: String similarity dedup — collapse candidates saying the same thing
+    {
+        let mut i = 0;
+        while i < candidates.len() {
+            let mut j = i + 1;
+            while j < candidates.len() {
+                if jaccard_similarity(&candidates[i].2, &candidates[j].2) > 0.6 {
+                    if candidates[i].0 >= candidates[j].0 { candidates.remove(j); }
+                    else { candidates.remove(i); continue; }
+                } else { j += 1; }
+            }
+            i += 1;
+        }
+    }
+
+    // Phase 5.2: Dream-informed utility adjustment
+    {
+        let dream_scores = crate::dream::get_intervention_scores();
+        for (utility, cat, _) in &mut candidates {
+            let effectiveness = dream_scores.scores.get(*cat).copied().unwrap_or(0.5);
+            *utility *= effectiveness as f32;
+        }
+    }
+
+    // Sort by utility descending, apply budget
+    candidates.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Log ALL candidates silently to redb (nothing is lost)
+    for (utility, category, msg) in &candidates {
+        common::log_structured("userprompt-context", common::LogLevel::Info, category,
+            &format!("u={:.1} trust={} {}", utility, trust, common::truncate(msg, 80)));
+    }
+
+    // Take top N by budget
+    let selected: Vec<String> = candidates.into_iter()
+        .take(advisory_budget)
+        .map(|(_, _, msg)| msg)
+        .collect();
+
+    // Event-based rule reinjection (replaces periodic)
+    let mut parts = selected;
+    if should_reinject_rules(&state) {
         let rules_path = common::assistant_rules_dir().join("tool-enforcement.md");
         if let Ok(content) = std::fs::read_to_string(&rules_path) {
             let condensed = common::truncate(&content, 800);
             parts.push(format!("## Rules Reminder (turn {})\n{}", turn, condensed));
             common::log_structured("userprompt-context", common::LogLevel::Info, "rules-reinject", &format!("turn {}", turn));
         }
-    }
-
-    let drift_threshold: u32 = state.adaptive.params.drift_threshold;
-    if drift_threshold > 0 && state.denial_rate(10) >= drift_threshold {
-        parts.push(format!(
-            "DRIFT DETECTED: {} tool denials in last 10 turns. Re-read your rules. \
-            Check substitutions: grep->rg, find->fd, cat->bat, curl->xh. \
-            Use just <recipe> when Justfile exists. Run `{} explain <rule-id>` for details.",
-            state.denial_rate(10), crate::constants::NAME
-        ));
-        common::log_structured("userprompt-context", common::LogLevel::Info, "drift-warning", &format!("turn {}", turn));
-        state.recent_denial_turns.clear();
-    }
-
-    // Git summary first (most useful grounding)
-    if let Some(ref git) = git_line {
-        parts.push(git.clone());
-    }
-
-    if session_path.exists() {
-        let tail = common::read_tail(&session_path, 1024);
-        if !tail.is_empty() {
-            let mut recent_errors: Vec<String> = Vec::new();
-            let mut edited_files: Vec<String> = Vec::new();
-
-            for line in tail.lines().rev() {
-                let entry = match serde_json::from_str::<serde_json::Value>(line) {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
-
-                let note_type = entry
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-
-                let detail = entry
-                    .get("detail")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-
-                match note_type {
-                    "error" if recent_errors.len() < 3 => {
-                        let error_type = detail.split_whitespace().next().unwrap_or(detail);
-                        if !recent_errors.iter().any(|e| e.starts_with(error_type)) {
-                            recent_errors.push(detail.to_string());
-                        }
-                    }
-                    "edit" if edited_files.len() < 5 => {
-                        if !edited_files.contains(&detail.to_string()) {
-                            edited_files.push(detail.to_string());
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            if !recent_errors.is_empty() {
-                parts.push(format!("Recent errors: {}", recent_errors.join(" | ")));
-            }
-            if !edited_files.is_empty() {
-                parts.push(format!("Edited: {}", edited_files.join(", ")));
-            }
-        }
-    }
-
-    // Files-in-context reminder
-    if !files_in_context.is_empty() {
-        parts.push(format!("In context: {}", files_in_context));
-    }
-
-    // Exploration budget advisory (rate-limited)
-    if explore_ready {
-        parts.push(format!(
-            "Note: {} exploration operations without editing. Consider committing to an approach.",
-            explore_count
-        ));
-    }
-
-    // Token budget advisory (rate-limited)
-    if let Some(advisory) = token_advisory {
-        parts.push(advisory);
-    }
-
-    // Cost budget check: warn when estimated cost exceeds threshold
-    {
-        let total_tokens = state.estimated_tokens_in + state.estimated_tokens_out;
-        // Default: $3/1M input, $15/1M output → rough blended rate ~$9/1M
-        let estimated_cost = total_tokens as f64 / 1_000_000.0 * 9.0;
-        // TODO: make configurable via config.toml budget.max_session_cost
-        let budget_limit = 5.0f64; // $5 default
-        if estimated_cost > budget_limit && state.advisory_ready("cost_budget") {
-            parts.push(format!(
-                "Session cost estimate: ${:.2} (budget: ${:.2}). Consider wrapping up or focusing on high-impact changes.",
-                estimated_cost, budget_limit
-            ));
-        }
-    }
-
-    // Parallelism hint: nudge when multiple independent items exist
-    if state.errors_unresolved > 1 && state.advisory_ready("parallel") {
-        parts.push(format!(
-            "{} unresolved errors — consider parallel fix agents.",
-            state.errors_unresolved
-        ));
-    }
-
-    // Late-session compactness mode (rate-limited, scaled to 1M context)
-    let deny_turn = rules::RULES.progressive_read_deny_turn;
-    let advisory_turn = rules::RULES.progressive_read_advisory_turn;
-    if turn >= deny_turn && state.advisory_ready("context_pressure") {
-        parts.push("Context pressure: HIGH. Minimize reads — use targeted reads with offset+limit.".to_string());
-    } else if turn >= advisory_turn && state.advisory_ready("context_pressure") {
-        parts.push("Context pressure: moderate. Prefer targeted reads (offset+limit).".to_string());
     }
 
     if parts.is_empty() {
@@ -365,7 +402,7 @@ pub fn run(_raw: &str) {
     let context_hash = common::string_hash(&combined);
     if context_hash == state.last_context_hash {
         common::write_session_state(&state);
-        return; // Nothing new — skip injection entirely
+        return;
     }
     state.last_context_hash = context_hash;
     common::write_session_state(&state);
@@ -423,6 +460,32 @@ fn detect_context_switch(state: &common::SessionState) -> bool {
     let ratio = new_dirs as f64 / state.rolling_working_set.len() as f64;
     let stale = state.turn.saturating_sub(state.last_initial_set_touch_turn) >= 8;
     ratio > 0.6 && stale
+}
+
+/// Jaccard similarity between two strings (word-level)
+fn jaccard_similarity(a: &str, b: &str) -> f64 {
+    let a_words: std::collections::HashSet<&str> = a.split_whitespace().collect();
+    let b_words: std::collections::HashSet<&str> = b.split_whitespace().collect();
+    let intersection = a_words.intersection(&b_words).count();
+    let union = a_words.union(&b_words).count();
+    if union == 0 { 0.0 } else { intersection as f64 / union as f64 }
+}
+
+/// Event-based rule reinjection: only reinject when there's evidence the agent
+/// is ignoring rules, not on a periodic timer. Reduces context waste.
+fn should_reinject_rules(state: &common::SessionState) -> bool {
+    // 3+ denials in last 5 turns = agent is fighting rules
+    let recent_denials = state.recent_denial_turns.iter()
+        .filter(|&&t| t + 5 >= state.turn)
+        .count();
+    if recent_denials >= 3 { return true; }
+
+    // Just after compaction = rules may have been lost from context
+    if state.last_compaction_turn > 0 && state.turn == state.last_compaction_turn + 1 {
+        return true;
+    }
+
+    false
 }
 
 /// Shorten path to last 2 components

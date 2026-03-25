@@ -181,13 +181,13 @@ patterns = [
 48 restrictions across 8 categories. Each has a unique ID, severity, and disable flag.
 
 ```bash
-warden restrictions list                          # Show all restrictions
-warden restrictions list --category safety        # Filter by category
-warden restrictions list --category substitution
-warden restrictions list --disabled               # Show only disabled
+warden debug-restrictions list                          # Show all restrictions
+warden debug-restrictions list --category safety        # Filter by category
+warden debug-restrictions list --category substitution
+warden debug-restrictions list --disabled               # Show only disabled
 
-warden restrictions disable substitution.grep     # Disable at runtime
-warden restrictions enable substitution.grep      # Re-enable
+warden debug-restrictions disable substitution.grep     # Disable at runtime
+warden debug-restrictions enable substitution.grep      # Re-enable
 ```
 
 **Disable in config** (persists across sessions):

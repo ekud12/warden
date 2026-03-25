@@ -21,15 +21,27 @@ mod common;
 mod config;
 mod constants;
 mod daemon;
+mod dream;
 mod handlers;
+mod scorecard;
 mod install;
 mod ipc;
-mod pipeline;
 mod rules;
 
 use std::process;
 
 fn main() {
+    // Capture backtraces on panic for post-mortem debugging
+    std::panic::set_hook(Box::new(|info| {
+        let bt = std::backtrace::Backtrace::force_capture();
+        let msg = format!("PANIC: {}\n{}", info, bt);
+        eprintln!("{}", msg);
+        // Write to panic.log in project log dir if available
+        let project_dir = common::project_dir();
+        let log_path = project_dir.join("panic.log");
+        let _ = std::fs::write(log_path, &msg);
+    }));
+
     let args: Vec<String> = std::env::args().collect();
     let subcmd = args.get(1).map(|s| s.as_str()).unwrap_or("");
 
@@ -39,6 +51,7 @@ fn main() {
             println!("{} {}", constants::NAME, env!("CARGO_PKG_VERSION"));
         }
         "init" => install::wizard::run(),
+        "uninstall" => install::uninstall::run(),
         "install" => {
             let target = args.get(2).map(|s| s.as_str()).unwrap_or("");
             match target {
@@ -50,6 +63,11 @@ fn main() {
                         && let Ok(msg) = install::path::add_to_path() {
                             eprintln!("{}", msg);
                         }
+                    // Pre-start daemon so first session connects instantly
+                    if !ipc::daemon_is_running() {
+                        ipc::spawn_daemon();
+                        eprintln!("Daemon started");
+                    }
                 }
                 "gemini-cli" => {
                     let _ = install::ensure_dirs();
@@ -59,6 +77,10 @@ fn main() {
                         && let Ok(msg) = install::path::add_to_path() {
                             eprintln!("{}", msg);
                         }
+                    if !ipc::daemon_is_running() {
+                        ipc::spawn_daemon();
+                        eprintln!("Daemon started");
+                    }
                 }
                 _ => eprintln!("Usage: {} install <claude-code|gemini-cli>", constants::NAME),
             }
@@ -100,16 +122,15 @@ fn main() {
 
         // ── No-stdin subcommands ──
         "describe" => handlers::describe::run(),
-        "explain" => {
+        "debug-explain" => {
             let target = args.get(2).map(|s| s.as_str()).unwrap_or("");
             if target.is_empty() {
-                eprintln!("Usage: {} explain <rule-id>", constants::NAME);
-                eprintln!("       {} explain-session", constants::NAME);
+                eprintln!("Usage: {} debug-explain <rule-id>", constants::NAME);
             } else {
                 handlers::explain::explain_rule(target);
             }
         }
-        "explain-session" => handlers::explain::explain_session(),
+        "debug-explain-session" => handlers::explain::explain_session(),
         "project-dir" => println!("{}", common::project_dir().display()),
         "rules" => {
             let r = &*rules::RULES;
@@ -121,7 +142,7 @@ fn main() {
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
         }
-        "restrictions" => {
+        "debug-restrictions" => {
             let action = args.get(2).map(|s| s.as_str()).unwrap_or("");
             match action {
                 "enable" => {
@@ -162,13 +183,14 @@ fn main() {
                 _ => config::restrictions::run(&args[2..]),
             }
         }
-        "export-sessions" => handlers::export_sessions::run(&args[2..]),
-        "stats" => print!("{}", handlers::learning::format_stats()),
-        "replay" => handlers::replay::run(&args[2..]),
-        "diff" if args.len() >= 4 => {
+        "debug-export" => handlers::export_sessions::run(&args[2..]),
+        "debug-stats" => print!("{}", handlers::learning::format_stats()),
+        "debug-scorecard" => scorecard::run(),
+        "debug-replay" => handlers::replay::run(&args[2..]),
+        "debug-diff" if args.len() >= 4 => {
             handlers::replay::run(&["diff".to_string(), args[2].clone(), args[3].clone()]);
         }
-        "tui" => {
+        "debug-tui" => {
             if let Err(e) = handlers::tui::run() {
                 eprintln!("TUI error: {}", e);
                 process::exit(1);
@@ -184,7 +206,7 @@ fn main() {
                 .unwrap_or_else(ipc::get_binary_mtime);
             daemon::run_server(mtime);
         }
-        "daemon-stop" => {
+        "debug-daemon-stop" => {
             if let Some(resp) = ipc::try_daemon("shutdown", "") {
                 if resp.exit_code == 0 {
                     eprintln!("Daemon stopped");
@@ -193,7 +215,7 @@ fn main() {
                 eprintln!("Daemon not running");
             }
         }
-        "daemon-status" => {
+        "debug-daemon-status" => {
             if let Some(resp) = ipc::try_daemon("daemon-status", "") {
                 println!("{}", resp.stdout);
             } else {
@@ -252,24 +274,90 @@ fn main() {
 
 fn read_stdin() -> String {
     use std::io::Read;
-    let mut buf = String::new();
-    let _ = std::io::stdin().take(1_048_576).read_to_string(&mut buf);
-    buf
+    // Use read() not read_to_string() — read() returns on first data without
+    // waiting for EOF. read_to_string() blocks until the write end closes,
+    // which deadlocks when called through the relay (Claude Code may not
+    // close stdin before reading stdout).
+    let mut buf = vec![0u8; 1_048_576];
+    let n = std::io::stdin().read(&mut buf).unwrap_or(0);
+    String::from_utf8_lossy(&buf[..n]).to_string()
 }
 
 fn install_assistant<A: assistant::Assistant + Default>() {
     let adapter = A::default();
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-    let binary_path = std::path::PathBuf::from(&home)
-        .join(constants::DIR)
-        .join(if cfg!(windows) { "warden.exe" } else { "warden" });
+    // On Windows, use relay (windowless) for hook commands to prevent CMD flicker.
+    // On Unix, use warden directly (no console flash issue).
+    let binary_name = if cfg!(windows) { "warden-relay.exe" } else { "warden" };
+    let binary_path = install::bin_dir().join(binary_name);
+    install_relay();
 
-    let config = adapter.generate_hooks_config(&binary_path);
-    eprintln!("Generated hooks config for {}:", adapter.name());
-    println!("{}", config);
-    eprintln!("\nAdd this to: {}", adapter.settings_path().display());
+    let hooks_json = adapter.generate_hooks_config(&binary_path);
+    let settings_path = adapter.settings_path();
+
+    // Parse the generated hooks config
+    let hooks_value: serde_json::Value = match serde_json::from_str(&hooks_json) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Failed to parse generated hooks: {}", e);
+            return;
+        }
+    };
+
+    // Read existing settings or start fresh
+    let mut settings: serde_json::Value = if settings_path.exists() {
+        match std::fs::read_to_string(&settings_path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or(serde_json::json!({})),
+            Err(_) => serde_json::json!({}),
+        }
+    } else {
+        // Ensure parent dir exists
+        if let Some(parent) = settings_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        serde_json::json!({})
+    };
+
+    // Backup existing settings if they have hooks (another system was installed)
+    if settings.get("hooks").is_some() {
+        let backup_path = settings_path.with_extension("json.bak");
+        let _ = std::fs::copy(&settings_path, &backup_path);
+        eprintln!("Backed up existing settings to {}", backup_path.display());
+    }
+
+    // Merge: replace hooks section, keep everything else (permissions, etc.)
+    if let Some(hooks) = hooks_value.get("hooks") {
+        settings["hooks"] = hooks.clone();
+    }
+
+    // Write back
+    match serde_json::to_string_pretty(&settings) {
+        Ok(output) => {
+            if std::fs::write(&settings_path, &output).is_ok() {
+                eprintln!("Installed {} hooks into {}", adapter.name(), settings_path.display());
+            } else {
+                eprintln!("Failed to write {}", settings_path.display());
+                eprintln!("Generated config (paste manually):");
+                println!("{}", hooks_json);
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to serialize settings: {}", e);
+        }
+    }
+}
+
+/// Install the relay binary next to warden.exe
+fn install_relay() {
+    let source = std::env::current_exe().unwrap_or_default();
+    let source_dir = source.parent().unwrap_or(std::path::Path::new("."));
+    let relay_name = if cfg!(windows) { "warden-relay.exe" } else { "warden-relay" };
+    let relay_src = source_dir.join(relay_name);
+
+    let dest = install::bin_dir().join(relay_name);
+
+    if relay_src.exists() && relay_src != dest {
+        let _ = std::fs::copy(&relay_src, &dest);
+    }
 }
 
 const HOOK_SUBCMDS: &[&str] = &[
@@ -504,6 +592,7 @@ fn print_help() {
     eprintln!("COMMANDS:");
     eprintln!("  init                    First-run setup wizard");
     eprintln!("  install <assistant>     Configure hooks for claude-code or gemini-cli");
+    eprintln!("  uninstall               Remove hooks, binary, and config");
     eprintln!("  mcp                     Run as MCP server (stdio, JSON-RPC)");
     eprintln!("  version                 Print version");
     eprintln!();
@@ -516,3 +605,4 @@ fn print_help() {
     eprintln!("  userprompt-context      Per-turn telemetry + adaptation + advisories");
     eprintln!("  ...and more (see docs)");
 }
+

@@ -2,13 +2,13 @@
 name = "warden"
 version = "1.0.0"
 edition = "2024"
-description = "Harness engineering for AI coding agents — runtime safety, intelligence, and governance for Claude Code, Gemini CLI, and more"
+description = "Runtime control layer for AI coding agents: policy enforcement, drift reduction, and context efficiency"
 license = "MIT"
 repository = "https://github.com/ekud12/warden"
 homepage = "https://github.com/ekud12/warden"
 documentation = "https://github.com/ekud12/warden/tree/main/docs"
 readme = "README.md"
-keywords = ["ai-safety", "claude-code", "coding-agent", "hooks", "guardrails"]
+keywords = ["runtime-control", "ai-agent", "coding-agent", "policy-enforcement", "session-intelligence"]
 authors = ["Liel Kaysari <ekud12>"]
 categories = ["command-line-utilities", "development-tools"]
 
@@ -19,6 +19,10 @@ regex = "1"
 toml = "0.8"
 ratatui = "0.29"
 crossterm = "0.28"
+redb = "3"
+dashmap = "6"
+compact_str = { version = "0.9", features = ["serde"] }
+smallvec = { version = "1", features = ["serde"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
@@ -30,6 +34,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_Security",
 ] }
 
+[build-dependencies]
+winresource = "0.1"
+
 [profile.release]
 opt-level = "z"
 lto = true
@@ -40,4 +47,8 @@ codegen-units = 1
 [[bin]]
 name = "warden"
 path = "src/main.rs"
+
+[[bin]]
+name = "warden-relay"
+path = "src/bin/relay.rs"
 

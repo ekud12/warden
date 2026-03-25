@@ -121,6 +121,8 @@ fn detect_errors(
     re: &SessionRegexes,
 ) {
     state.errors_unresolved += 1;
+    // Track what's blocking progress
+    state.goal_stack.blocked_on = format!("Error in: {}", common::truncate(cmd, 40));
 
     // TypeScript errors
     let matches: Vec<&str> = re.ts_error.find_iter(output).map(|m| m.as_str()).collect();
@@ -226,6 +228,14 @@ fn detect_errors(
     }
 }
 
+/// Reset intelligence fields on milestone (verification debt, checkpoint, blocked_on)
+fn on_milestone(state: &mut common::SessionState) {
+    state.edits_since_verification = 0;
+    state.turns_since_checkpoint = 0;
+    state.subsystem_switches = 0;
+    state.goal_stack.blocked_on.clear();
+}
+
 fn detect_milestones(
     cmd: &str,
     output: &str,
@@ -241,6 +251,7 @@ fn detect_milestones(
         state.last_milestone = detail;
         state.last_build_turn = state.turn;
         state.last_build_output_tokens = (output.len() as u64) / 4;
+        on_milestone(state);
         return;
     }
 
@@ -253,6 +264,7 @@ fn detect_milestones(
         state.last_milestone = detail;
         state.last_build_turn = state.turn;
         state.last_build_output_tokens = (output.len() as u64) / 4;
+        on_milestone(state);
         return;
     }
 
@@ -262,6 +274,7 @@ fn detect_milestones(
         common::log("posttool-session", "MILESTONE TypeScript clean");
         state.errors_unresolved = 0;
         state.last_milestone = "TypeScript clean".to_string();
+        on_milestone(state);
         return;
     }
 
@@ -271,6 +284,7 @@ fn detect_milestones(
         common::log("posttool-session", "MILESTONE knip clean");
         state.errors_unresolved = 0;
         state.last_milestone = "knip clean".to_string();
+        on_milestone(state);
         return;
     }
 
@@ -280,6 +294,7 @@ fn detect_milestones(
         common::log("posttool-session", "MILESTONE No circular deps");
         state.errors_unresolved = 0;
         state.last_milestone = "No circular deps".to_string();
+        on_milestone(state);
         return;
     }
 

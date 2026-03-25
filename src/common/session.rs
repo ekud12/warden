@@ -1,23 +1,28 @@
 // ─── common::session — session state persistence ─────────────────────────────
 
 use super::io::{cwd_hash8, get_project_cwd, project_dir};
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::BTreeMap;
+
+// Type alias: BTreeMap for deterministic serialization order
+type HashMap<K, V> = BTreeMap<K, V>;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{LazyLock, Mutex};
+use std::sync::LazyLock;
 
 /// Whether we're running in daemon mode (in-memory cache active)
 static DAEMON_MODE: AtomicBool = AtomicBool::new(false);
 
-/// In-memory session state cache (daemon mode only), keyed by hash8 of CWD
-static SESSION_CACHE: LazyLock<Mutex<HashMap<String, SessionState>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// In-memory session state cache (daemon mode only), keyed by hash8 of CWD.
+/// DashMap provides lock-free concurrent access — no Mutex contention.
+static SESSION_CACHE: LazyLock<DashMap<String, SessionState>> =
+    LazyLock::new(DashMap::new);
 
 /// Which cache keys have unsaved changes needing disk flush
-static CACHE_DIRTY_KEYS: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
+static CACHE_DIRTY_KEYS: LazyLock<DashMap<String, ()>> =
+    LazyLock::new(DashMap::new);
 
 /// Per-file read tracking entry
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -28,6 +33,15 @@ pub struct FileReadEntry {
     /// File modification time (seconds since epoch) for stale-read detection
     #[serde(default)]
     pub mtime: u64,
+}
+
+/// Structured goal stack: primary goal + current subgoal + blocked-on status
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct GoalStack {
+    pub primary: String,
+    pub subgoal: String,
+    pub blocked_on: String,
 }
 
 /// Per-command output tracking entry
@@ -100,7 +114,7 @@ pub struct SessionState {
     #[serde(default)]
     pub last_build_output_tokens: u64,
     #[serde(default)]
-    pub injection_warn_counts: std::collections::HashMap<String, u32>,
+    pub injection_warn_counts: BTreeMap<String, u32>,
     /// Turn at which last compaction occurred (0 = never compacted)
     #[serde(default)]
     pub last_compaction_turn: u32,
@@ -155,6 +169,50 @@ pub struct SessionState {
     /// Rule IDs that fired (denied) during this session — for effectiveness tracking
     #[serde(default)]
     pub rules_fired: Vec<String>,
+
+    // ─── Intelligence: Verification Debt ──
+    /// Edits since last successful build/test verification
+    #[serde(default)]
+    pub edits_since_verification: u32,
+    /// Reads since last edit (exploration without commitment)
+    #[serde(default)]
+    pub reads_since_edit: u32,
+
+    // ─── Intelligence: Focus Score ──
+    /// All directories touched this session (bounded to 30)
+    #[serde(default)]
+    pub directories_touched: Vec<String>,
+    /// Subsystem switches without milestone
+    #[serde(default)]
+    pub subsystem_switches: u32,
+
+    // ─── Intelligence: Negative Memory ──
+    /// Dead ends: "file_or_cmd:reason" (bounded to 20)
+    #[serde(default)]
+    pub dead_ends: Vec<String>,
+    /// Failed command prefixes: hash → failure count
+    #[serde(default)]
+    pub failed_commands: HashMap<String, u32>,
+
+    // ─── Intelligence: Goal Stack ──
+    /// Structured goal (replaces flat session_goal for new sessions)
+    #[serde(default)]
+    pub goal_stack: GoalStack,
+
+    // ─── Intelligence: Checkpoint ──
+    /// Turns since last milestone or verification
+    #[serde(default)]
+    pub turns_since_checkpoint: u32,
+
+    // ─── Intelligence: Compression Risk ──
+    /// Times a command was re-run after truncation
+    #[serde(default)]
+    pub retries_after_truncation: u32,
+
+    // ─── Project metadata ──
+    /// Auto-detected project type (rust/node/python/go/java/unknown)
+    #[serde(default)]
+    pub project_type: String,
 }
 
 /// Bounds for session state collections
@@ -279,7 +337,7 @@ impl SessionState {
         self.action_history.truncate(10);
         self.rolling_working_set.truncate(5);
         if self.action_transitions.len() > 25 {
-            let mut entries: Vec<_> = self.action_transitions.drain().collect();
+            let mut entries: Vec<_> = std::mem::take(&mut self.action_transitions).into_iter().collect();
             entries.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
             self.action_transitions = entries.into_iter().take(25).collect();
         }
@@ -317,22 +375,25 @@ pub fn enable_daemon_mode() {
 pub fn read_session_state() -> SessionState {
     if DAEMON_MODE.load(Ordering::Relaxed) {
         let key = cache_key();
-        let cache = SESSION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(state) = cache.get(&key) {
-            return state.clone();
+        if let Some(entry) = SESSION_CACHE.get(&key) {
+            return entry.value().clone();
         }
         // First access — load from disk into cache
-        drop(cache);
         let state = read_session_state_from_disk();
-        let mut cache = SESSION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        cache.insert(key, state.clone());
+        SESSION_CACHE.insert(key, state.clone());
         return state;
     }
     read_session_state_from_disk()
 }
 
-/// Read session state from disk — returns defaults on any error (fail open)
+/// Read session state from storage — tries redb first, falls back to JSON, then defaults (fail open)
 fn read_session_state_from_disk() -> SessionState {
+    // Try redb first (primary storage)
+    if super::storage::is_available()
+        && let Some(state) = super::storage::read_json::<SessionState>("session_state", "current") {
+            return state;
+        }
+    // Fall back to JSON file (pre-migration or redb unavailable)
     let path = session_state_path();
     match fs::read_to_string(&path) {
         Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
@@ -346,10 +407,8 @@ pub fn write_session_state(state: &SessionState) {
     if crate::common::is_ci() { return; }
     if DAEMON_MODE.load(Ordering::Relaxed) {
         let key = cache_key();
-        let mut cache = SESSION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        cache.insert(key.clone(), state.clone());
-        let mut dirty = CACHE_DIRTY_KEYS.lock().unwrap_or_else(|e| e.into_inner());
-        dirty.insert(key);
+        SESSION_CACHE.insert(key.clone(), state.clone());
+        CACHE_DIRTY_KEYS.insert(key, ());
         return; // Disk write deferred to flush_session_cache()
     }
     write_session_state_to_disk(state);
@@ -357,17 +416,17 @@ pub fn write_session_state(state: &SessionState) {
 
 /// Flush cached session state to disk (called after each daemon request)
 pub fn flush_session_cache() {
-    let dirty_keys: HashSet<String> = {
-        let mut dirty = CACHE_DIRTY_KEYS.lock().unwrap_or_else(|e| e.into_inner());
-        std::mem::take(&mut *dirty)
-    };
+    let dirty_keys: Vec<String> = CACHE_DIRTY_KEYS.iter()
+        .map(|entry| entry.key().clone())
+        .collect();
+    CACHE_DIRTY_KEYS.clear();
+
     if dirty_keys.is_empty() {
         return;
     }
-    let cache = SESSION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
     for key in &dirty_keys {
-        if let Some(state) = cache.get(key) {
-            write_session_state_to_disk(state);
+        if let Some(entry) = SESSION_CACHE.get(key) {
+            write_session_state_to_disk(entry.value());
         }
     }
 }
@@ -375,33 +434,39 @@ pub fn flush_session_cache() {
 /// Invalidate the session cache (called on session-start reset)
 #[allow(dead_code)]
 pub fn invalidate_session_cache() {
-    let mut cache = SESSION_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    cache.clear();
-    let mut dirty = CACHE_DIRTY_KEYS.lock().unwrap_or_else(|e| e.into_inner());
-    dirty.clear();
+    SESSION_CACHE.clear();
+    CACHE_DIRTY_KEYS.clear();
 }
 
-/// Write session state atomically (tmp + rename) — silent on failure.
+/// Write session state to storage — redb primary, JSON fallback.
 /// Triggers aggressive pruning if serialized state exceeds 50KB.
 fn write_session_state_to_disk(state: &SessionState) {
+    // Size monitoring: prune if too large
+    let state = {
+        let json_size = serde_json::to_string(state).map(|j| j.len()).unwrap_or(0);
+        if json_size > 50_000 {
+            crate::common::log("session", &format!("State size {}KB > 50KB, pruning", json_size / 1024));
+            let mut pruned = state.clone();
+            pruned.aggressive_prune();
+            pruned
+        } else {
+            state.clone()
+        }
+    };
+
+    // Try redb first (primary storage)
+    if super::storage::is_available()
+        && super::storage::write_json("session_state", "current", &state).is_some() {
+            return;
+        }
+
+    // Fall back to JSON file
     let path = session_state_path();
     let tmp_path = path.with_extension("json.tmp");
-
-    let json = match serde_json::to_string_pretty(state) {
+    let json = match serde_json::to_string_pretty(&state) {
         Ok(j) => j,
         Err(_) => return,
     };
-
-    // Size monitoring: prune and re-serialize if too large
-    let json = if json.len() > 50_000 {
-        crate::common::log("session", &format!("State size {}KB > 50KB, pruning", json.len() / 1024));
-        let mut pruned = state.clone();
-        pruned.aggressive_prune();
-        serde_json::to_string_pretty(&pruned).unwrap_or(json)
-    } else {
-        json
-    };
-
     if fs::write(&tmp_path, &json).is_ok()
         && fs::rename(&tmp_path, &path).is_err()
     {

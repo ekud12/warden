@@ -36,8 +36,47 @@ pub const COST_BUDGET_DEFAULT: f64 = 5.0;
 /// Default blended token rate ($/1M tokens — roughly Opus input+output average)
 pub const TOKEN_RATE_PER_MILLION: f64 = 9.0;
 
-/// Progressive read advisory turn threshold
-pub const PROGRESSIVE_READ_ADVISORY_TURN: u32 = 25;
+/// Progressive read advisory turn threshold (matches runtime default in rules/mod.rs)
+pub const PROGRESSIVE_READ_ADVISORY_TURN: u32 = 50;
 
-/// Progressive read deny turn threshold
-pub const PROGRESSIVE_READ_DENY_TURN: u32 = 40;
+/// Progressive read deny turn threshold (matches runtime default in rules/mod.rs)
+pub const PROGRESSIVE_READ_DENY_TURN: u32 = 80;
+
+// ─── Injection budget thresholds ──────────────────────────────────────────────
+
+/// Trust score above which session is "very healthy" — inject top 1 advisory only
+pub const TRUST_BUDGET_HIGH: u32 = 85;
+/// Trust score above which session is "normal" — inject top 3
+pub const TRUST_BUDGET_NORMAL: u32 = 50;
+/// Trust score above which session is "degraded" — inject top 5
+pub const TRUST_BUDGET_DEGRADED: u32 = 25;
+// Below TRUST_BUDGET_DEGRADED: uncapped (struggling)
+
+// ─── Trust score weights ──────────────────────────────────────────────────────
+
+pub const TRUST_WEIGHT_ERRORS: i32 = 5;
+pub const TRUST_WEIGHT_VERIFICATION_DEBT: i32 = 3;
+pub const TRUST_WEIGHT_SUBSYSTEM_SWITCHES: i32 = 2;
+pub const TRUST_WEIGHT_DEAD_ENDS: i32 = 4;
+pub const TRUST_WEIGHT_CHECKPOINT_GAP: i32 = 1;
+pub const TRUST_WEIGHT_RECENT_DENIALS: i32 = 3;
+pub const TRUST_MILESTONE_BONUS: i32 = 10;
+pub const TRUST_BALANCE_BONUS: i32 = 5;
+
+// ─── Dream state ──────────────────────────────────────────────────────────────
+
+/// Effectiveness learning rate: how much to adjust per advisory→milestone observation
+pub const DREAM_LEARNING_RATE: f64 = 0.1;
+
+// ─── Scorecard weights ────────────────────────────────────────────────────────
+
+pub const SCORECARD_BASELINE: i32 = 50;
+pub const SCORECARD_SAFETY_BONUS: i32 = 20;
+pub const SCORECARD_FP_PENALTY: i32 = 10;
+pub const SCORECARD_EFFICIENCY_HIGH: i32 = 15;
+pub const SCORECARD_EFFICIENCY_MED: i32 = 10;
+pub const SCORECARD_MILESTONE_PER: i32 = 3;
+pub const SCORECARD_LOOP_PENALTY: i32 = 5;
+pub const SCORECARD_SILENCE_BONUS_HIGH: i32 = 10;
+pub const SCORECARD_SILENCE_BONUS_MED: i32 = 5;
+pub const SCORECARD_REPEAT_PENALTY: i32 = 5;

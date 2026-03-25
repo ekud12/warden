@@ -1,35 +1,21 @@
 # Warden Architecture
 
-Single-binary runtime intelligence layer for AI coding assistants. Intercepts hook events (tool calls, session lifecycle, user prompts) and processes them through a composable middleware pipeline.
+Single-binary runtime intelligence layer for AI coding assistants. Intercepts hook events (tool calls, session lifecycle, user prompts) and processes them through direct handler dispatch.
 
-## Pipeline / Middleware
+## Handler Dispatch
 
-Every hook invocation flows through a `Pipeline` of `Middleware` stages (`src/pipeline/`).
+Direct function dispatch in `main.rs` — no middleware abstraction. Each handler is independent, panic-isolated via `catch_unwind`, <0.5ms.
 
 ```
-AI Assistant -> hook event (JSON stdin) -> Pipeline [stage1 -> stage2 -> ... -> stageN] -> JSON stdout
+AI Assistant -> hook event (JSON stdin) -> main.rs dispatch -> handler function -> JSON stdout
 ```
-
-**Core types:**
-
-- `PipelineContext` -- shared mutable state carrying tool name, tool input, advisories, timing data, and the final decision.
-- `StageResult` -- `Continue`, `Deny(msg)`, `Allow(advisory)`, or `Skip`.
-- `Decision` -- final outcome: `Deny(String)` or `Allow(Option<String>)`.
 
 **Properties:**
 
-- Stages run in order; `Deny` or `Allow` short-circuits immediately.
-- Each stage wrapped in `catch_unwind` -- panics are logged and skipped (fail-open).
-- Per-stage timing recorded for profiling.
-- Disabled stages (via `enabled()` method) skipped at zero cost.
-
-```rust
-pub trait Middleware: Send + Sync {
-    fn name(&self) -> &'static str;
-    fn enabled(&self, ctx: &PipelineContext) -> bool;
-    fn process(&self, ctx: &mut PipelineContext) -> StageResult;
-}
-```
+- Each handler is a standalone function called by `dispatch_hook()`
+- Panic isolation via `catch_unwind` — panics logged and skipped (fail-open)
+- CI mode (`dispatch_hook_ci`) runs safety-critical handlers only
+- Daemon fast-path via IPC; falls back to direct execution
 
 ## Multi-Assistant Adapter
 
@@ -98,7 +84,7 @@ Rules are loaded once via `LazyLock` (`src/rules/mod.rs`). The daemon restarts a
 
 ## Session Telemetry
 
-Session state persisted per-project in `session-state.json` (`src/common/session.rs`). Collections are bounded (max 50 files_read, 20 commands, 20 snapshots, etc.) and evicted by age.
+Session state persisted per-project in redb (primary) with JSON fallback (`src/common/session.rs`). Collections are bounded (max 50 files_read, 20 commands, 20 snapshots, etc.) and evicted by age.
 
 **TurnSnapshot** -- per-turn telemetry collected every user prompt:
 
@@ -159,7 +145,9 @@ AI Assistant -> hook event -> warden CLI -> named pipe -> daemon -> handler disp
                                   +-- fallback: direct execution if daemon unavailable
 ```
 
-**Named pipe:** `\\.\pipe\warden-{username}`
+**Transport:**
+- Windows: Named pipes (`\\.\pipe\warden-{username}`)
+- Unix: Domain sockets (`/tmp/warden-{username}.sock`)
 
 **Protocol:** Length-prefixed JSON. 4-byte little-endian length prefix, then JSON payload. One request/response per connection.
 
@@ -191,9 +179,9 @@ Exit code `-2` (`EXIT_RESTART`) signals the client that the daemon detected a re
   rules/                     -- rules directory
   projects/
     {hash8}/                 -- per-project state (8-char hash of CWD)
-      session-state.json     -- current session state (TurnSnapshots, files, commands)
-      session-notes.jsonl    -- session event log (milestones, errors, transitions)
-      stats.json             -- project statistics (Welford accumulators)
+      warden.redb            -- primary storage (session state, events, stats, dream)
+      session-state.json     -- legacy fallback (migrated to redb on first run)
+      session-notes.jsonl    -- session event log (migrated to redb events table)
 
 .warden/                     -- per-project directory (in project root)
   rules.toml                 -- project-specific rule overrides
@@ -209,5 +197,5 @@ Exit code `-2` (`EXIT_RESTART`) signals the client that the daemon detected a re
 | Analytics (per turn) | <0.5ms | O(1) Welford updates, O(n) regression on max 20 points |
 | Daemon startup | <50ms | Copy binary + spawn detached process |
 | Memory (daemon) | <10MB | Bounded collections, minimal allocations |
-| Binary size | <3MB | `opt-level = "z"`, LTO, strip, `codegen-units = 1` |
+| Binary size | <4MB | `opt-level = "z"`, LTO, strip, `codegen-units = 1` |
 | Panic tolerance | 100% | `catch_unwind` per stage, fail-open on all errors |

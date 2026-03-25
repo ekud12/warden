@@ -53,18 +53,18 @@ disabled = ["substitution.cat", "read.post-edit"]
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `disabled` | `[]` | List of restriction IDs to disable. See `warden restrictions list` for all IDs. |
+| `disabled` | `[]` | List of restriction IDs to disable. See `warden debug-restrictions list` for all IDs. |
 
 Each restriction has a unique dotted ID (e.g., `safety.rm-rf`, `substitution.grep`, `read.dedup`). Safety restrictions (`can_disable: false`) cannot be disabled.
 
 **Runtime toggle:**
 
 ```bash
-warden restrictions disable substitution.grep   # Add to disabled list
-warden restrictions enable substitution.grep    # Remove from disabled list
-warden restrictions list                        # Show all restrictions
-warden restrictions list --disabled             # Show only disabled
-warden restrictions list --category safety      # Filter by category
+warden debug-restrictions disable substitution.grep   # Add to disabled list
+warden debug-restrictions enable substitution.grep    # Remove from disabled list
+warden debug-restrictions list                        # Show all restrictions
+warden debug-restrictions list --disabled             # Show only disabled
+warden debug-restrictions list --category safety      # Filter by category
 ```
 
 **Categories:** Safety, Destructive, Substitution, Governance, Hallucination, ZeroTrace, Redirect, Permission.
@@ -140,18 +140,18 @@ warden version                              # Print version
 
 # Inspection
 warden rules                                # Show merged rule counts per category
-warden restrictions list                    # Show all restrictions with metadata
-warden stats                                # Show learning/effectiveness stats
+warden debug-restrictions list                    # Show all restrictions with metadata
+warden debug-stats                                # Show learning/effectiveness stats
 warden describe                             # Describe warden capabilities
 warden project-dir                          # Print per-project state directory
 
 # Daemon
-warden daemon-status                        # Check if daemon is running (JSON: pid, mtime)
-warden daemon-stop                          # Stop the background daemon
+warden debug-daemon-status                        # Check if daemon is running (JSON: pid, mtime)
+warden debug-daemon-stop                          # Stop the background daemon
 
 # Session data
-warden export-sessions [--json]             # Export session history
-warden replay <session-id>                  # Replay a session
+warden debug-export [--json]             # Export session history
+warden debug-replay <session-id>                  # Replay a session
 warden diff <session-a> <session-b>         # Compare two sessions
 ```
 

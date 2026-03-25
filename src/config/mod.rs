@@ -7,7 +7,10 @@
 // Patterns are re-exported from core:: for backward compat (config::SAFETY etc.)
 
 pub mod core;
+pub mod parser;
 pub mod restrictions;
+
+pub use parser::CONFIG;
 
 // Re-export core values at config:: level for backward compatibility
 pub use core::safety::{SAFETY, DESTRUCTIVE, GIT_SAFETY};

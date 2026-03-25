@@ -47,7 +47,10 @@ pub fn pipe_name() -> String {
     let username = std::env::var("USERNAME")
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_else(|_| "default".to_string());
-    format!(r"\\.\pipe\{}-{}", crate::constants::PIPE_PREFIX, username)
+    #[cfg(windows)]
+    { format!(r"\\.\pipe\{}-{}", crate::constants::PIPE_PREFIX, username) }
+    #[cfg(not(windows))]
+    { format!("/tmp/{}-{}.sock", crate::constants::PIPE_PREFIX, username) }
 }
 
 /// Get the modification time of the current binary as epoch seconds.
@@ -196,9 +199,15 @@ pub fn pid_is_warden(_pid: u32) -> bool {
 }
 
 #[cfg(not(windows))]
-pub fn pid_is_alive(_pid: u32) -> bool {
-    // Simplified — just assume alive on non-Windows
-    true
+pub fn pid_is_alive(pid: u32) -> bool {
+    // Check /proc/{pid} on Linux, or use kill -0 via std::process::Command
+    std::path::Path::new(&format!("/proc/{}", pid)).exists()
+        || std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
 }
 
 /// Spawn a new daemon process in the background (detached).
@@ -216,13 +225,24 @@ pub fn spawn_daemon() {
     } else {
         crate::constants::DAEMON_NAME.to_string()
     };
-    let daemon_exe = crate::common::hooks_dir().join(daemon_exe_name);
+    let daemon_exe = crate::common::hooks_dir().join(&daemon_exe_name);
 
-    // Copy current binary to daemon location (retry once if briefly locked)
-    if std::fs::copy(&source, &daemon_exe).is_err() {
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        if let Err(e) = std::fs::copy(&source, &daemon_exe) {
-            crate::common::log("ipc", &format!("Cannot copy daemon binary: {}", e));
+    // Copy current binary to daemon location (retry with backoff if locked)
+    let mut copied = false;
+    for delay_ms in [0, 100, 500] {
+        if delay_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        }
+        if std::fs::copy(&source, &daemon_exe).is_ok() {
+            copied = true;
+            break;
+        }
+    }
+    if !copied {
+        if daemon_exe.exists() {
+            crate::common::log("ipc", "Daemon binary locked, reusing existing copy");
+        } else {
+            crate::common::log("ipc", "Cannot copy daemon binary and no existing copy");
             return;
         }
     }
@@ -314,8 +334,11 @@ fn connect_pipe(pipe_path: &str, timeout: Duration) -> Option<PipeStream> {
 }
 
 #[cfg(not(windows))]
-fn connect_pipe(_pipe_path: &str, _timeout: Duration) -> Option<PipeStream> {
-    None // No daemon support on non-Windows
+fn connect_pipe(pipe_path: &str, timeout: Duration) -> Option<PipeStream> {
+    let stream = std::os::unix::net::UnixStream::connect(pipe_path).ok()?;
+    stream.set_read_timeout(Some(timeout)).ok()?;
+    stream.set_write_timeout(Some(timeout)).ok()?;
+    Some(PipeStream(stream))
 }
 
 // ─── PipeStream abstraction ─────────────────────────────────────────────────
@@ -394,21 +417,21 @@ impl Drop for PipeStream {
 }
 
 #[cfg(not(windows))]
-struct PipeStream;
+struct PipeStream(std::os::unix::net::UnixStream);
 
 #[cfg(not(windows))]
 impl Read for PipeStream {
-    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.read(buf)
     }
 }
 
 #[cfg(not(windows))]
 impl Write for PipeStream {
-    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
     }
     fn flush(&mut self) -> std::io::Result<()> {
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+        self.0.flush()
     }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "warden-ai",
+  "name": "@bitmilldev/warden",
   "version": "1.0.0",
   "description": "AI Coding Session Guardian — runtime intelligence layer for Claude Code, Gemini CLI, and more",
   "keywords": ["ai", "coding", "hooks", "claude", "gemini", "guardian", "session"],

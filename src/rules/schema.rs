@@ -34,6 +34,12 @@ pub struct RulesFile {
     /// Enable git read-only mode (block all mutating git commands). OFF by default.
     #[serde(default)]
     pub git_readonly: Option<bool>,
+    /// Session mode: diagnose, implement, refactor, release. Adjusts thresholds.
+    #[serde(default)]
+    pub session_mode: Option<String>,
+    /// Custom command filters for output compression (extends compiled defaults)
+    #[serde(default)]
+    pub command_filters: Vec<CommandFilter>,
 }
 
 /// A section of pattern+message pairs with optional replace mode
@@ -53,6 +59,9 @@ pub struct PatternEntry {
     #[serde(rename = "match")]
     pub regex: String,
     pub msg: String,
+    /// Shadow mode: log "would deny" without blocking. Enables safe rule rollout.
+    #[serde(default)]
+    pub shadow: bool,
 }
 
 /// Auto-allow section (regex list)
@@ -96,6 +105,39 @@ pub struct JustMapEntry {
     pub prefix: String,
     pub recipe: String,
 }
+
+/// Command filter rule for data-driven output compression
+#[derive(Deserialize, Debug, Clone, serde::Serialize)]
+pub struct CommandFilter {
+    /// Regex or substring to match against the command string
+    #[serde(rename = "match")]
+    pub cmd_match: String,
+    /// Filter strategy: strip_matching, keep_matching, dedup, head_tail, passthrough
+    #[serde(default = "default_strategy")]
+    pub strategy: String,
+    /// Patterns for lines to keep (regex)
+    #[serde(default)]
+    pub keep_patterns: Vec<String>,
+    /// Patterns for lines to strip (regex)
+    #[serde(default)]
+    pub strip_patterns: Vec<String>,
+    /// Number of lines to keep from the start
+    #[serde(default = "default_keep_n")]
+    pub keep_first: usize,
+    /// Number of lines to keep from the end
+    #[serde(default = "default_keep_n")]
+    pub keep_last: usize,
+    /// Summary line template ({kept}, {total}, {stripped} placeholders)
+    #[serde(default)]
+    pub summary_template: String,
+    /// Maximum output lines after filtering
+    #[serde(default = "default_max_lines")]
+    pub max_lines: usize,
+}
+
+fn default_strategy() -> String { "strip_matching".to_string() }
+fn default_keep_n() -> usize { 3 }
+fn default_max_lines() -> usize { 40 }
 
 /// Restriction disable list — allows selectively disabling restrictions by ID
 #[derive(Deserialize, Debug, Default)]

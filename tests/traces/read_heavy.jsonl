@@ -1,0 +1,18 @@
+{"type":"read","detail":"src/main.rs","turn":1}
+{"type":"read","detail":"src/lib.rs","turn":2}
+{"type":"read","detail":"src/config.rs","turn":3}
+{"type":"read","detail":"src/utils.rs","turn":4}
+{"type":"read","detail":"src/types.rs","turn":5}
+{"type":"read","detail":"src/handlers/mod.rs","turn":6}
+{"type":"read","detail":"src/handlers/auth.rs","turn":7}
+{"type":"read","detail":"src/handlers/api.rs","turn":8}
+{"type":"read","detail":"src/handlers/db.rs","turn":9}
+{"type":"read","detail":"src/models/user.rs","turn":10}
+{"type":"read","detail":"src/models/session.rs","turn":11}
+{"type":"read","detail":"src/models/config.rs","turn":12}
+{"type":"read","detail":"Cargo.toml","turn":13}
+{"type":"read","detail":"README.md","turn":14}
+{"type":"advisory","detail":"focus 14 reads without an edit","turn":14}
+{"type":"read","detail":"src/tests/mod.rs","turn":15}
+{"type":"edit","detail":"src/lib.rs","turn":16}
+{"type":"milestone","detail":"cargo check passed","turn":18}

@@ -23,14 +23,14 @@ static ZERO_TRACE_RE: LazyLock<Option<Regex>> =
 static SENSITIVE_DENY: LazyLock<Vec<(Regex, String)>> = LazyLock::new(|| {
     rules::RULES.sensitive_deny_pairs
         .iter()
-        .filter_map(|(pat, msg)| Regex::new(pat).ok().map(|r| (r, msg.clone())))
+        .filter_map(|(_id, pat, msg, _shadow)| Regex::new(pat).ok().map(|r| (r, msg.clone())))
         .collect()
 });
 
 static SENSITIVE_WARN: LazyLock<Vec<(Regex, String)>> = LazyLock::new(|| {
     rules::RULES.sensitive_warn_pairs
         .iter()
-        .filter_map(|(pat, msg)| Regex::new(pat).ok().map(|r| (r, msg.clone())))
+        .filter_map(|(_id, pat, msg, _shadow)| Regex::new(pat).ok().map(|r| (r, msg.clone())))
         .collect()
 });
 

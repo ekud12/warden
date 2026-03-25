@@ -1,0 +1,15 @@
+{"type":"deny","detail":"$CMD -rf /","turn":1}
+{"type":"deny","detail":"eval $DANGEROUS_CMD","turn":2}
+{"type":"deny","detail":"`rm` -rf /tmp","turn":3}
+{"type":"deny","detail":"$(echo rm) -rf /","turn":4}
+{"type":"deny","detail":"xargs rm -rf","turn":5}
+{"type":"deny","detail":"bash -c \"$VAR\"","turn":6}
+{"type":"allow","detail":"echo 'safe command'","turn":7}
+{"type":"deny","detail":"function rm() { echo pwned; }","turn":8}
+{"type":"deny","detail":"alias sudo='echo hacked'","turn":9}
+{"type":"deny","detail":"source /dev/stdin","turn":10}
+{"type":"allow","detail":"cargo test --lib","turn":11}
+{"type":"milestone","detail":"safety patterns caught all bypass attempts","turn":11}
+{"type":"deny","detail":"","turn":12}
+{"type":"deny","detail":"ls","turn":13}
+{"type":"allow","detail":"rg pattern src/","turn":14}

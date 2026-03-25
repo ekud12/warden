@@ -5,7 +5,7 @@
 // are detected. Updated every turn with O(1) operations.
 // ──────────────────────────────────────────────────────────────────────────────
 
-use std::collections::HashMap;
+use std::collections::BTreeMap as HashMap;
 
 /// Record an action transition (prev → current)
 pub fn record_transition(transitions: &mut HashMap<String, u32>, prev: &str, current: &str) {

@@ -6,6 +6,24 @@ use crate::common;
 pub fn update_read_state(file_path: &str) {
     let mut state = common::read_session_state();
     state.explore_count += 1;
+    state.reads_since_edit += 1;
+
+    // Track directory for focus score
+    let dir = file_path.replace('\\', "/");
+    if let Some(parent) = dir.rsplit('/').nth(1) {
+        let parent_str = parent.to_string();
+        if !state.directories_touched.contains(&parent_str) {
+            // Check for subsystem switch
+            if let Some(last) = state.directories_touched.last()
+                && last != &parent_str
+            {
+                state.subsystem_switches += 1;
+            }
+            if state.directories_touched.len() < 30 {
+                state.directories_touched.push(parent_str);
+            }
+        }
+    }
 
     // Record file read with content hash and mtime
     match common::content_hash(std::path::Path::new(file_path)) {

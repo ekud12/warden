@@ -5,7 +5,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap as HashMap;
 
 /// Per-rule effectiveness data
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]

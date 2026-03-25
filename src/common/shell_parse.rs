@@ -196,6 +196,185 @@ fn skip_whitespace(chars: &[char], i: &mut usize) {
     }
 }
 
+// ─── Structured command parsing ──────────────────────────────────────────────
+
+/// Structured representation of a single shell command (parsed from a segment).
+/// NOT a full bash parser — handles the 95% case of commands AI agents generate.
+#[derive(Debug, Clone)]
+pub struct ParsedCommand {
+    /// The program name (first non-env-var token), e.g., "cargo", "rm"
+    pub program: String,
+    /// Arguments to the program, e.g., ["build", "--release"]
+    pub args: Vec<String>,
+    /// Environment variable assignments preceding the command, e.g., [("FOO", "bar")]
+    pub env_vars: Vec<(String, String)>,
+    /// Output/input redirections found in the command
+    pub redirects: Vec<Redirect>,
+    /// Whether the command contains shell expansion ($VAR, $(cmd), `cmd`)
+    pub has_expansion: bool,
+}
+
+/// A shell redirect operator and its target
+#[derive(Debug, Clone, PartialEq)]
+pub enum Redirect {
+    /// `> file`
+    Out(String),
+    /// `>> file`
+    Append(String),
+    /// `< file`
+    In(String),
+}
+
+/// Parse a single command segment into a structured ParsedCommand.
+/// Handles: env vars, program extraction, args, redirects, expansion detection.
+pub fn parse_argv(text: &str) -> ParsedCommand {
+    // Check expansion on raw text (before quote stripping) so single-quoted
+    // variables like '$HOME' are correctly detected as non-expansion
+    let has_expansion = contains_expansion(text);
+
+    let tokens = tokenize(text);
+    let mut env_vars = Vec::new();
+    let mut program = String::new();
+    let mut args = Vec::new();
+    let mut redirects = Vec::new();
+    let mut program_found = false;
+
+    let mut i = 0;
+    while i < tokens.len() {
+        let token = &tokens[i];
+
+        // Before program is found, check for env var assignments (KEY=VALUE)
+        if !program_found {
+            if let Some(eq_pos) = token.find('=') {
+                let key = &token[..eq_pos];
+                if !key.is_empty() && key.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    && key.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                {
+                    let val = token[eq_pos + 1..].to_string();
+                    env_vars.push((key.to_string(), val));
+                    i += 1;
+                    continue;
+                }
+            }
+            program = token.clone();
+            program_found = true;
+            i += 1;
+            continue;
+        }
+
+        // Handle redirects
+        if token == ">>" && i + 1 < tokens.len() {
+            redirects.push(Redirect::Append(tokens[i + 1].clone()));
+            i += 2;
+            continue;
+        }
+        if token == ">" && i + 1 < tokens.len() {
+            redirects.push(Redirect::Out(tokens[i + 1].clone()));
+            i += 2;
+            continue;
+        }
+        if token == "<" && i + 1 < tokens.len() {
+            redirects.push(Redirect::In(tokens[i + 1].clone()));
+            i += 2;
+            continue;
+        }
+        // Redirect attached to token: ">file", ">>file"
+        if let Some(target) = token.strip_prefix(">>") {
+            if !target.is_empty() { redirects.push(Redirect::Append(target.to_string())); }
+            i += 1;
+            continue;
+        }
+        if let Some(target) = token.strip_prefix('>') {
+            if !target.is_empty() { redirects.push(Redirect::Out(target.to_string())); }
+            i += 1;
+            continue;
+        }
+        if let Some(target) = token.strip_prefix('<') {
+            if !target.is_empty() { redirects.push(Redirect::In(target.to_string())); }
+            i += 1;
+            continue;
+        }
+
+        args.push(token.clone());
+        i += 1;
+    }
+
+    ParsedCommand { program, args, env_vars, redirects, has_expansion }
+}
+
+/// Check if a token contains shell expansion markers
+fn contains_expansion(token: &str) -> bool {
+    let chars: Vec<char> = token.chars().collect();
+    let mut in_single_quote = false;
+    for (i, &ch) in chars.iter().enumerate() {
+        if ch == '\'' && !in_single_quote {
+            in_single_quote = true;
+            continue;
+        }
+        if ch == '\'' && in_single_quote {
+            in_single_quote = false;
+            continue;
+        }
+        if in_single_quote { continue; }
+
+        // $VAR, ${VAR}, $(cmd)
+        if ch == '$' { return true; }
+        // `cmd` backtick expansion
+        if ch == '`' { return true; }
+        // Tilde expansion at start
+        if ch == '~' && i == 0 { continue; } // ~ alone is not dangerous expansion
+    }
+    false
+}
+
+/// Quote-aware tokenization: split on whitespace respecting single/double quotes
+fn tokenize(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let len = chars.len();
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut i = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+
+    while i < len {
+        let ch = chars[i];
+
+        // Backslash escape (outside single quotes)
+        if ch == '\\' && !in_single && i + 1 < len {
+            current.push(chars[i + 1]);
+            i += 2;
+            continue;
+        }
+
+        if ch == '\'' && !in_double {
+            in_single = !in_single;
+            i += 1;
+            continue; // Don't include quote chars in token
+        }
+        if ch == '"' && !in_single {
+            in_double = !in_double;
+            i += 1;
+            continue;
+        }
+
+        if ch == ' ' && !in_single && !in_double {
+            if !current.is_empty() {
+                tokens.push(std::mem::take(&mut current));
+            }
+            i += 1;
+            continue;
+        }
+
+        current.push(ch);
+        i += 1;
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
 /// Rejoin segments back into a command string with separators.
 pub fn rejoin(segments: &[Segment]) -> String {
     let mut result = String::new();
@@ -290,5 +469,75 @@ mod tests {
         let segs = parse(input);
         let output = rejoin(&segs);
         assert_eq!(output, "cd /tmp && ls -la ; echo done");
+    }
+
+    // ── parse_argv tests ──
+
+    #[test]
+    fn argv_simple_command() {
+        let cmd = parse_argv("ls -la /tmp");
+        assert_eq!(cmd.program, "ls");
+        assert_eq!(cmd.args, vec!["-la", "/tmp"]);
+        assert!(cmd.env_vars.is_empty());
+        assert!(!cmd.has_expansion);
+    }
+
+    #[test]
+    fn argv_env_vars() {
+        let cmd = parse_argv("FOO=bar BAZ=1 cargo build --release");
+        assert_eq!(cmd.program, "cargo");
+        assert_eq!(cmd.args, vec!["build", "--release"]);
+        assert_eq!(cmd.env_vars, vec![("FOO".to_string(), "bar".to_string()), ("BAZ".to_string(), "1".to_string())]);
+    }
+
+    #[test]
+    fn argv_redirects() {
+        let cmd = parse_argv("echo hello > output.txt");
+        assert_eq!(cmd.program, "echo");
+        assert_eq!(cmd.args, vec!["hello"]);
+        assert_eq!(cmd.redirects, vec![Redirect::Out("output.txt".to_string())]);
+    }
+
+    #[test]
+    fn argv_append_redirect() {
+        let cmd = parse_argv("echo line >> log.txt");
+        assert_eq!(cmd.program, "echo");
+        assert_eq!(cmd.redirects, vec![Redirect::Append("log.txt".to_string())]);
+    }
+
+    #[test]
+    fn argv_expansion_detected() {
+        let cmd = parse_argv("echo $HOME");
+        assert!(cmd.has_expansion);
+
+        let cmd2 = parse_argv("echo $(whoami)");
+        assert!(cmd2.has_expansion);
+
+        let cmd3 = parse_argv("echo `date`");
+        assert!(cmd3.has_expansion);
+    }
+
+    #[test]
+    fn argv_single_quoted_no_expansion() {
+        let cmd = parse_argv("echo '$HOME'");
+        assert!(!cmd.has_expansion);
+        assert_eq!(cmd.args, vec!["$HOME"]);
+    }
+
+    #[test]
+    fn argv_quoted_args_preserved() {
+        let cmd = parse_argv(r#"rg "hello world" src/"#);
+        assert_eq!(cmd.program, "rg");
+        assert_eq!(cmd.args, vec!["hello world", "src/"]);
+    }
+
+    #[test]
+    fn argv_complex_combined() {
+        let cmd = parse_argv("RUST_LOG=debug cargo test --lib > output.log 2>&1");
+        assert_eq!(cmd.program, "cargo");
+        assert_eq!(cmd.env_vars, vec![("RUST_LOG".to_string(), "debug".to_string())]);
+        assert!(cmd.args.contains(&"test".to_string()));
+        assert!(cmd.args.contains(&"--lib".to_string()));
+        assert!(!cmd.redirects.is_empty());
     }
 }

@@ -60,13 +60,11 @@ pub fn handle_truncation(cmd: &str) {
         }
     }
 
-    // Final check: auto-allow known safe commands (not matched by short/verbose)
-    for re in &PATTERNS.auto_allow {
-        if re.is_match(cmd) {
-            common::log("pretool-bash", &format!("ALLOW (auto): {}", common::truncate(cmd, 60)));
-            common::allow("PreToolUse");
-            return;
-        }
+    // Final check: auto-allow known safe commands (single RegexSet pass)
+    if PATTERNS.auto_allow_set.is_match(cmd) {
+        common::log("pretool-bash", &format!("ALLOW (auto): {}", common::truncate(cmd, 60)));
+        common::allow("PreToolUse");
+        return;
     }
 
     // Truly unknown command — silent passthrough (permission system decides)

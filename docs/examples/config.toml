@@ -29,8 +29,8 @@ huniq = true       # Enforce sort|uniq -> huniq substitution
 # Disable specific restrictions by their ID. Only restrictions with
 # can_disable = true can be disabled. Safety restrictions cannot be disabled.
 #
-# Run `warden restrictions list` to see all restriction IDs and their status.
-# Run `warden restrictions disable <id>` to disable interactively.
+# Run `warden debug-restrictions list` to see all restriction IDs and their status.
+# Run `warden debug-restrictions disable <id>` to disable interactively.
 #
 # Categories: Safety, Destructive, Substitution, Governance, Hallucination,
 #             ZeroTrace, Redirect, Permission

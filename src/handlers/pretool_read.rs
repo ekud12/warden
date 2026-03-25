@@ -1,19 +1,19 @@
 // ─── pretool_read — PreToolUse handler for Read tool governance ────────────────
 //
 // Four responsibilities:
-//   1. Post-edit read suppression: DENY re-reading a file just edited (within 2 turns)
-//   2. Read dedup: DENY re-reading unchanged files still in context (within 10 turns)
-//   3. Progressive ranged read: ADVISORY/DENY full reads of medium files in late sessions
-//   4. Large file governance: prevent full reads of code files >50KB
+//   1. Post-edit read advisory: advise against re-reading a file just edited (within 2 turns)
+//   2. Read dedup advisory: advise against re-reading unchanged files still in context
+//   3. Progressive ranged read: advisory/deny full reads of medium files in late sessions
+//   4. Large file governance: advisory for full reads of code files >50KB
+//
+// Bias: advisory unless confidence is very high. Only progressive late-session
+// reads on >10KB files actually deny. Everything else advises and allows.
 //
 // Allows unconditionally:
 //   - Ranged reads (offset, limit, start_line, end_line, line_range present)
-//   - Non-code file extensions (configs, markdown, JSON, etc.) — for governance only
+//   - Non-code file extensions (configs, markdown, JSON, etc.)
 //   - Files that can't be stat'd (new/inaccessible — fail open)
-//   - Code files under progressive threshold (turn-dependent)
-//
-// The dedup DENY has a compaction guard: reads are allowed freely for 2 turns
-// after compaction (files_read is cleared on PreCompact).
+//   - Post-compaction reads (2-turn grace period)
 // ──────────────────────────────────────────────────────────────────────────────
 
 use crate::common;
@@ -22,7 +22,7 @@ use crate::rules;
 use std::fs;
 use std::path::Path;
 
-/// PreToolUse handler for Read — dedup deny + post-edit suppression + large file governance
+/// PreToolUse handler for Read — dedup advisory + post-edit advisory + large file governance
 pub fn run(raw: &str) {
     let input = common::parse_input_or_return!(raw);
 
@@ -88,12 +88,9 @@ pub fn run(raw: &str) {
     }
 
     // ── 2. Read dedup — advisory for unchanged files still in context ──
-    // Downgraded from deny to advisory: false denies (post-compaction, edit-intent)
-    // cause more harm than the ~200 tokens saved per blocked read.
-    if let Some(advisory_or_deny) = check_read_dedup(file_path, &state) {
-        let msg = match advisory_or_deny {
-            DedupAction::Deny(msg) | DedupAction::Advisory(msg) => msg,
-        };
+    // Advisory-only: false denies (post-compaction, edit-intent) cause more
+    // harm than the ~200 tokens saved per blocked read.
+    if let Some(msg) = check_read_dedup(file_path, &state) {
         track_read(file_path, fs::metadata(file_path).map(|m| m.len()).unwrap_or(0));
         common::log_structured("pretool-read", common::LogLevel::Advisory, "read-dedup", truncate_path(file_path));
         common::allow_with_advisory("PreToolUse", &msg);
@@ -182,13 +179,8 @@ fn track_read(file_path: &str, size: u64) {
     }
 }
 
-enum DedupAction {
-    Deny(String),
-    Advisory(String),
-}
-
-/// Check read dedup — returns Deny if within context window, Advisory if borderline
-fn check_read_dedup(file_path: &str, state: &common::SessionState) -> Option<DedupAction> {
+/// Check read dedup — returns advisory message if file unchanged and likely still in context
+fn check_read_dedup(file_path: &str, state: &common::SessionState) -> Option<String> {
     if state.files_read.is_empty() {
         return None;
     }
@@ -204,35 +196,37 @@ fn check_read_dedup(file_path: &str, state: &common::SessionState) -> Option<Ded
     let turn_gap = state.turn.saturating_sub(prev.turn);
     let post_compaction = state.turn.saturating_sub(state.last_compaction_turn) <= 2;
 
-    // Very recent (≤2 turns): advisory only — model may need content for editing
-    if turn_gap <= 2 && !post_compaction {
-        return Some(DedupAction::Advisory(format!(
+    // Post-compaction grace: context was just cleared, re-reads are expected
+    if post_compaction {
+        return None;
+    }
+
+    let dedup_window = state.adaptive.params.read_dedup_window;
+    let dedup_window = if dedup_window > 0 { dedup_window } else { 10 };
+    let advisory_zone = dedup_window * 2;
+
+    // Very recent (≤2 turns): gentle advisory
+    if turn_gap <= 2 {
+        return Some(format!(
             "You read this file at turn {} ({} turns ago). Content unchanged (~{} bytes). It's likely still in your context — skip re-reading if you already have what you need.",
             prev.turn, turn_gap, prev.size
-        )));
+        ));
     }
 
-    // Within dedup window and not right after compaction → DENY
-    // (file content is still in Claude's context window)
-    // TODO: Re-enable adaptive dedup window when adaptation module is ported.
-    // Was: state.adaptive.params.read_dedup_window
-    let dedup_window: u32 = 0;
-    let dedup_deny = if dedup_window > 0 { dedup_window } else { 10 };
-    let dedup_advisory = dedup_deny * 2;
-
-    if turn_gap <= dedup_deny && !post_compaction {
-        return Some(DedupAction::Deny(format!(
+    // Within dedup window: firmer advisory
+    if turn_gap <= dedup_window {
+        return Some(format!(
             "You read this file at turn {} ({} turns ago). Content unchanged (~{} bytes). It's still in your context.",
             prev.turn, turn_gap, prev.size
-        )));
+        ));
     }
 
-    // Beyond deny window but within advisory zone → advisory
-    if turn_gap <= dedup_advisory {
-        return Some(DedupAction::Advisory(format!(
+    // Beyond dedup window but within advisory zone: soft advisory
+    if turn_gap <= advisory_zone {
+        return Some(format!(
             "You read this file at turn {} ({} turns ago). Content unchanged (~{} bytes). It may still be in your context.",
             prev.turn, turn_gap, prev.size
-        )));
+        ));
     }
 
     // Beyond advisory zone → allow (likely compacted out)

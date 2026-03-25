@@ -16,8 +16,8 @@
 //   ├── auto_allow.rs       ← safe read-only commands
 //   └── thresholds.rs       ← MAX_READ_SIZE, MAX_MCP_OUTPUT, etc.
 //
-// The TOML files (rules/core.toml, rules/community.toml) can EXTEND or
-// REPLACE these at runtime. These compiled values are the fallback floor.
+// TOML files (~/.warden/rules.toml, .warden/rules.toml) can EXTEND these
+// at runtime. Compiled safety values are the immutable floor.
 // ──────────────────────────────────────────────────────────────────────────────
 
 pub mod advisories;
@@ -25,6 +25,7 @@ pub mod auto_allow;
 pub mod commands;
 pub mod error_hints;
 pub mod extensions;
+pub mod filters;
 pub mod hallucination;
 pub mod injection;
 pub mod just;

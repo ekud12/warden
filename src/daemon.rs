@@ -50,6 +50,13 @@ pub fn run_server(source_mtime: u64) {
     // Enable in-memory caching for session state and log buffering
     common::enable_daemon_mode();
 
+    // Initialize platform-specific listener
+    #[cfg(not(windows))]
+    if !init_unix_listener() {
+        common::log("daemon", "Failed to initialize Unix listener — aborting");
+        return;
+    }
+
     common::log("daemon", &format!("Starting daemon (pid={}, mtime={})", pid, startup_mtime));
 
     let shutdown = Arc::new(AtomicBool::new(false));
@@ -65,7 +72,25 @@ pub fn run_server(source_mtime: u64) {
                 if idle_secs >= IDLE_TIMEOUT_SECS {
                     common::log("daemon", "Idle timeout (1h) — auto-shutdown");
                     ipc::remove_pid_file();
+                    #[cfg(not(windows))]
+                    { let _ = std::fs::remove_file(ipc::pipe_name()); }
                     std::process::exit(0);
+                }
+            }
+        });
+    }
+
+    // Dream worker — background learning during idle time
+    {
+        let last_act = Arc::clone(&last_activity);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(Duration::from_secs(30));
+                let idle_secs = now_secs().saturating_sub(last_act.load(Ordering::Relaxed));
+                if idle_secs < 10 { continue; } // Only dream when genuinely idle
+
+                if let Some(batch) = crate::dream::next_batch() {
+                    crate::dream::process_batch(batch);
                 }
             }
         });
@@ -172,6 +197,14 @@ pub fn run_server(source_mtime: u64) {
     common::log("daemon", "Daemon shutting down");
     common::flush_daemon_buffers();
     ipc::remove_pid_file();
+
+    // Remove Unix domain socket file on shutdown
+    #[cfg(not(windows))]
+    {
+        let sock_path = ipc::pipe_name();
+        let _ = std::fs::remove_file(&sock_path);
+    }
+
     common::log("daemon", "Daemon stopped");
     common::flush_daemon_buffers();
 }
@@ -205,8 +238,20 @@ fn dispatch_handler(subcmd: &str, payload: &str) -> DaemonResponse {
     }));
 
     let stdout = common::take_capture();
-    let elapsed_ms = handler_start.elapsed().as_millis();
-    common::log("daemon", &format!("DISPATCH {} {}ms", subcmd, elapsed_ms));
+    let elapsed = handler_start.elapsed();
+    let elapsed_us = elapsed.as_micros();
+    // Structured handler timing for latency tracking and regression detection
+    common::log_structured("daemon", common::LogLevel::Info, "handler-timing",
+        &format!("{}={}us ({}ms)", subcmd, elapsed_us, elapsed.as_millis()));
+    // Warn if handler exceeds budget (pretool: 2ms, session-start: 500ms, others: 10ms)
+    // session-start gets a higher budget — cold start includes redb init + file I/O
+    let budget_us = if subcmd.starts_with("pretool") { 2000 }
+        else if subcmd == "session-start" { 500_000 }
+        else { 10000 };
+    if elapsed_us > budget_us {
+        common::log_structured("daemon", common::LogLevel::Info, "latency-warning",
+            &format!("{} exceeded budget: {}us > {}us", subcmd, elapsed_us, budget_us));
+    }
     DaemonResponse {
         stdout,
         exit_code: if result.is_ok() { 0 } else { 1 },
@@ -225,6 +270,10 @@ fn accept_connection() -> Option<ServerPipe> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::Security::{
+        SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
+        InitializeSecurityDescriptor, SetSecurityDescriptorDacl,
+    };
     use windows_sys::Win32::System::Pipes::{
         ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
     };
@@ -235,7 +284,24 @@ fn accept_connection() -> Option<ServerPipe> {
         .chain(std::iter::once(0))
         .collect();
 
-    // SAFETY: wide_path is null-terminated; handle checked against INVALID_HANDLE_VALUE; closed on error paths.
+    // Build a security descriptor with a null DACL restricted to current user.
+    // A null DACL grants full access only to the owner (the current process user).
+    // SAFETY: sd is stack-allocated and lives for the duration of CreateNamedPipeW.
+    let mut sd: SECURITY_DESCRIPTOR = unsafe { std::mem::zeroed() };
+    unsafe {
+        // SECURITY_DESCRIPTOR_REVISION = 1
+        InitializeSecurityDescriptor(&mut sd as *mut _ as *mut _, 1);
+        // Setting bDaclPresent=true with pDacl=null creates an empty DACL (deny all except owner)
+        SetSecurityDescriptorDacl(&mut sd as *mut _ as *mut _, 1, std::ptr::null(), 0);
+    }
+
+    let mut sa = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: &mut sd as *mut _ as *mut _,
+        bInheritHandle: 0,
+    };
+
+    // SAFETY: wide_path is null-terminated; sa is valid for pipe lifetime; handle checked below.
     unsafe {
         let handle = CreateNamedPipeW(
             wide_path.as_ptr(),
@@ -245,7 +311,7 @@ fn accept_connection() -> Option<ServerPipe> {
             4096,  // out buffer
             4096,  // in buffer
             100,   // default timeout ms
-            std::ptr::null(),
+            &mut sa as *mut _ as *const _,
         );
 
         if handle == INVALID_HANDLE_VALUE {
@@ -337,27 +403,68 @@ impl Drop for ServerPipe {
 }
 
 #[cfg(not(windows))]
-struct ServerPipe;
+struct ServerPipe(std::os::unix::net::UnixStream);
+
+#[cfg(not(windows))]
+static UNIX_LISTENER: std::sync::LazyLock<std::sync::Mutex<Option<std::os::unix::net::UnixListener>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+
+/// Initialize the Unix domain socket listener. Called once at daemon startup.
+#[cfg(not(windows))]
+pub fn init_unix_listener() -> bool {
+    let path = ipc::pipe_name();
+    // Remove stale socket file if it exists
+    let _ = std::fs::remove_file(&path);
+    match std::os::unix::net::UnixListener::bind(&path) {
+        Ok(listener) => {
+            // Set socket file permissions to owner-only (0o600)
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            }
+            if let Ok(mut guard) = UNIX_LISTENER.lock() {
+                *guard = Some(listener);
+            }
+            true
+        }
+        Err(e) => {
+            common::log("daemon", &format!("Failed to bind Unix socket: {}", e));
+            false
+        }
+    }
+}
 
 #[cfg(not(windows))]
 fn accept_connection() -> Option<ServerPipe> {
-    None
+    let guard = UNIX_LISTENER.lock().ok()?;
+    let listener = guard.as_ref()?;
+    // Set a timeout so the accept doesn't block forever (allows idle checks)
+    listener.set_nonblocking(false).ok()?;
+    match listener.accept() {
+        Ok((stream, _)) => {
+            stream.set_read_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS))).ok()?;
+            stream.set_write_timeout(Some(Duration::from_secs(READ_TIMEOUT_SECS))).ok()?;
+            Some(ServerPipe(stream))
+        }
+        Err(_) => None,
+    }
 }
 
 #[cfg(not(windows))]
 impl Read for ServerPipe {
-    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.read(buf)
     }
 }
 
 #[cfg(not(windows))]
 impl Write for ServerPipe {
-    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
     }
     fn flush(&mut self) -> std::io::Result<()> {
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "not windows"))
+        self.0.flush()
     }
 }
 

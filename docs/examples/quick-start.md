@@ -52,19 +52,19 @@ Every Bash command, file read, and file write flows through warden's pipeline. D
 
 ```bash
 # View current session statistics
-warden stats
+warden debug-stats
 
 # List all restrictions and their status
-warden restrictions list
+warden debug-restrictions list
 
 # Filter by category
-warden restrictions list --category Safety
+warden debug-restrictions list --category Safety
 
 # See merged rule counts
 warden rules
 
 # Export session data
-warden export-sessions --format json
+warden debug-export --format json
 ```
 
 ## Common Customizations
@@ -73,7 +73,7 @@ warden export-sessions --format json
 
 ```bash
 # Interactive
-warden restrictions disable substitution.cat
+warden debug-restrictions disable substitution.cat
 
 # Or edit ~/.warden/config.toml directly
 # [restrictions]
@@ -116,8 +116,8 @@ warden config get tools.justfile
 Warden runs a background daemon for sub-millisecond hook response:
 
 ```bash
-warden daemon-status   # Check if running
-warden daemon-stop     # Stop the daemon (auto-restarts on next hook call)
+warden debug-daemon-status   # Check if running
+warden debug-daemon-stop     # Stop the daemon (auto-restarts on next hook call)
 ```
 
 ## Directory Layout

@@ -37,14 +37,36 @@ pub fn run(args: &[String]) {
     }
 }
 
-/// Replay a session from session-notes.jsonl
+/// Replay a session from redb events (preferred) or session-notes.jsonl (fallback)
 fn replay_session(project_dir: &std::path::Path) {
-    let notes_path = project_dir.join(constants::SESSION_NOTES_FILE);
-    let content = match fs::read_to_string(&notes_path) {
-        Ok(c) => c,
-        Err(_) => {
-            eprintln!("No session notes found at {}", notes_path.display());
-            return;
+    // Try redb first
+    common::storage::open_db(project_dir);
+    let redb_content = if common::storage::is_available() {
+        let events = common::storage::read_last_events(500);
+        if !events.is_empty() {
+            Some(events.iter()
+                .filter_map(|e| String::from_utf8(e.clone()).ok())
+                .collect::<Vec<_>>()
+                .join("\n"))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let content = match redb_content {
+        Some(c) => c,
+        None => {
+            // Fall back to JSONL file
+            let notes_path = project_dir.join(constants::SESSION_NOTES_FILE);
+            match fs::read_to_string(&notes_path) {
+                Ok(c) => c,
+                Err(_) => {
+                    eprintln!("No session data found in {} (tried redb + JSONL)", project_dir.display());
+                    return;
+                }
+            }
         }
     };
 
@@ -201,4 +223,97 @@ fn short_ts(ts: &str) -> &str {
 
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max { s.to_string() } else { format!("{}...", &s[..max]) }
+}
+
+// ─── Deterministic replay through current rules ──────────────────────────────
+
+/// Replay report: classify each event outcome
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+pub struct ReplayReport {
+    pub total_events: u32,
+    pub correct_denials: u32,
+    pub new_denials: u32,
+    pub removed_denials: u32,
+    pub false_positives: u32,
+    pub noisy_advisories: u32,    // advisory repeated 3+ times without behavior change
+    pub helpful_advisories: u32,  // advisory followed by milestone within 5 turns
+}
+
+/// Replay events through current rules, comparing against recorded decisions
+pub fn replay_through_rules(events: &[Vec<u8>]) -> ReplayReport {
+    use crate::handlers::pretool_bash;
+    let patterns = &*pretool_bash::PATTERNS;
+
+    let mut report = ReplayReport::default();
+
+    let mut last_denied_cmd: Option<String> = None;
+    let mut last_denied_turn: u32 = 0;
+    let mut last_advisory_turn: u32 = 0;
+    let mut advisory_categories: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+
+    for raw in events {
+        let entry: serde_json::Value = match serde_json::from_slice(raw) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let event_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+        let turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+
+        // Track advisory quality
+        if event_type.contains("advisory") || event_type.contains("injection") {
+            let cat = detail.split_whitespace().next().unwrap_or("unknown").to_string();
+            *advisory_categories.entry(cat).or_insert(0) += 1;
+            last_advisory_turn = turn;
+        }
+        if event_type == "milestone" && turn.saturating_sub(last_advisory_turn) <= 5 && last_advisory_turn > 0 {
+            report.helpful_advisories += 1;
+        }
+
+        // Only replay denial-relevant events (commands that went through pretool-bash)
+        if event_type != "deny" && event_type != "allow" && !event_type.contains("command") {
+            continue;
+        }
+        report.total_events += 1;
+
+        let was_denied = event_type == "deny" || event_type == "denial";
+        let cmd = detail;
+
+        // Re-evaluate against current rules
+        let would_deny_now = patterns.safety_set.is_match(cmd)
+            || patterns.hallucination_set.is_match(cmd)
+            || patterns.destructive_set.is_match(cmd);
+
+        match (was_denied, would_deny_now) {
+            (true, true) => report.correct_denials += 1,
+            (false, true) => report.new_denials += 1,
+            (true, false) => report.removed_denials += 1,
+            (false, false) => {} // correct allow
+        }
+
+        // False positive detection
+        if was_denied {
+            if let Some(ref prev) = last_denied_cmd
+                && prev == cmd && turn.saturating_sub(last_denied_turn) <= 2 {
+                    report.false_positives += 1;
+                }
+            last_denied_cmd = Some(cmd.to_string());
+            last_denied_turn = turn;
+        }
+    }
+
+    // Count noisy advisories (same category 3+ times)
+    report.noisy_advisories = advisory_categories.values().filter(|&&c| c >= 3).count() as u32;
+
+    report
+}
+
+/// Format replay report for display
+pub fn format_replay_report(r: &ReplayReport) -> String {
+    format!(
+        "Replay: {} events. Denials: {} correct, {} new, {} removed, {} FP. Advisories: {} helpful, {} noisy",
+        r.total_events, r.correct_denials, r.new_denials, r.removed_denials, r.false_positives,
+        r.helpful_advisories, r.noisy_advisories
+    )
 }

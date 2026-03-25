@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+const { spawnSync } = require("child_process");
+const path = require("path");
+const os = require("os");
+
+const ext = os.platform() === "win32" ? ".exe" : "";
+const binary = path.join(os.homedir(), ".warden", "bin", `warden${ext}`);
+
+const result = spawnSync(binary, process.argv.slice(2), {
+  stdio: "inherit",
+  windowsHide: true,
+});
+
+if (result.error) {
+  if (result.error.code === "ENOENT") {
+    console.error("warden binary not found. Run: npm install -g @bitmilldev/warden");
+  } else {
+    console.error(`Failed to run warden: ${result.error.message}`);
+  }
+  process.exit(1);
+}
+
+process.exit(result.status || 0);

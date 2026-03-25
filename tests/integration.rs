@@ -2,6 +2,17 @@
 
 use std::process::Command;
 
+/// Check if a CLI tool is available on PATH
+fn tool_available(name: &str) -> bool {
+    Command::new(if cfg!(windows) { "where" } else { "which" })
+        .arg(name)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
 fn run_warden(subcmd: &str, input: &str) -> String {
     let exe = env!("CARGO_BIN_EXE_warden");
     let output = Command::new(exe)
@@ -112,6 +123,7 @@ fn git_commit_allowed_by_default() {
 
 #[test]
 fn substitution_grep_to_rg() {
+    if !tool_available("rg") { return; } // skip if rg not installed
     let out = run_warden("pretool-bash", &bash_input("grep -r pattern ."));
     assert!(
         out.contains("deny") && out.contains("rg"),
@@ -121,6 +133,7 @@ fn substitution_grep_to_rg() {
 
 #[test]
 fn substitution_find_to_fd() {
+    if !tool_available("fd") { return; } // skip if fd not installed
     let out = run_warden("pretool-bash", &bash_input("find . -name '*.rs'"));
     assert!(
         out.contains("deny") && out.contains("fd"),
@@ -130,6 +143,7 @@ fn substitution_find_to_fd() {
 
 #[test]
 fn substitution_curl_to_xh() {
+    if !tool_available("xh") { return; }
     let out = run_warden("pretool-bash", &bash_input("curl https://example.com"));
     assert!(
         out.contains("deny") && out.contains("xh"),
@@ -467,6 +481,7 @@ fn destructive_deny_madge_image() {
 
 #[test]
 fn substitution_tsnode_to_tsx() {
+    if !tool_available("tsx") { return; }
     let out = run_warden("pretool-bash", &bash_input("ts-node script.ts"));
     assert!(
         out.contains("deny") && out.contains("tsx"),
@@ -476,6 +491,7 @@ fn substitution_tsnode_to_tsx() {
 
 #[test]
 fn substitution_du_to_dust() {
+    if !tool_available("dust") { return; }
     let out = run_warden("pretool-bash", &bash_input("du -sh ."));
     assert!(
         out.contains("deny") && out.contains("dust"),
@@ -485,6 +501,7 @@ fn substitution_du_to_dust() {
 
 #[test]
 fn substitution_sort_uniq_to_huniq() {
+    if !tool_available("huniq") { return; }
     let out = run_warden("pretool-bash", &bash_input("sort file.txt | uniq"));
     assert!(
         out.contains("deny") && out.contains("huniq"),
@@ -494,6 +511,7 @@ fn substitution_sort_uniq_to_huniq() {
 
 #[test]
 fn substitution_sort_u_to_huniq() {
+    if !tool_available("huniq") { return; }
     let out = run_warden("pretool-bash", &bash_input("sort -u file.txt"));
     assert!(
         out.contains("deny") && out.contains("huniq"),
@@ -1183,6 +1201,7 @@ fn golden_safety_deny_rm_rf() {
 
 #[test]
 fn golden_substitution_grep() {
+    if !tool_available("rg") { return; }
     let out = run_warden("pretool-bash", &bash_input("grep -r TODO src/"));
     assert!(out.contains("deny"), "grep should be denied");
     assert!(

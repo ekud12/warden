@@ -2,7 +2,7 @@
 // Warden npm/bun postinstall — downloads the platform-specific binary
 // to ~/.warden/bin/ and registers PATH.
 
-const { execSync, spawnSync } = require("child_process");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -32,57 +32,129 @@ async function main() {
 
   const wardenHome = path.join(os.homedir(), ".warden");
   const binDir = path.join(wardenHome, "bin");
-  const destName = os.platform() === "win32" ? "warden.exe" : "warden";
-  const dest = path.join(binDir, destName);
+  const ext = os.platform() === "win32" ? ".exe" : "";
+  const dest = path.join(binDir, `warden${ext}`);
 
   // Create directories
   fs.mkdirSync(binDir, { recursive: true });
   fs.mkdirSync(path.join(wardenHome, "rules"), { recursive: true });
   fs.mkdirSync(path.join(wardenHome, "projects"), { recursive: true });
 
-  // Download binary from GitHub Releases
+  // Strategy 1: Check if warden is already installed via cargo and is current version
+  const localCargo = findCargoBinary();
+  if (localCargo) {
+    console.log(`Found cargo-installed warden at ${localCargo}`);
+    if (localCargo !== dest) {
+      fs.copyFileSync(localCargo, dest);
+      console.log(`Copied to ${dest}`);
+    }
+    copyRelay(binDir, localCargo);
+    postInstall(dest);
+    return;
+  }
+
+  // Strategy 2: Download from GitHub Releases
   const url = `https://github.com/${REPO}/releases/download/v${VERSION}/${binary}`;
   console.log(`Downloading warden v${VERSION} for ${platform}...`);
 
   try {
     await download(url, dest);
+    const stat = fs.statSync(dest);
+    if (stat.size === 0) {
+      fs.unlinkSync(dest);
+      throw new Error("Downloaded file is empty (asset may not exist in release)");
+    }
+
     if (os.platform() === "win32") {
-      // Remove Zone.Identifier to prevent SmartScreen "Access denied"
       try { fs.unlinkSync(dest + ":Zone.Identifier"); } catch (e) {}
     } else {
       fs.chmodSync(dest, 0o755);
     }
 
-    // Also download the relay binary (Windows only — prevents CMD flicker)
+    // Download relay binary (Windows only — prevents CMD flicker)
     if (os.platform() === "win32") {
       const relayBinary = binary.replace("warden-", "warden-relay-");
       const relayDest = path.join(binDir, "warden-relay.exe");
       const relayUrl = `https://github.com/${REPO}/releases/download/v${VERSION}/${relayBinary}`;
       try {
         await download(relayUrl, relayDest);
-        try { fs.unlinkSync(relayDest + ":Zone.Identifier"); } catch (e) {}
-        console.log(`Installed relay to ${relayDest}`);
+        const relayStat = fs.statSync(relayDest);
+        if (relayStat.size === 0) {
+          fs.unlinkSync(relayDest);
+        } else {
+          try { fs.unlinkSync(relayDest + ":Zone.Identifier"); } catch (e) {}
+          console.log(`Installed relay to ${relayDest}`);
+        }
       } catch (e) {
         // Relay is optional — warden works without it (just has CMD flicker)
       }
     }
 
-    console.log(`Installed to ${dest}`);
-
-    // Run warden init (non-interactive: just PATH + config)
-    try {
-      spawnSync(dest, ["version"], { stdio: "inherit" });
-    } catch (e) {
-      // Ignore — binary might need different setup
-    }
-
-    console.log("");
-    console.log("Run 'warden init' to complete setup (install CLI tools, configure hooks).");
-    console.log(`Or: 'warden install claude-code' / 'warden install gemini-cli'`);
+    postInstall(dest);
   } catch (err) {
+    // Clean up empty/partial file
+    try { if (fs.existsSync(dest) && fs.statSync(dest).size === 0) fs.unlinkSync(dest); } catch (e) {}
+
     console.error(`Download failed: ${err.message}`);
-    console.error("Install from source: cargo install warden-ai");
+    console.error("");
+    console.error("Alternative install methods:");
+    console.error("  cargo install warden-ai");
+    console.error("  Download from: https://github.com/ekud12/warden/releases");
     process.exit(0); // Don't fail npm install
+  }
+}
+
+function postInstall(dest) {
+  console.log(`Installed to ${dest}`);
+
+  // Verify binary works
+  try {
+    spawnSync(dest, ["version"], { stdio: "inherit", timeout: 5000 });
+  } catch (e) {
+    // Ignore — binary might need different setup
+  }
+
+  console.log("");
+  console.log("Run 'warden init' to complete setup (install CLI tools, configure hooks).");
+  console.log("Or: 'warden install claude-code' / 'warden install gemini-cli'");
+}
+
+function findCargoBinary() {
+  // Check common cargo install locations
+  const ext = os.platform() === "win32" ? ".exe" : "";
+  const candidates = [
+    path.join(os.homedir(), ".cargo", "bin", `warden${ext}`),
+  ];
+
+  // Also check if there's a local build in the project (for development)
+  const envBinary = process.env.WARDEN_BINARY;
+  if (envBinary && fs.existsSync(envBinary)) {
+    return envBinary;
+  }
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      const stat = fs.statSync(candidate);
+      if (stat.size > 0) return candidate;
+    }
+  }
+  return null;
+}
+
+function copyRelay(binDir, sourceBinaryDir) {
+  if (os.platform() !== "win32") return;
+
+  const sourceDir = path.dirname(sourceBinaryDir);
+  const relaySource = path.join(sourceDir, "warden-relay.exe");
+  const relayDest = path.join(binDir, "warden-relay.exe");
+
+  if (fs.existsSync(relaySource) && relaySource !== relayDest) {
+    try {
+      fs.copyFileSync(relaySource, relayDest);
+      console.log(`Copied relay to ${relayDest}`);
+    } catch (e) {
+      // Non-fatal
+    }
   }
 }
 
@@ -92,7 +164,7 @@ function download(url, dest, redirects = 0) {
     const proto = url.startsWith("https") ? https : require("http");
     proto.get(url, (response) => {
       if (response.statusCode === 301 || response.statusCode === 302) {
-        response.resume(); // drain the response
+        response.resume();
         return resolve(download(response.headers.location, dest, redirects + 1));
       }
       if (response.statusCode !== 200) {
@@ -102,8 +174,14 @@ function download(url, dest, redirects = 0) {
       const file = fs.createWriteStream(dest);
       response.pipe(file);
       file.on("finish", () => { file.close(); resolve(); });
-      file.on("error", (e) => { fs.unlinkSync(dest); reject(e); });
-    }).on("error", reject);
+      file.on("error", (e) => {
+        try { fs.unlinkSync(dest); } catch (ignore) {}
+        reject(e);
+      });
+    }).on("error", (e) => {
+      try { fs.unlinkSync(dest); } catch (ignore) {}
+      reject(e);
+    });
   });
 }
 

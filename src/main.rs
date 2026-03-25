@@ -30,6 +30,27 @@ mod scorecard;
 
 use std::process;
 
+const USER_COMMANDS: &[&str] = &[
+    "init",
+    "install",
+    "uninstall",
+    "update",
+    "config",
+    "describe",
+    "version",
+    "mcp",
+    "doctor",
+    "explain",
+    "stats",
+    "scorecard",
+    "replay",
+    "tui",
+    "export",
+    "restrictions",
+    "daemon-status",
+    "daemon-stop",
+];
+
 fn main() {
     // Capture backtraces on panic for post-mortem debugging
     std::panic::set_hook(Box::new(|info| {
@@ -63,6 +84,14 @@ fn main() {
                         &format!("  {} install claude-code\n", constants::NAME),
                     );
                     eprintln!();
+
+                    // Check if already installed
+                    let adapter = assistant::claude_code::ClaudeCode;
+                    if is_already_installed(&adapter) {
+                        term::status_warn("Warden is already installed for Claude Code.");
+                        term::hint("Run `warden update` to check for updates.");
+                        eprintln!();
+                    }
 
                     let sp = term::Spinner::start("Setting up directories...");
                     let _ = install::ensure_dirs();
@@ -108,6 +137,14 @@ fn main() {
                     );
                     eprintln!();
 
+                    // Check if already installed
+                    let adapter = assistant::gemini_cli::GeminiCli;
+                    if is_already_installed(&adapter) {
+                        term::status_warn("Warden is already installed for Gemini CLI.");
+                        term::hint("Run `warden update` to check for updates.");
+                        eprintln!();
+                    }
+
                     let sp = term::Spinner::start("Setting up directories...");
                     let _ = install::ensure_dirs();
                     let _ = install::install_binary();
@@ -150,6 +187,24 @@ fn main() {
             }
         }
 
+        "update" => {
+            let flag = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match flag {
+                "--apply" => install::update::run_apply(),
+                "--check" | "" => install::update::run_check(),
+                _ => {
+                    install::term::print_colored(
+                        install::term::WARN,
+                        &format!("  Unknown flag: {}. Use --check or --apply.\n", flag),
+                    );
+                }
+            }
+        }
+
+        "doctor" => {
+            install::update::run_doctor();
+        }
+
         // ── Config commands ──
         "config" => {
             let action = args.get(2).map(|s| s.as_str()).unwrap_or("list");
@@ -180,12 +235,15 @@ fn main() {
                         get_config_value(&config_path, key);
                     }
                 }
-                _ => eprintln!("Usage: {} config <list|get|set|path>", constants::NAME),
+                "schema" => {
+                    print!("{}", include_str!("../schemas/config.schema.json"));
+                }
+                _ => eprintln!("Usage: {} config <list|get|set|path|schema>", constants::NAME),
             }
         }
 
         // ── No-stdin subcommands ──
-        "describe" => handlers::describe::run(),
+        "describe" => handlers::describe::run(&args[1..]),
         "debug-explain" => {
             let target = args.get(2).map(|s| s.as_str()).unwrap_or("");
             if target.is_empty() {
@@ -197,14 +255,19 @@ fn main() {
         "debug-explain-session" => handlers::explain::explain_session(),
         "project-dir" => println!("{}", common::project_dir().display()),
         "rules" => {
-            let r = &*rules::RULES;
-            let out = serde_json::json!({
-                "safety": r.safety_pairs.len(),
-                "substitutions": r.substitutions_pairs.len(),
-                "advisories": r.advisories_pairs.len(),
-                "auto_allow": r.auto_allow_patterns.len(),
-            });
-            println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+            let action = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if action == "schema" {
+                print!("{}", include_str!("../schemas/rules.schema.json"));
+            } else {
+                let r = &*rules::RULES;
+                let out = serde_json::json!({
+                    "safety": r.safety_pairs.len(),
+                    "substitutions": r.substitutions_pairs.len(),
+                    "advisories": r.advisories_pairs.len(),
+                    "auto_allow": r.auto_allow_patterns.len(),
+                });
+                println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+            }
         }
         "debug-restrictions" => {
             let action = args.get(2).map(|s| s.as_str()).unwrap_or("");
@@ -295,6 +358,56 @@ fn main() {
             }
         }
 
+        // ── Clean command aliases (map to debug-* handlers) ──
+        "explain" => {
+            let target = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if target.is_empty() {
+                eprintln!("Usage: {} explain <rule-id>", constants::NAME);
+            } else {
+                handlers::explain::explain_rule(target);
+            }
+        }
+        "explain-session" => handlers::explain::explain_session(),
+        "stats" => print!("{}", handlers::learning::format_stats()),
+        "scorecard" => scorecard::run(),
+        "replay" => handlers::replay::run(&args[2..]),
+        "tui" => {
+            if let Err(e) = handlers::tui::run() {
+                eprintln!("TUI error: {}", e);
+                process::exit(1);
+            }
+        }
+        "export" | "export-sessions" => handlers::export_sessions::run(&args[2..]),
+        "restrictions" => {
+            // Forward to debug-restrictions handler
+            let action = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            match action {
+                "enable" => {
+                    let id = args.get(3).map(|s| s.as_str()).unwrap_or("");
+                    if !id.is_empty() { toggle_restriction(id, false); }
+                }
+                "disable" => {
+                    let id = args.get(3).map(|s| s.as_str()).unwrap_or("");
+                    if !id.is_empty() { toggle_restriction(id, true); }
+                }
+                _ => config::restrictions::run(&args[2..]),
+            }
+        }
+        "daemon-status" => {
+            if let Some(resp) = ipc::try_daemon("daemon-status", "") {
+                println!("{}", resp.stdout);
+            } else {
+                eprintln!("Daemon not running");
+            }
+        }
+        "daemon-stop" => {
+            if let Some(resp) = ipc::try_daemon("shutdown", "") {
+                if resp.exit_code == 0 { eprintln!("Daemon stopped"); }
+            } else {
+                eprintln!("Daemon not running");
+            }
+        }
+
         // ── Hook subcommands (JSON stdin) ──
         _ if is_hook_subcmd(subcmd) => {
             // Set per-project CWD
@@ -334,7 +447,29 @@ fn main() {
 
         _ => {
             if !subcmd.is_empty() {
-                eprintln!("Unknown command: {}", subcmd);
+                use install::term;
+                eprintln!();
+                term::print_colored(term::ERROR, &format!("  Unknown command: {}\n", subcmd));
+
+                // Find closest match
+                let mut best = ("", usize::MAX);
+                for &cmd in USER_COMMANDS {
+                    let dist = levenshtein(subcmd, cmd);
+                    if dist < best.1 {
+                        best = (cmd, dist);
+                    }
+                }
+                if best.1 <= 3 && !best.0.is_empty() {
+                    term::print_colored(term::DIM, "  Did you mean ");
+                    term::print_bold(term::TEXT, best.0);
+                    term::print_colored(term::DIM, "?\n");
+                }
+                eprintln!();
+                term::hint(&format!(
+                    "Run `{} --help` for available commands.",
+                    constants::NAME
+                ));
+                eprintln!();
             } else {
                 print_help();
             }
@@ -384,20 +519,81 @@ fn install_assistant<A: assistant::Assistant + Default>() {
         serde_json::json!({})
     };
 
-    // Backup existing settings if they have hooks
-    if settings.get("hooks").is_some() {
+    // Backup existing settings before any modification
+    if settings_path.exists() {
         let backup_path = settings_path.with_extension("json.bak");
         let _ = std::fs::copy(&settings_path, &backup_path);
     }
 
-    // Merge: replace hooks section, keep everything else
-    if let Some(hooks) = hooks_value.get("hooks") {
-        settings["hooks"] = hooks.clone();
+    // Merge hooks: update only Warden-owned entries, preserve non-Warden hooks
+    if let Some(new_hooks) = hooks_value.get("hooks").and_then(|h| h.as_object()) {
+        let existing_hooks = settings
+            .get("hooks")
+            .and_then(|h| h.as_object())
+            .cloned()
+            .unwrap_or_default();
+
+        let mut merged = serde_json::Map::new();
+
+        // For each event type in the new Warden config
+        for (event, new_entries) in new_hooks {
+            let mut event_hooks: Vec<serde_json::Value> = Vec::new();
+
+            // Keep non-Warden hooks from existing config for this event
+            if let Some(existing_entries) = existing_hooks.get(event).and_then(|e| e.as_array()) {
+                for entry in existing_entries {
+                    if !is_warden_hook(entry) {
+                        event_hooks.push(entry.clone());
+                    }
+                }
+            }
+
+            // Add all Warden hooks from the new config
+            if let Some(new_arr) = new_entries.as_array() {
+                for entry in new_arr {
+                    event_hooks.push(entry.clone());
+                }
+            }
+
+            merged.insert(event.clone(), serde_json::Value::Array(event_hooks));
+        }
+
+        // Preserve event types that exist in settings but not in Warden's config
+        for (event, entries) in &existing_hooks {
+            if !merged.contains_key(event) {
+                merged.insert(event.clone(), entries.clone());
+            }
+        }
+
+        settings["hooks"] = serde_json::Value::Object(merged);
     }
 
     if let Ok(output) = serde_json::to_string_pretty(&settings) {
         let _ = std::fs::write(&settings_path, &output);
     }
+}
+
+/// Check if a hook entry is owned by Warden (command contains warden/warden-relay)
+fn is_warden_hook(entry: &serde_json::Value) -> bool {
+    // Check nested hooks array: { matcher, hooks: [{ type, command }] }
+    if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
+        for hook in hooks {
+            if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
+                let cmd_lower = cmd.to_lowercase();
+                if cmd_lower.contains("warden") {
+                    return true;
+                }
+            }
+        }
+    }
+    // Also check top-level command (Gemini CLI format)
+    if let Some(cmd) = entry.get("command").and_then(|c| c.as_str()) {
+        let cmd_lower = cmd.to_lowercase();
+        if cmd_lower.contains("warden") {
+            return true;
+        }
+    }
+    false
 }
 
 /// Install the relay binary next to warden.exe
@@ -666,6 +862,93 @@ fn get_config_value(path: &std::path::Path, key: &str) {
     eprintln!("{}: not set", key);
 }
 
+/// Check if warden hooks are already present in an assistant's settings file.
+fn is_already_installed(adapter: &dyn assistant::Assistant) -> bool {
+    let settings_path = adapter.settings_path();
+    let content = match std::fs::read_to_string(&settings_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let settings: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    // Check if any hook command contains "warden"
+    if let Some(hooks) = settings.get("hooks") {
+        let hooks_str = hooks.to_string();
+        return hooks_str.contains("warden");
+    }
+    false
+}
+
+/// Check GitHub releases for the latest version. Returns Some("vX.Y.Z") or None.
+fn check_latest_version() -> Option<String> {
+    // Try PowerShell on Windows, curl elsewhere
+    let output = if cfg!(windows) {
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "(Invoke-RestMethod -Uri 'https://api.github.com/repos/ekud12/warden/releases/latest' -Headers @{'User-Agent'='warden'}).tag_name",
+            ])
+            .output()
+            .ok()?
+    } else {
+        std::process::Command::new("curl")
+            .args([
+                "-s",
+                "-H",
+                "User-Agent: warden",
+                "https://api.github.com/repos/ekud12/warden/releases/latest",
+            ])
+            .output()
+            .ok()?
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() || !output.status.success() {
+        return None;
+    }
+
+    if cfg!(windows) {
+        // PowerShell already extracted tag_name
+        if stdout.starts_with('v')
+            || stdout
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
+        {
+            Some(stdout)
+        } else {
+            None
+        }
+    } else {
+        // Parse JSON from curl output
+        let parsed: serde_json::Value = serde_json::from_str(&stdout).ok()?;
+        parsed
+            .get("tag_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    }
+}
+
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a = a.as_bytes();
+    let b = b.as_bytes();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    let mut curr = vec![0; b.len() + 1];
+    for i in 1..=a.len() {
+        curr[0] = i;
+        for j in 1..=b.len() {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b.len()]
+}
+
 fn print_help() {
     use install::term;
 
@@ -684,14 +967,36 @@ fn print_help() {
     term::println_colored(term::DIM, "Interactive setup wizard");
     term::print_colored(term::TEXT, "    install <assistant>   ");
     term::println_colored(term::DIM, "Configure hooks (claude-code, gemini-cli)");
+    term::print_colored(term::TEXT, "    update                ");
+    term::println_colored(term::DIM, "Check for updates (--apply to upgrade)");
     term::print_colored(term::TEXT, "    uninstall             ");
     term::println_colored(term::DIM, "Remove hooks, binary, and config");
     term::print_colored(term::TEXT, "    config                ");
     term::println_colored(term::DIM, "View or modify configuration");
     term::print_colored(term::TEXT, "    describe              ");
-    term::println_colored(term::DIM, "Show active rules and restrictions");
+    term::println_colored(term::DIM, "Show active user overrides (--all for full dump)");
+    term::print_colored(term::TEXT, "    doctor                ");
+    term::println_colored(term::DIM, "Verify installation health");
     term::print_colored(term::TEXT, "    version               ");
     term::println_colored(term::DIM, "Print version");
+    eprintln!();
+    term::print_bold(term::TEXT, "  DIAGNOSTICS\n");
+    term::print_colored(term::TEXT, "    explain <rule>        ");
+    term::println_colored(term::DIM, "Why a rule fired, with context");
+    term::print_colored(term::TEXT, "    stats                 ");
+    term::println_colored(term::DIM, "Learning and analytics data");
+    term::print_colored(term::TEXT, "    scorecard             ");
+    term::println_colored(term::DIM, "Session quality scorecard");
+    term::print_colored(term::TEXT, "    replay                ");
+    term::println_colored(term::DIM, "Replay a past session");
+    term::print_colored(term::TEXT, "    tui                   ");
+    term::println_colored(term::DIM, "Interactive terminal dashboard");
+    term::print_colored(term::TEXT, "    export                ");
+    term::println_colored(term::DIM, "Export session data");
+    term::print_colored(term::TEXT, "    daemon-status         ");
+    term::println_colored(term::DIM, "Check daemon health");
+    term::print_colored(term::TEXT, "    daemon-stop           ");
+    term::println_colored(term::DIM, "Stop background daemon");
     eprintln!();
     term::print_bold(term::TEXT, "  GETTING STARTED\n");
     term::print_colored(

@@ -15,6 +15,7 @@ pub mod path;
 pub mod term;
 pub mod tools;
 pub mod uninstall;
+pub mod update;
 pub mod wizard;
 
 use crate::constants;

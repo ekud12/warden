@@ -1,6 +1,6 @@
 [package]
 name = "warden-ai"
-version = "1.0.2"
+version = "1.1.0"
 edition = "2024"
 description = "Runtime control layer for AI coding agents: policy enforcement, drift reduction, and context efficiency"
 license = "MIT"
@@ -28,6 +28,7 @@ smallvec = { version = "1", features = ["serde"] }
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",
+    "Win32_System_Console",
     "Win32_System_IO",
     "Win32_System_Threading",
     "Win32_System_Pipes",

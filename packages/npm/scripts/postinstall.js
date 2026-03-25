@@ -86,24 +86,24 @@ async function main() {
   }
 }
 
-function download(url, dest) {
+function download(url, dest, redirects = 0) {
+  if (redirects > 10) return Promise.reject(new Error("Too many redirects"));
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    const request = (urlStr) => {
-      https.get(urlStr, (response) => {
-        if (response.statusCode === 302 || response.statusCode === 301) {
-          request(response.headers.location);
-          return;
-        }
-        if (response.statusCode !== 200) {
-          reject(new Error(`HTTP ${response.statusCode}`));
-          return;
-        }
-        response.pipe(file);
-        file.on("finish", () => { file.close(); resolve(); });
-      }).on("error", reject);
-    };
-    request(url);
+    const proto = url.startsWith("https") ? https : require("http");
+    proto.get(url, (response) => {
+      if (response.statusCode === 301 || response.statusCode === 302) {
+        response.resume(); // drain the response
+        return resolve(download(response.headers.location, dest, redirects + 1));
+      }
+      if (response.statusCode !== 200) {
+        response.resume();
+        return reject(new Error(`HTTP ${response.statusCode} for ${url}`));
+      }
+      const file = fs.createWriteStream(dest);
+      response.pipe(file);
+      file.on("finish", () => { file.close(); resolve(); });
+      file.on("error", (e) => { fs.unlinkSync(dest); reject(e); });
+    }).on("error", reject);
   });
 }
 

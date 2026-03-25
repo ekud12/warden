@@ -86,8 +86,9 @@ jobs:
 
       - name: Create release and upload assets
         run: |
+          FILES=$(ls warden-* checksums-sha256.txt | sort -u)
           gh release create "${{ github.ref_name }}" \
-            warden-* warden-relay-* checksums-sha256.txt \
+            $FILES \
             --title "${{ github.ref_name }}" \
             --generate-notes
         env:

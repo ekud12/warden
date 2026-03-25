@@ -54,9 +54,7 @@ struct Thresholds {
 fn get_thresholds() -> Thresholds {
     let state = common::read_session_state();
 
-    // TODO: Re-enable adaptive truncation when adaptation module is ported.
-    // Was: state.adaptive.params.truncation_max_lines
-    let adapted: usize = 0;
+    let adapted = state.adaptive.params.truncation_max_lines;
 
     // Use adapted max_lines if available, else fall back to turn-based defaults
     let max_lines = if adapted > 0 {
@@ -115,6 +113,9 @@ pub fn run() {
             Err(_) => break,
         }
     }
+
+    // Error cluster compression: group similar errors before filtering
+    let lines = cluster_errors(lines);
 
     match mode.as_str() {
         "test" => filter_test(&lines, &mut out),
@@ -441,6 +442,66 @@ fn filter_smart(lines: &[String], out: &mut impl Write, max_lines: usize) {
     }
 
     record_savings(lines.len(), max_lines);
+}
+
+/// Error cluster compression: group similar error lines by file + error code.
+/// If a cluster has 3+ entries, collapse to a summary + first/last occurrence.
+/// This reduces noise from large builds without hiding the underlying issue.
+fn cluster_errors(lines: Vec<String>) -> Vec<String> {
+    static ERROR_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^(.+?):(\d+)(?::\d+)?:\s*(error|warning)(?:\[([A-Z]\d+)\])?:\s*(.+)").unwrap()
+    });
+
+    // Count errors per file
+    let mut file_counts: std::collections::HashMap<String, Vec<usize>> = std::collections::HashMap::new();
+    for (i, line) in lines.iter().enumerate() {
+        if let Some(caps) = ERROR_RE.captures(line) {
+            let file = caps.get(1).map_or("", |m| m.as_str()).to_string();
+            file_counts.entry(file).or_default().push(i);
+        }
+    }
+
+    // If no clusters of 3+, return original
+    if !file_counts.values().any(|indices| indices.len() >= 3) {
+        return lines;
+    }
+
+    let mut result = Vec::with_capacity(lines.len());
+    let mut skip_indices: HashSet<usize> = HashSet::new();
+
+    for (file, indices) in &file_counts {
+        if indices.len() >= 3 {
+            // Keep first and last occurrence, collapse the middle
+            let first = indices[0];
+            let last = indices[indices.len() - 1];
+            for &idx in &indices[1..indices.len() - 1] {
+                skip_indices.insert(idx);
+            }
+            // Insert cluster summary after the first occurrence
+            // (handled inline below)
+            let _ = (file, first, last); // used for context only
+        }
+    }
+
+    let mut cluster_summaries_inserted: HashSet<String> = HashSet::new();
+    for (i, line) in lines.iter().enumerate() {
+        if skip_indices.contains(&i) {
+            // Check if we need to insert a cluster summary here
+            if let Some(caps) = ERROR_RE.captures(line) {
+                let file = caps.get(1).map_or("", |m| m.as_str()).to_string();
+                if let Some(indices) = file_counts.get(&file)
+                    && indices.len() >= 3 && indices[0] < i && !cluster_summaries_inserted.contains(&file) {
+                        let severity = caps.get(3).map_or("error", |m| m.as_str());
+                        result.push(format!("  ... [{} more {}s in {}]", indices.len() - 2, severity, file));
+                        cluster_summaries_inserted.insert(file);
+                    }
+            }
+            continue;
+        }
+        result.push(line.clone());
+    }
+
+    result
 }
 
 /// Record truncation savings — best-effort direct write.

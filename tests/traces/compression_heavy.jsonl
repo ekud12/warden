@@ -1,0 +1,19 @@
+{"type":"read","detail":"Cargo.toml","turn":1}
+{"type":"edit","detail":"src/lib.rs","turn":2}
+{"type":"allow","detail":"cargo test","turn":3}
+{"type":"compression","detail":"cargo test output 4200→50 lines","turn":3}
+{"type":"milestone","detail":"cargo test passed (262 tests)","turn":3}
+{"type":"edit","detail":"src/lib.rs","turn":4}
+{"type":"allow","detail":"cargo test","turn":5}
+{"type":"compression","detail":"cargo test output 4200→80 lines","turn":5}
+{"type":"error","detail":"1 test failed: test_edge_case","turn":5}
+{"type":"edit","detail":"src/lib.rs","turn":6}
+{"type":"allow","detail":"cargo test","turn":7}
+{"type":"compression","detail":"cargo test output 4200→50 lines","turn":7}
+{"type":"milestone","detail":"cargo test passed (262 tests)","turn":7}
+{"type":"allow","detail":"npm install","turn":8}
+{"type":"compression","detail":"npm install output 500→20 lines","turn":8}
+{"type":"milestone","detail":"npm install complete","turn":8}
+{"type":"allow","detail":"cargo build --release","turn":9}
+{"type":"compression","detail":"cargo build output 150→15 lines","turn":9}
+{"type":"milestone","detail":"cargo build passed","turn":9}

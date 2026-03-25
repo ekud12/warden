@@ -6,10 +6,31 @@ use crate::common;
 pub fn update_edit_state(file_path: &str) {
     let mut state = common::read_session_state();
 
+    // Premature execution detection: editing before enough evidence gathered
+    if state.turn <= 5 && state.files_read.len() < 3 && state.files_edited.is_empty() {
+        common::log("intelligence", &format!(
+            "Early editing: only {} files examined before first edit at turn {}",
+            state.files_read.len(), state.turn
+        ));
+    }
+
     // Reset explore count — editing means committing to an approach
     state.explore_count = 0;
+    state.reads_since_edit = 0;
     state.last_edit_turn = state.turn;
     state.last_edited_file = file_path.to_string();
+
+    // Verification debt: increment edits since last build/test
+    state.edits_since_verification += 1;
+
+    // Infer subgoal from file being edited
+    let module = file_path
+        .replace('\\', "/")
+        .rsplit('/')
+        .nth(1)
+        .unwrap_or("unknown")
+        .to_string();
+    state.goal_stack.subgoal = module;
 
     // Track edited file (dedup)
     let short_path = shorten_path(file_path);

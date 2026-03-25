@@ -51,3 +51,6 @@ deploy.ps1
 
 # Claude Code (session-specific)
 .claude/
+
+# Local planning / vision docs
+.dream/

@@ -19,9 +19,7 @@ pub const DAEMON_NAME: &str = "warden-daemon";
 /// Config file name inside home dir
 pub const CONFIG_FILE: &str = "config.toml";
 
-/// Default rules file names
-pub const CORE_RULES: &str = "core.toml";
-pub const COMMUNITY_RULES: &str = "community.toml";
+/// Personal rules template filename (used by install wizard)
 pub const PERSONAL_RULES: &str = "personal.toml";
 
 /// Session state file per project

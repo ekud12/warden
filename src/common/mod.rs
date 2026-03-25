@@ -4,9 +4,11 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 mod io;
+pub mod events;
 mod output;
 pub mod sanitize;
 pub mod scratch;
+pub mod storage;
 mod session;
 pub mod shell_parse;
 pub mod subprocess;

@@ -349,6 +349,19 @@ pub fn add_session_note_ext(note_type: &str, detail: &str, data: Option<&serde_j
         }
         let _ = writeln!(f, "{}", entry);
     }
+
+    // Also persist to redb events table when available
+    if super::storage::is_available() {
+        let mut entry = serde_json::json!({
+            "ts": now_iso(),
+            "type": note_type,
+            "detail": detail,
+        });
+        if let Some(d) = data {
+            entry["data"] = d.clone();
+        }
+        let _ = super::storage::append_event(entry.to_string().as_bytes());
+    }
 }
 
 /// Read the last N bytes from a file (for dedup checks)

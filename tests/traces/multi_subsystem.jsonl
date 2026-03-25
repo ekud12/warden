@@ -1,0 +1,23 @@
+{"type":"read","detail":"src/main.rs","turn":1}
+{"type":"read","detail":"src/handlers/auth.rs","turn":2}
+{"type":"edit","detail":"src/handlers/auth.rs","turn":3}
+{"type":"read","detail":"src/models/user.rs","turn":4}
+{"type":"edit","detail":"src/models/user.rs","turn":5}
+{"type":"read","detail":"src/db/migrations/001.sql","turn":6}
+{"type":"edit","detail":"src/db/migrations/001.sql","turn":7}
+{"type":"read","detail":"tests/integration/auth_test.rs","turn":8}
+{"type":"edit","detail":"tests/integration/auth_test.rs","turn":9}
+{"type":"milestone","detail":"cargo test passed","turn":10}
+{"type":"read","detail":"frontend/src/App.tsx","turn":11}
+{"type":"advisory","detail":"focus Subsystem switch: backend→frontend","turn":11}
+{"type":"read","detail":"frontend/src/hooks/useAuth.ts","turn":12}
+{"type":"edit","detail":"frontend/src/hooks/useAuth.ts","turn":13}
+{"type":"read","detail":"frontend/src/components/Login.tsx","turn":14}
+{"type":"edit","detail":"frontend/src/components/Login.tsx","turn":15}
+{"type":"read","detail":"docs/api.md","turn":16}
+{"type":"advisory","detail":"focus Focus: 35/100 — 5 dirs, 3 switches","turn":16}
+{"type":"edit","detail":"docs/api.md","turn":17}
+{"type":"read","detail":"infra/docker-compose.yml","turn":18}
+{"type":"advisory","detail":"focus Subsystem switch: docs→infra","turn":18}
+{"type":"milestone","detail":"docker compose up passed","turn":19}
+{"type":"advisory","detail":"verification 5 edits since last verification","turn":20}

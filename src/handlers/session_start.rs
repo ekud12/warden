@@ -1,17 +1,12 @@
-// ─── session_start — SessionStart hook for context injection ──────────────────
+// ─── session_start — SessionStart hook ────────────────────────────────────────
 //
-// Runs once at session start. Loads and injects additionalContext:
+// Runs once at session start. Injects ONLY tool enforcement rules.
+// All other context (aidex note, session activity, cross-project insights,
+// git warnings, provider output) is stored silently in redb — available
+// via MCP session_status on demand, never injected.
 //
-//   1. Tool enforcement rules from ~/.claude/rules/tool-enforcement.md
-//   2. Aidex session memory from .aidex/note.md (if project has .aidex/)
-//   3. Recent session activity (last 10 entries from session-notes.jsonl)
-//   4. Justfile reminder (if Justfile exists in cwd)
-//
-// The rules injection ensures NEVER/ALWAYS tool policies are present in
-// context from the very start. PreCompact re-injects them for survival.
-//
-// Re-init guard: if turn > 0 (mid-session re-fire after deploy/daemon restart),
-// skips state reset and heavy context, only re-injects rules.
+// Re-init guard: if turn > 0 (mid-session re-fire), skips state reset,
+// only re-injects rules.
 // ──────────────────────────────────────────────────────────────────────────────
 
 use crate::common;
@@ -19,12 +14,29 @@ use crate::constants;
 use crate::handlers::cross_session;
 use crate::handlers::learning;
 use std::fs;
-use std::path::Path;
 
-/// SessionStart hook — context loader
-/// Reads aidex_note + last session entries, returns as additionalContext
+/// SessionStart hook — rules-only injection
+/// All non-rules context stored silently in redb
 pub fn run(raw: &str) {
     let _input = common::parse_input(raw);
+
+    // Open redb storage for this project (creates DB + tables on first run)
+    let proj_dir = common::project_dir();
+    common::storage::open_db(&proj_dir);
+
+    // Migrate legacy JSON files to redb on first run
+    let legacy_state = proj_dir.join("session-state.json");
+    if legacy_state.exists() {
+        common::storage::migrate_from_json(&proj_dir);
+        // Rename legacy files to .bak
+        for name in ["session-state.json", "stats.json", "rule-effectiveness.json", "session-notes.jsonl"] {
+            let src = proj_dir.join(name);
+            if src.exists() {
+                let _ = fs::rename(&src, src.with_extension(format!("{}.bak", src.extension().unwrap_or_default().to_str().unwrap_or(""))));
+            }
+        }
+        common::log("session-start", "Migrated legacy JSON files to redb");
+    }
 
     let existing = common::read_session_state();
     let is_reinit = existing.turn > 0;
@@ -39,8 +51,26 @@ pub fn run(raw: &str) {
         cleanup_stale_tmp();
     }
 
-    // TODO: Auto-start daemon if not running (ipc module not yet ported)
-    // auto_start_daemon();
+    // A.9: Auto-detect project type + store in session state
+    if !is_reinit {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let project_type = detect_project_type(&cwd);
+        let mut state = common::read_session_state();
+        state.project_type = project_type.to_string();
+        common::write_session_state(&state);
+        common::log("session-start", &format!("Project type: {}", project_type));
+    }
+
+    // A.6: Self-healing daemon — auto-start if not running
+    if std::env::var("WARDEN_NO_DAEMON").is_err() && !crate::ipc::daemon_is_running() {
+        // Clean stale PID if process is dead
+        if let Some(pid) = crate::ipc::read_pid()
+            && (!crate::ipc::pid_is_alive(pid) || !crate::ipc::pid_is_warden(pid)) {
+                crate::ipc::remove_pid_file();
+            }
+        crate::ipc::spawn_daemon();
+        common::log("session-start", "Auto-started daemon");
+    }
 
     // Persist WARDEN_HOME to CLAUDE_ENV_FILE if available (makes path available to Bash calls)
     persist_warden_home();
@@ -68,84 +98,43 @@ pub fn run(raw: &str) {
     }
 
     // ── Full init below (fresh session only) ──
+    // Store context silently in redb (available via MCP on demand).
+    // ONLY tool enforcement rules get injected into agent context.
 
-    // Check for .aidex directory and note
     let cwd = std::env::current_dir().unwrap_or_default();
-    let aidex_dir = cwd.join(".aidex");
 
-    if aidex_dir.is_dir() {
-        // Read aidex note if available
-        let note_path = aidex_dir.join("note.md");
-        if let Ok(content) = fs::read_to_string(&note_path)
-            && !content.trim().is_empty() {
-                context_parts.push(format!(
-                    "## Session Memory (from aidex_note)\n{}",
-                    content.trim()
-                ));
-            }
-    }
-
-    // Read last 10 entries from session-notes.jsonl (per-project)
-    let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
-    if session_path.exists() {
-        let tail = common::read_tail(&session_path, 4096);
-        let lines: Vec<&str> = tail.lines().collect();
-        let recent: Vec<&str> = if lines.len() > 10 {
-            lines[lines.len() - 10..].to_vec()
-        } else {
-            lines
-        };
-
-        if !recent.is_empty() {
-            let mut summary = String::from("## Recent Session Activity\n");
-            for line in &recent {
-                if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-                    let note_type = entry
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
-                    let detail = entry
-                        .get("detail")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
-                    summary.push_str(&format!("- [{}] {}\n", note_type, detail));
-                }
-            }
-            context_parts.push(summary);
+    // Aidex note → redb (silent)
+    let aidex_note = cwd.join(".aidex").join("note.md");
+    if let Ok(content) = fs::read_to_string(&aidex_note)
+        && !content.trim().is_empty() {
+            let _ = common::storage::write_json("dream", "aidex_note", &content.trim().to_string());
         }
-    }
 
-    // Cross-session recurring error detection
+    // Cross-session recurring errors → redb (silent)
+    let session_path = common::project_dir().join("session-notes.jsonl");
     if let Some(recurring) = cross_session::detect_recurring(&session_path) {
-        context_parts.push(recurring);
+        let _ = common::storage::write_json("dream", "cross_session_recurring", &recurring);
     }
 
-    // Cross-project learning insights
+    // Cross-project learning insights → redb (silent)
     if let Some(insights) = learning::get_insights() {
-        context_parts.push(insights);
+        let _ = common::storage::write_json("dream", "cross_project_insights", &insights);
     }
 
-    // Git branch safety check
+    // Git branch safety → redb (silent)
     let git_warnings = crate::handlers::git_guardian::check_branch_state();
-    for warning in &git_warnings {
-        context_parts.push(warning.clone());
+    if !git_warnings.is_empty() {
+        let _ = common::storage::write_json("dream", "git_warnings", &git_warnings);
     }
 
-    // Progressive onboarding: track session count, limit features for new users
-    let session_count = increment_session_count();
-    if session_count <= 3 {
-        context_parts.push(format!(
-            "{} session #{} — safety rules active. Substitutions + analytics unlock after 3 sessions. \
-             Skip: `{} config set onboarding.level full`",
-            constants::NAME, session_count, constants::NAME
-        ));
-    }
+    // Session counter (tracked, no onboarding injection)
+    let _session_count = increment_session_count();
 
-    // Custom context providers: run scripts in ~/.warden/providers/
+    // Custom providers → redb (silent)
     let providers_dir = common::hooks_dir().join("providers");
     if providers_dir.is_dir()
         && let Ok(entries) = fs::read_dir(&providers_dir) {
+            let mut provider_outputs: Vec<String> = Vec::new();
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_file()
@@ -153,22 +142,20 @@ pub fn run(raw: &str) {
                         path.to_str().unwrap_or(""), &[], std::time::Duration::from_secs(2),
                     )
                     && !output.stdout.trim().is_empty() {
-                        context_parts.push(output.stdout.trim().to_string());
+                        provider_outputs.push(output.stdout.trim().to_string());
                     }
+            }
+            if !provider_outputs.is_empty() {
+                let _ = common::storage::write_json("dream", "provider_outputs", &provider_outputs);
             }
         }
 
-    // Check for Justfile
-    if Path::new("Justfile").exists() || Path::new("justfile").exists() {
-        context_parts
-            .push("Justfile detected: use `just <recipe>` for all build/test/lint commands.".to_string());
-    }
-
+    // Inject ONLY tool enforcement rules
     if !context_parts.is_empty() {
         common::additional_context(&context_parts.join("\n\n"));
     }
 
-    common::log("session-start", "Context loaded");
+    common::log("session-start", "Context loaded (rules-only)");
 }
 
 /// Write WARDEN_HOME to CLAUDE_ENV_FILE so it's available to all Bash calls in the session.
@@ -216,4 +203,27 @@ fn cleanup_stale_tmp() {
             }
         }
     }
+}
+
+/// Auto-detect project type from workspace files
+fn detect_project_type(cwd: &std::path::Path) -> &'static str {
+    if cwd.join("Cargo.toml").exists() { "rust" }
+    else if cwd.join("package.json").exists() { "node" }
+    else if cwd.join("pyproject.toml").exists() || cwd.join("setup.py").exists() { "python" }
+    else if cwd.join("go.mod").exists() { "go" }
+    else if cwd.join("pom.xml").exists() || cwd.join("build.gradle").exists() { "java" }
+    else if has_extension(cwd, "sln") || has_extension(cwd, "csproj") { "dotnet" }
+    else if cwd.join("composer.json").exists() { "php" }
+    else if cwd.join("Gemfile").exists() { "ruby" }
+    else if cwd.join("Package.swift").exists() { "swift" }
+    else { "unknown" }
+}
+
+/// Check if any file with the given extension exists in the directory (non-recursive)
+fn has_extension(dir: &std::path::Path, ext: &str) -> bool {
+    std::fs::read_dir(dir)
+        .map(|entries| entries.flatten().any(|e| {
+            e.path().extension().map(|x| x == ext).unwrap_or(false)
+        }))
+        .unwrap_or(false)
 }

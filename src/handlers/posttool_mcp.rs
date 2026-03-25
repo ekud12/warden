@@ -99,9 +99,7 @@ pub fn run(raw: &str) {
 fn get_max_mcp_output() -> usize {
     let state = common::read_session_state();
 
-    // TODO: re-enable when adaptation ported
-    // let adapted = state.adaptive.params.mcp_output_limit;
-    let adapted: usize = 0; // TODO: use adaptive limit when available
+    let adapted = state.adaptive.params.mcp_output_limit;
 
     // Use adapted limit if available, else fall back to turn-based defaults
     if adapted > 0 {

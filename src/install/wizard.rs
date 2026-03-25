@@ -164,7 +164,8 @@ fn detect_and_configure_assistants() {
 /// Configure Claude Code hooks in ~/.claude/settings.json
 fn configure_claude_code() {
     let adapter = crate::assistant::claude_code::ClaudeCode;
-    let binary = super::bin_dir().join(if cfg!(windows) { "warden.exe" } else { "warden" });
+    let binary_name = if cfg!(windows) { "warden-relay.exe" } else { "warden" };
+    let binary = super::bin_dir().join(binary_name);
     let hooks_json = adapter.generate_hooks_config(&binary);
 
     let settings_path = dirs_home().join(".claude").join("settings.json");
@@ -194,7 +195,8 @@ fn configure_claude_code() {
 /// Configure Gemini CLI hooks
 fn configure_gemini_cli() {
     let adapter = crate::assistant::gemini_cli::GeminiCli;
-    let binary = super::bin_dir().join(if cfg!(windows) { "warden.exe" } else { "warden" });
+    let binary_name = if cfg!(windows) { "warden-relay.exe" } else { "warden" };
+    let binary = super::bin_dir().join(binary_name);
     let hooks_json = adapter.generate_hooks_config(&binary);
 
     let settings_path = dirs_home().join(".gemini").join("settings.json");

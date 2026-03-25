@@ -1,0 +1,275 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Warden mdBook Theme — Dark Techy Aesthetic
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Animated grid background ──────────────────────────────────── */
+.ayu .content {
+    position: relative;
+}
+
+.ayu #content {
+    background:
+        linear-gradient(rgba(15, 23, 42, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 23, 42, 0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+/* ── Glowing accent color ──────────────────────────────────────── */
+:root {
+    --warden-accent: #f59e0b;
+    --warden-accent-glow: rgba(245, 158, 11, 0.15);
+    --warden-cyan: #06b6d4;
+    --warden-green: #10b981;
+}
+
+/* ── Logo in sidebar with subtle glow ──────────────────────────── */
+.sidebar .sidebar-scrollbox::before {
+    content: "";
+    display: block;
+    width: 64px;
+    height: 64px;
+    margin: 1.2rem auto 0.3rem;
+    background-image: url("../assets/logo.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    filter: drop-shadow(0 0 8px var(--warden-accent-glow));
+    transition: filter 0.3s ease;
+}
+
+.sidebar .sidebar-scrollbox::before:hover {
+    filter: drop-shadow(0 0 16px var(--warden-accent));
+}
+
+.sidebar .sidebar-scrollbox::after {
+    content: "Runtime Control Layer";
+    display: block;
+    text-align: center;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    opacity: 0.4;
+    margin-bottom: 1.5rem;
+    padding: 0 1rem;
+}
+
+/* ── Sidebar styling ───────────────────────────────────────────── */
+.ayu .sidebar {
+    border-right: 1px solid rgba(245, 158, 11, 0.1);
+}
+
+.ayu .sidebar .sidebar-scrollbox {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.3) 0%, transparent 100%);
+}
+
+/* Active link glow */
+.ayu .sidebar a.active {
+    border-left: 3px solid var(--warden-accent);
+    padding-left: 0.5rem;
+    text-shadow: 0 0 10px var(--warden-accent-glow);
+}
+
+/* ── Code blocks with accent border ────────────────────────────── */
+.ayu pre {
+    border-left: 3px solid var(--warden-accent);
+    border-radius: 0 6px 6px 0;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+code {
+    font-size: 0.9em;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+pre > code {
+    font-size: 0.85em;
+}
+
+/* Inline code badge style */
+:not(pre) > code {
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+    font-size: 0.88em;
+    border: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+/* ── Tables with accent header ─────────────────────────────────── */
+table {
+    font-size: 0.9em;
+    border-collapse: collapse;
+    width: 100%;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.ayu table th {
+    font-weight: 600;
+    text-align: left;
+    border-bottom: 2px solid var(--warden-accent);
+    padding: 0.5rem 0.8rem;
+}
+
+.ayu table td {
+    padding: 0.4rem 0.8rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.ayu table tr:hover td {
+    background: rgba(245, 158, 11, 0.03);
+}
+
+/* ── Blockquotes as callout cards ──────────────────────────────── */
+blockquote {
+    border-left: 4px solid var(--warden-accent);
+    padding: 0.8rem 1.2rem;
+    margin: 1.2rem 0;
+    border-radius: 0 6px 6px 0;
+    background: rgba(245, 158, 11, 0.03);
+}
+
+/* ── Headers with subtle underline ─────────────────────────────── */
+.ayu .content h1 {
+    border-bottom: 2px solid rgba(245, 158, 11, 0.2);
+    padding-bottom: 0.3rem;
+}
+
+.ayu .content h2 {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 0.2rem;
+    margin-top: 2rem;
+}
+
+/* ── Animated typing cursor on first h1 ────────────────────────── */
+.content main > h1:first-of-type::after {
+    content: "▊";
+    animation: blink 1.2s step-start infinite;
+    color: var(--warden-accent);
+    font-weight: 300;
+    margin-left: 0.1em;
+    opacity: 0.7;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+/* ── Capability-themed callout boxes ────────────────────────────── */
+blockquote.enforce {
+    border-left-color: var(--warden-accent);
+    background: rgba(245, 158, 11, 0.05);
+}
+
+blockquote.focus {
+    border-left-color: var(--warden-cyan);
+    background: rgba(6, 182, 212, 0.05);
+}
+
+blockquote.compress {
+    border-left-color: var(--warden-green);
+    background: rgba(16, 185, 129, 0.05);
+}
+
+/* ── Three-column capability grid ──────────────────────────────── */
+.capability-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.capability-grid > div {
+    padding: 1.2rem;
+    border-radius: 6px;
+    border-top: 3px solid;
+}
+
+.capability-grid > div:nth-child(1) {
+    border-top-color: var(--warden-accent);
+    background: rgba(245, 158, 11, 0.03);
+}
+
+.capability-grid > div:nth-child(2) {
+    border-top-color: var(--warden-cyan);
+    background: rgba(6, 182, 212, 0.03);
+}
+
+.capability-grid > div:nth-child(3) {
+    border-top-color: var(--warden-green);
+    background: rgba(16, 185, 129, 0.03);
+}
+
+.capability-grid h3 {
+    margin-top: 0;
+    font-size: 1.1em;
+}
+
+/* ── Terminal example styling ──────────────────────────────────── */
+.terminal-example pre {
+    border-left: 3px solid var(--warden-accent);
+    position: relative;
+}
+
+.terminal-example pre::before {
+    content: "Terminal";
+    position: absolute;
+    top: -0.6em;
+    left: 0.8em;
+    font-size: 0.7em;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    padding: 0 0.4em;
+}
+
+/* ── Smooth page transitions ───────────────────────────────────── */
+.content main {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scrollbar styling (Chromium) ──────────────────────────────── */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(245, 158, 11, 0.3);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(245, 158, 11, 0.5);
+}
+
+/* ── Responsive: wider content on large screens ────────────────── */
+@media (min-width: 1200px) {
+    .content {
+        max-width: 920px;
+    }
+}
+
+/* ── Nav buttons glow on hover ─────────────────────────────────── */
+.ayu .nav-chapters:hover {
+    color: var(--warden-accent);
+    text-shadow: 0 0 8px var(--warden-accent-glow);
+}
+
+/* ── Search input styling ──────────────────────────────────────── */
+.ayu #searchbar {
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: 4px;
+    transition: border-color 0.2s ease;
+}
+
+.ayu #searchbar:focus {
+    border-color: var(--warden-accent);
+    box-shadow: 0 0 8px var(--warden-accent-glow);
+}

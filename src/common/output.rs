@@ -56,11 +56,12 @@ pub fn deny(event: &str, message: &str) {
     write_json(&out);
 }
 
-/// Write PreToolUse deny with restriction ID (appends opt-out instructions)
+/// Write PreToolUse deny with inline rationale (rule ID + opt-out).
+/// The agent sees the rule ID in every denial — no need to call explain.
 pub fn deny_with_id(event: &str, message: &str, restriction_id: &str) {
     let full_message = format!(
-        "{}\nTo disable: `{} restrictions disable {}`",
-        message, crate::constants::NAME, restriction_id
+        "{} [{}]\nTo disable: `{} restrictions disable {}`",
+        message, restriction_id, crate::constants::NAME, restriction_id
     );
     let out = PreToolDeny {
         hook_specific_output: PreToolDenyInner {

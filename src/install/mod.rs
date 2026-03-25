@@ -13,6 +13,7 @@
 pub mod detect;
 pub mod path;
 pub mod tools;
+pub mod uninstall;
 pub mod wizard;
 
 use crate::constants;
@@ -69,6 +70,19 @@ pub fn install_binary() -> Result<(), String> {
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = fs::set_permissions(&dest, fs::Permissions::from_mode(0o755));
+    }
+
+    // Also copy the relay binary if it exists next to the source
+    let relay_name = if cfg!(windows) { "warden-relay.exe" } else { "warden-relay" };
+    let relay_src = source.parent().unwrap_or(std::path::Path::new(".")).join(relay_name);
+    let relay_dest = dest_dir.join(relay_name);
+    if relay_src.exists() && relay_src != relay_dest {
+        let _ = fs::copy(&relay_src, &relay_dest);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&relay_dest, fs::Permissions::from_mode(0o755));
+        }
     }
 
     Ok(())

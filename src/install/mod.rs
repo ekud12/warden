@@ -12,6 +12,7 @@
 
 pub mod detect;
 pub mod path;
+pub mod term;
 pub mod tools;
 pub mod uninstall;
 pub mod wizard;

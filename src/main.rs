@@ -47,7 +47,7 @@ fn main() {
 
     match subcmd {
         // ── Management commands (no stdin) ──
-        "version" => {
+        "version" | "--version" | "-v" => {
             println!("{} {}", constants::NAME, env!("CARGO_PKG_VERSION"));
         }
         "init" => install::wizard::run(),
@@ -56,33 +56,80 @@ fn main() {
             let target = args.get(2).map(|s| s.as_str()).unwrap_or("");
             match target {
                 "claude-code" => {
+                    use install::term;
+                    eprintln!();
+                    term::print_bold(term::BRAND, &format!("  {} install claude-code\n", constants::NAME));
+                    eprintln!();
+
+                    let sp = term::Spinner::start("Setting up directories...");
                     let _ = install::ensure_dirs();
                     let _ = install::install_binary();
+                    sp.finish_ok("Directories ready");
+
+                    let sp = term::Spinner::start("Configuring hooks...");
                     install_assistant::<assistant::claude_code::ClaudeCode>();
-                    if !install::path::is_on_path()
-                        && let Ok(msg) = install::path::add_to_path()
-                    {
-                        eprintln!("{}", msg);
+                    sp.finish_ok("Claude Code hooks installed");
+
+                    if !install::path::is_on_path() {
+                        let sp = term::Spinner::start("Registering PATH...");
+                        match install::path::add_to_path() {
+                            Ok(msg) => sp.finish_ok(&msg),
+                            Err(e) => sp.finish_warn(&format!("PATH: {}", e)),
+                        }
+                    } else {
+                        term::status_ok("Already on PATH");
                     }
-                    // Pre-start daemon so first session connects instantly
+
                     if !ipc::daemon_is_running() {
+                        let sp = term::Spinner::start("Starting daemon...");
                         ipc::spawn_daemon();
-                        eprintln!("Daemon started");
+                        sp.finish_ok("Daemon started");
+                    } else {
+                        term::status_ok("Daemon already running");
                     }
+
+                    eprintln!();
+                    term::print_bold(term::SUCCESS, "  Ready! ");
+                    term::print_colored(term::DIM, "Start a Claude Code session and Warden will guard it.\n");
+                    eprintln!();
                 }
                 "gemini-cli" => {
+                    use install::term;
+                    eprintln!();
+                    term::print_bold(term::BRAND, &format!("  {} install gemini-cli\n", constants::NAME));
+                    eprintln!();
+
+                    let sp = term::Spinner::start("Setting up directories...");
                     let _ = install::ensure_dirs();
                     let _ = install::install_binary();
+                    sp.finish_ok("Directories ready");
+
+                    let sp = term::Spinner::start("Configuring hooks...");
                     install_assistant::<assistant::gemini_cli::GeminiCli>();
-                    if !install::path::is_on_path()
-                        && let Ok(msg) = install::path::add_to_path()
-                    {
-                        eprintln!("{}", msg);
+                    sp.finish_ok("Gemini CLI hooks installed");
+
+                    if !install::path::is_on_path() {
+                        let sp = term::Spinner::start("Registering PATH...");
+                        match install::path::add_to_path() {
+                            Ok(msg) => sp.finish_ok(&msg),
+                            Err(e) => sp.finish_warn(&format!("PATH: {}", e)),
+                        }
+                    } else {
+                        term::status_ok("Already on PATH");
                     }
+
                     if !ipc::daemon_is_running() {
+                        let sp = term::Spinner::start("Starting daemon...");
                         ipc::spawn_daemon();
-                        eprintln!("Daemon started");
+                        sp.finish_ok("Daemon started");
+                    } else {
+                        term::status_ok("Daemon already running");
                     }
+
+                    eprintln!();
+                    term::print_bold(term::SUCCESS, "  Ready! ");
+                    term::print_colored(term::DIM, "Start a Gemini CLI session and Warden will guard it.\n");
+                    eprintln!();
                 }
                 _ => eprintln!(
                     "Usage: {} install <claude-code|gemini-cli>",
@@ -297,8 +344,6 @@ fn read_stdin() -> String {
 
 fn install_assistant<A: assistant::Assistant + Default>() {
     let adapter = A::default();
-    // On Windows, use relay (windowless) for hook commands to prevent CMD flicker.
-    // On Unix, use warden directly (no console flash issue).
     let binary_name = if cfg!(windows) {
         "warden-relay.exe"
     } else {
@@ -310,59 +355,36 @@ fn install_assistant<A: assistant::Assistant + Default>() {
     let hooks_json = adapter.generate_hooks_config(&binary_path);
     let settings_path = adapter.settings_path();
 
-    // Parse the generated hooks config
     let hooks_value: serde_json::Value = match serde_json::from_str(&hooks_json) {
         Ok(v) => v,
-        Err(e) => {
-            eprintln!("Failed to parse generated hooks: {}", e);
-            return;
-        }
+        Err(_) => return,
     };
 
-    // Read existing settings or start fresh
     let mut settings: serde_json::Value = if settings_path.exists() {
         match std::fs::read_to_string(&settings_path) {
             Ok(content) => serde_json::from_str(&content).unwrap_or(serde_json::json!({})),
             Err(_) => serde_json::json!({}),
         }
     } else {
-        // Ensure parent dir exists
         if let Some(parent) = settings_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
         serde_json::json!({})
     };
 
-    // Backup existing settings if they have hooks (another system was installed)
+    // Backup existing settings if they have hooks
     if settings.get("hooks").is_some() {
         let backup_path = settings_path.with_extension("json.bak");
         let _ = std::fs::copy(&settings_path, &backup_path);
-        eprintln!("Backed up existing settings to {}", backup_path.display());
     }
 
-    // Merge: replace hooks section, keep everything else (permissions, etc.)
+    // Merge: replace hooks section, keep everything else
     if let Some(hooks) = hooks_value.get("hooks") {
         settings["hooks"] = hooks.clone();
     }
 
-    // Write back
-    match serde_json::to_string_pretty(&settings) {
-        Ok(output) => {
-            if std::fs::write(&settings_path, &output).is_ok() {
-                eprintln!(
-                    "Installed {} hooks into {}",
-                    adapter.name(),
-                    settings_path.display()
-                );
-            } else {
-                eprintln!("Failed to write {}", settings_path.display());
-                eprintln!("Generated config (paste manually):");
-                println!("{}", hooks_json);
-            }
-        }
-        Err(e) => {
-            eprintln!("Failed to serialize settings: {}", e);
-        }
+    if let Ok(output) = serde_json::to_string_pretty(&settings) {
+        let _ = std::fs::write(&settings_path, &output);
     }
 }
 
@@ -633,28 +655,36 @@ fn get_config_value(path: &std::path::Path, key: &str) {
 }
 
 fn print_help() {
-    eprintln!(
-        "{} v{} — AI Coding Session Guardian",
-        constants::NAME,
-        env!("CARGO_PKG_VERSION")
-    );
+    use install::term;
+
     eprintln!();
-    eprintln!("USAGE:");
-    eprintln!("  {} <command>", constants::NAME);
+    term::print_bold(term::BRAND, "  W A R D E N");
+    term::print_colored(term::DIM, &format!("  v{}\n", env!("CARGO_PKG_VERSION")));
+    term::print_colored(term::DIM, "  Runtime guardian for AI coding agents\n");
     eprintln!();
-    eprintln!("COMMANDS:");
-    eprintln!("  init                    First-run setup wizard");
-    eprintln!("  install <assistant>     Configure hooks for claude-code or gemini-cli");
-    eprintln!("  uninstall               Remove hooks, binary, and config");
-    eprintln!("  mcp                     Run as MCP server (stdio, JSON-RPC)");
-    eprintln!("  version                 Print version");
+    term::print_colored(term::ACCENT, "  ───────────────────────────────────────\n");
     eprintln!();
-    eprintln!("HOOK SUBCOMMANDS (called by AI assistants):");
-    eprintln!("  pretool-bash            Safety, substitution, advisory pipeline");
-    eprintln!("  pretool-read            Read governance (large files, dedup)");
-    eprintln!("  pretool-write           Write governance (sensitive paths, zero-trace)");
-    eprintln!("  session-start           Session initialization + context injection");
-    eprintln!("  session-end             Session summary + analytics update");
-    eprintln!("  userprompt-context      Per-turn telemetry + adaptation + advisories");
-    eprintln!("  ...and more (see docs)");
+    term::print_bold(term::TEXT, "  USAGE\n");
+    term::print_colored(term::DIM, &format!("    {} <command>\n", constants::NAME));
+    eprintln!();
+    term::print_bold(term::TEXT, "  COMMANDS\n");
+    term::print_colored(term::TEXT, "    init                  ");
+    term::println_colored(term::DIM, "Interactive setup wizard");
+    term::print_colored(term::TEXT, "    install <assistant>   ");
+    term::println_colored(term::DIM, "Configure hooks (claude-code, gemini-cli)");
+    term::print_colored(term::TEXT, "    uninstall             ");
+    term::println_colored(term::DIM, "Remove hooks, binary, and config");
+    term::print_colored(term::TEXT, "    config                ");
+    term::println_colored(term::DIM, "View or modify configuration");
+    term::print_colored(term::TEXT, "    describe              ");
+    term::println_colored(term::DIM, "Show active rules and restrictions");
+    term::print_colored(term::TEXT, "    version               ");
+    term::println_colored(term::DIM, "Print version");
+    eprintln!();
+    term::print_bold(term::TEXT, "  GETTING STARTED\n");
+    term::print_colored(term::DIM, "    1. warden init              Run the setup wizard\n");
+    term::print_colored(term::DIM, "    2. Start a coding session    Warden activates automatically\n");
+    eprintln!();
+    term::print_colored(term::DIM, "  https://github.com/ekud12/warden\n");
+    eprintln!();
 }

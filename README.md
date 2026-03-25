@@ -10,13 +10,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ekud12/warden/releases"><img src="https://img.shields.io/badge/v1.0.0-blue?style=flat-square" alt="Version" /></a>
+  <a href="https://github.com/ekud12/warden/releases"><img src="https://img.shields.io/badge/v1.1.1-blue?style=flat-square" alt="Version" /></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust%202024-orange?style=flat-square&logo=rust" alt="Rust" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" /></a>
-  <img src="https://img.shields.io/badge/298_rules-brightgreen?style=flat-square" alt="Rules" />
-  <img src="https://img.shields.io/badge/149_tests-brightgreen?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/2.8MB_binary-lightgrey?style=flat-square" alt="Binary" />
-  <img src="https://img.shields.io/badge/~2ms_latency-lightgrey?style=flat-square" alt="Latency" />
+  <img src="https://img.shields.io/badge/+300_rules-brightgreen?style=flat-square" alt="Rules" />
+  <img src="https://img.shields.io/badge/182_tests-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/3.7MB_binary-lightgrey?style=flat-square" alt="Binary" />
+  <img src="https://img.shields.io/badge/<2ms_latency-lightgrey?style=flat-square" alt="Latency" />
   <img src="https://img.shields.io/badge/win%20%7C%20mac%20%7C%20linux-lightgrey?style=flat-square" alt="Platform" />
 </p>
 
@@ -24,10 +24,11 @@
   <img src="https://img.shields.io/badge/Claude_Code-supported-8A2BE2?style=flat-square" alt="Claude Code" />
   <img src="https://img.shields.io/badge/Gemini_CLI-supported-4285F4?style=flat-square" alt="Gemini CLI" />
   <img src="https://img.shields.io/badge/MCP_Server-6_tools-FF6B35?style=flat-square" alt="MCP" />
+  <img src="https://img.shields.io/badge/7_advisory_signals-informational?style=flat-square" alt="Advisory Signals" />
   <img src="https://img.shields.io/badge/redb-ACID_storage-333?style=flat-square" alt="Storage" />
 </p>
 
-> Warden is the runtime control layer for AI coding agents. It intercepts tool use, enforces policy, reduces drift, compresses noisy output, and keeps long sessions focused on the actual task. Unlike prompt instructions that can be ignored or lost in context, Warden operates at runtime — every tool call passes through deterministic policy enforcement in under 2ms.
+> Warden is the runtime control layer for AI coding agents. It intercepts tool use, enforces policy, reduces drift, compresses noisy output, and keeps long sessions focused on the actual task. Unlike prompt instructions that can be ignored or lost in context, Warden operates at runtime — every tool call passes through deterministic policy enforcement in under 2ms. Full documentation at [bitmill.dev](https://bitmill.dev).
 
 ---
 
@@ -82,6 +83,12 @@ Warden:      Prompt injection detected (instruction-hijack). Flagging to user.
 After edit:  JSON syntax error in package.json: expected `,` (line 15, column 3)
 ```
 
+**Typo corrected** ("Did you mean?"):
+```
+$ warden stauts
+Unknown command "stauts". Did you mean "stats"?
+```
+
 **Output compressed** (smart filter, data-driven):
 ```
 cargo test:  262 tests, 500 lines of output
@@ -100,7 +107,7 @@ Every approach to controlling AI coding agents has a structural weakness:
 | **CLAUDE.md rules** | AI can ignore them. Rules degrade as context fills. Get compacted away. | Hook returns `"deny"` — deterministic, survives compaction |
 | **Skill files / .md trees** | Stateless between invocations. No session memory. | 5 session phases, 8 adaptive parameters, cross-session DNA |
 | **Bash wrappers** | No tool-call interception. No session awareness. Single assistant. | Native hook integration, typed JSON protocol, multi-assistant |
-| **Superpowers (VS Code)** | Visual only. ~50 rules. Claude Code only. No CLI. | 298 compiled rules. CLI-native. Claude + Gemini. |
+| **Superpowers (VS Code)** | Visual only. ~50 rules. Claude Code only. No CLI. | +300 compiled rules. CLI-native. Claude + Gemini. |
 | **RTK** | Output compression only. No safety rules. No governance. | Safety + compression + intelligence + governance in one binary |
 | **Prompt engineering** | Gets ignored. Gets hallucinated past. Gets compacted. | Runs outside the model — enforcement layer, not a suggestion |
 
@@ -108,7 +115,7 @@ Every approach to controlling AI coding agents has a structural weakness:
 
 | Capability | CLAUDE.md | Bash scripts | Superpowers | RTK | **Warden** |
 |-----------|-----------|-------------|-------------|-----|-----------|
-| Rule count | ~5-10 | ~10-20 | ~50 | 0 | **298** |
+| Rule count | ~5-10 | ~10-20 | ~50 | 0 | **+300** |
 | Enforcement | Advisory | Per-command | Visual | None | **Deterministic** |
 | Hook latency | 0ms | ~50ms | ~100ms | ~10ms | **~2ms** |
 | Session phases | No | No | No | No | **5 phases, 8 params** |
@@ -161,6 +168,11 @@ All of these activate the moment you run `warden init`. No TOML to edit, no flag
 - Predicts when context will compact (linear regression on token usage)
 
 **Developer experience:**
+- Interactive TUI wizard (`warden init`) with arrow-key navigation powered by crossterm
+- "Did you mean?" command suggestions using Levenshtein distance for typos
+- `warden update` — checks for new versions and self-updates
+- `warden describe` — shows active user overrides (`--all` for full dump)
+- Already-installed detection with update offer during init
 - Progressive onboarding: safety-only for first 3 sessions, full features unlock gradually
 - Every denial includes the exact command to disable it: `warden restrictions disable <rule-id>`
 - Generates session changelog at end — files edited, errors, milestones, phase transitions
@@ -172,11 +184,19 @@ All of these activate the moment you run `warden init`. No TOML to edit, no flag
 
 ## 3. Install
 
-### From source
+### Recommended: npx (zero install)
 
 ```bash
-git clone https://github.com/ekud12/warden
-cd warden && cargo install --path .
+npx @bitmilldev/warden init
+```
+
+Downloads the correct binary for your platform, runs the interactive TUI wizard, and configures your assistant in one command. Already-installed detection with update offer if a previous version is found.
+
+### Cargo
+
+```bash
+cargo install warden-ai
+warden init
 ```
 
 ### Pre-built binary (Linux/macOS)
@@ -213,16 +233,18 @@ scoop install warden
 ### Then configure your assistant
 
 ```bash
-warden init                        # Interactive setup wizard
+warden init                        # Interactive TUI wizard with arrow-key navigation
 warden install claude-code         # Or: warden install gemini-cli
 ```
+
+Releases are published to 5 platforms: GitHub Releases, crates.io, npm, Homebrew, and Scoop.
 
 ---
 
 ## 4. Quick Start
 
-1. **Install**: `cargo install --path .` (or download binary)
-2. **Initialize**: `warden init` — creates dirs, detects tools, offers to install missing CLIs
+1. **Install**: `npx @bitmilldev/warden init` or `cargo install warden-ai`
+2. **Initialize**: `warden init` — interactive TUI wizard with arrow-key navigation (crossterm), detects tools, offers to install missing CLIs
 3. **Configure hooks**: `warden install claude-code` (or `gemini-cli`)
 4. **Start coding**: open your AI assistant and run any command
 
@@ -301,7 +323,7 @@ max_lines = 30
 
 **Full uninstall.** `warden uninstall` removes hooks, binary, PATH, and optionally all config.
 
-**Session inspection.** `warden explain-session`, `warden tui` (live dashboard), `warden replay`, `warden diff`, `warden export-sessions`.
+**Session inspection.** `warden explain-session`, `warden tui` (live dashboard), `warden replay`, `warden diff`, `warden export-sessions`, `warden describe`.
 
 ---
 
@@ -331,7 +353,7 @@ Pattern matching uses `RegexSet` — all patterns in a category tested simultane
 
 ## 7. Rules
 
-### 298 patterns across 9 categories
+### +300 patterns across 9 categories
 
 | Category | Count | Example pattern | Action |
 |----------|------:|----------------|--------|
@@ -472,7 +494,7 @@ max_lines = 30
 ### 4-level inheritance
 
 ```
-Compiled defaults (298 rules, always present)
+Compiled defaults (+300 rules, always present)
   → ~/.warden/rules/core.toml (extend or replace categories)
     → ~/.warden/rules/personal.toml (your preferences)
       → .warden/rules.toml (project team agreements)
@@ -492,8 +514,10 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 | Command | What it does |
 |---------|-------------|
-| `warden init` | Create ~/.warden/, detect tools, configure assistant hooks |
+| `warden init` | Interactive TUI wizard — create ~/.warden/, detect tools, configure hooks |
 | `warden install <assistant>` | Generate hooks config for claude-code or gemini-cli |
+| `warden update` | Check for new versions and self-update |
+| `warden describe` | Show active user overrides (`--all` for full config dump) |
 | `warden uninstall` | Remove hooks, binary, PATH, config (with confirmation) |
 | `warden mcp` | Run as MCP server (stdio JSON-RPC 2.0, 6 tools) |
 | `warden explain <rule-id>` | Show rule pattern, category, action, and disable command |
@@ -503,7 +527,7 @@ warden explain substitution.grep              # Show rule details + disable comm
 | `warden replay` | Narrative timeline of a past session |
 | `warden diff <a> <b>` | Side-by-side comparison of two session replays |
 | `warden export-sessions` | Export session analytics as JSON or CSV |
-| `warden restrictions list` | Table of all 298 rules with ID, category, severity |
+| `warden restrictions list` | Table of all +300 rules with ID, category, severity |
 | `warden restrictions disable <id>` | Disable a specific rule (persisted in config.toml) |
 | `warden config list` | Print current config.toml contents |
 | `warden config set <key> <val>` | Set a dotted config value (e.g., `tools.justfile false`) |
@@ -519,9 +543,9 @@ warden explain substitution.grep              # Show rule details + disable comm
 |--------|-------|
 | Hook latency (daemon) | ~2ms per hook invocation |
 | Hook latency (cold) | ~12ms (direct execution, no daemon) |
-| Pattern matching | Single RegexSet DFA pass (298 patterns simultaneous) |
+| Pattern matching | Single RegexSet DFA pass (+300 patterns simultaneous) |
 | Pipeline short-circuit | Deny at stage 1 skips stages 2-10 |
-| Binary size | 2.8MB (single file, zero runtime dependencies) |
+| Binary size | 3.7MB (single file, zero runtime dependencies) |
 | Daemon memory | ~5MB resident |
 | Daemon startup | <50ms (binary copy + spawn) |
 | Regex compilation | Once at startup via LazyLock (reused across all hook calls) |
@@ -534,11 +558,13 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 ## 13. Documentation
 
+**Full documentation:** [bitmill.dev](https://bitmill.dev)
+
 | Document | Description |
 |----------|-------------|
 | [Quick Start](docs/examples/quick-start.md) | Install, configure, verify in 5 minutes |
 | [Configuration](docs/configuration.md) | All TOML keys, env vars, 4-level merge |
-| [Rules Guide](docs/rules-guide.md) | All 298 rules by category, custom rules |
+| [Rules Guide](docs/rules-guide.md) | All +300 rules by category, custom rules |
 | [Commands Reference](docs/commands.md) | Every command with flags and examples |
 | [Architecture](docs/architecture.md) | Pipeline, adapters, IPC daemon, analytics |
 | [Pipeline Stages](docs/pipeline-stages.md) | Each of the 10 stages explained |
@@ -556,7 +582,7 @@ warden explain substitution.grep              # Show rule details + disable comm
 | `toml` | 4-level TOML configuration parsing |
 | `redb` | Embedded ACID database (session state, events, analytics) |
 | `dashmap` | Lock-free concurrent HashMap for daemon session cache |
-| `ratatui` + `crossterm` | Terminal UI dashboard |
+| `ratatui` + `crossterm` | Terminal UI dashboard + interactive init wizard |
 | `compact_str` | Memory-efficient inline strings |
 | `smallvec` | Stack-allocated bounded vectors |
 
@@ -565,6 +591,7 @@ Rust 2024 edition. MIT license. Built by [Liel Kaysari](https://github.com/ekud1
 ---
 
 <p align="center">
+  <a href="https://bitmill.dev">Docs</a> &bull;
   <a href="https://github.com/ekud12/warden">GitHub</a> &bull;
   <a href="docs/examples/quick-start.md">Quick Start</a> &bull;
   <a href="docs/architecture.md">Architecture</a> &bull;

@@ -129,23 +129,18 @@ pub fn banner() {
     let ver = env!("CARGO_PKG_VERSION");
     eprintln!();
 
-    // Angular W inspired by the crystalline red logo
-    print_bold(BRAND, "     \\\\        //\n");
-    print_bold(BRAND, "      \\\\      //\n");
-    print_bold(BRAND, "       \\\\    //\n");
-    print_bold(BRAND, "        \\\\  //\n");
-    print_bold(BRAND, "         \\\\//\n");
-    print_bold(BRAND, "    \\\\    \\/    //\n");
-    print_bold(BRAND, "     \\\\        //\n");
-    print_bold(BRAND, "      \\\\      //\n");
-    print_bold(BRAND, "       \\/    \\/\n");
+    // W logo — left-aligned
+    print_bold(BRAND, "  \\\\      //\\\\      //\n");
+    print_bold(BRAND, "   \\\\    //  \\\\    //\n");
+    print_bold(BRAND, "    \\\\  //    \\\\  //\n");
+    print_bold(BRAND, "     \\\\//      \\\\//\n");
 
     eprintln!();
-    print_bold(TEXT, "     W A R D E N");
+    print_bold(TEXT, "  W A R D E N");
     print_colored(DIM, &format!("  v{}\n", ver));
-    print_colored(DIM, "     Runtime guardian for AI coding agents\n");
+    print_colored(DIM, "  Runtime guardian for AI coding agents\n");
     eprintln!();
-    print_colored(ACCENT, "     ───────────────────────────────────────\n");
+    print_colored(ACCENT, "  ─────────────────────────────────\n");
 }
 
 // ─── Interactive select (single) ─────────────────────────────────────────────

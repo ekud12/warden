@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bitmill.dev/schemas/warden-rules.json",
+  "title": "Warden Rules",
+  "description": "Schema for ~/.warden/rules.toml or .warden/rules.toml — custom rule overrides",
+  "type": "object",
+  "properties": {
+    "safety": { "$ref": "#/$defs/patternSection", "description": "Safety rules — block dangerous commands (rm -rf, sudo, chmod 777)" },
+    "destructive": { "$ref": "#/$defs/patternSection", "description": "Destructive operation detection" },
+    "substitutions": { "$ref": "#/$defs/patternSection", "description": "Tool substitution rules (grep→rg, find→fd)" },
+    "advisories": { "$ref": "#/$defs/patternSection", "description": "Advisory rules — warn but don't block" },
+    "hallucination": { "$ref": "#/$defs/patternSection", "description": "Hallucination prevention — block invented commands/flags" },
+    "hallucination_advisory": { "$ref": "#/$defs/patternSection", "description": "Hallucination advisories — warn about suspicious patterns" },
+    "sensitive_paths_deny": { "$ref": "#/$defs/patternSection", "description": "Sensitive path blocking (SSH keys, credentials)" },
+    "sensitive_paths_warn": { "$ref": "#/$defs/patternSection", "description": "Sensitive path warnings" },
+    "auto_allow": {
+      "type": "object",
+      "properties": {
+        "replace": { "type": "boolean", "default": false, "description": "If true, clear compiled auto-allow patterns before adding these" },
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Regex patterns for commands that should be auto-approved"
+        }
+      }
+    },
+    "zero_trace": {
+      "type": "object",
+      "description": "Patterns to strip AI/LLM attribution from output",
+      "properties": {
+        "content_pattern": { "type": "string", "description": "Regex for content to strip" },
+        "cmd_pattern": { "type": "string", "description": "Regex for commands to strip" },
+        "write_pattern": { "type": "string", "description": "Regex for write content to strip" },
+        "path_exclude": { "type": "string", "description": "Regex for paths to exclude from zero-trace" }
+      }
+    },
+    "just": {
+      "type": "object",
+      "description": "Justfile recipe mapping",
+      "properties": {
+        "replace_map": { "type": "boolean", "default": false },
+        "replace_verbose": { "type": "boolean", "default": false },
+        "replace_short": { "type": "boolean", "default": false },
+        "map": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "description": "Command-to-recipe mappings: [[\"from\", \"to\"]]"
+        },
+        "verbose": { "type": "array", "items": { "type": "string" } },
+        "short": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "description": "Runtime thresholds",
+      "properties": {
+        "max_read_size": { "type": "integer", "description": "Maximum file read size in bytes" },
+        "max_mcp_output": { "type": "integer", "description": "Maximum MCP tool output size" },
+        "max_string_len": { "type": "integer", "description": "Maximum string length in truncation" },
+        "max_array_len": { "type": "integer", "description": "Maximum array length in truncation" },
+        "doom_loop_threshold": { "type": "integer", "description": "Turns before doom loop detection" },
+        "drift_threshold": { "type": "number", "description": "Denial density threshold for drift detection" }
+      }
+    },
+    "restrictions": {
+      "type": "object",
+      "properties": {
+        "disabled": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Rule IDs to disable"
+        }
+      }
+    },
+    "git_readonly": { "type": "boolean", "description": "If true, block all mutating git commands" },
+    "session_mode": { "type": "string", "enum": ["diagnose", "implement", "refactor", "release"], "description": "Session mode hint" },
+    "command_filters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/commandFilter" },
+      "description": "Custom output filters for specific commands"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "patternSection": {
+      "type": "object",
+      "properties": {
+        "replace": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, clear compiled patterns for this category before adding these. Compiled safety floor is always preserved."
+        },
+        "patterns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/patternEntry" }
+        }
+      }
+    },
+    "patternEntry": {
+      "type": "object",
+      "required": ["regex", "msg"],
+      "properties": {
+        "regex": { "type": "string", "description": "Regex pattern to match against commands/content" },
+        "msg": { "type": "string", "description": "Message shown when pattern matches" },
+        "shadow": { "type": "boolean", "default": false, "description": "If true, log match but don't block (shadow mode)" }
+      }
+    },
+    "commandFilter": {
+      "type": "object",
+      "required": ["cmd_match", "strategy"],
+      "properties": {
+        "cmd_match": { "type": "string", "description": "Regex/substring to match command" },
+        "strategy": {
+          "type": "string",
+          "enum": ["strip_matching", "keep_matching", "dedup", "head_tail", "passthrough"],
+          "description": "Filtering strategy"
+        },
+        "keep_patterns": { "type": "array", "items": { "type": "string" } },
+        "strip_patterns": { "type": "array", "items": { "type": "string" } },
+        "keep_first": { "type": "integer", "default": 3 },
+        "keep_last": { "type": "integer", "default": 3 },
+        "summary_template": { "type": "string" },
+        "max_lines": { "type": "integer", "default": 40 }
+      }
+    }
+  }
+}

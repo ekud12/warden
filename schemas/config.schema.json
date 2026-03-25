@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bitmill.dev/schemas/warden-config.json",
+  "title": "Warden Configuration",
+  "description": "Schema for ~/.warden/config.toml — Warden runtime configuration",
+  "type": "object",
+  "properties": {
+    "assistant": {
+      "type": "object",
+      "description": "Assistant adapter configuration",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["auto", "claude-code", "gemini-cli"],
+          "default": "auto",
+          "description": "Which AI assistant to target. 'auto' detects from environment variables."
+        }
+      },
+      "additionalProperties": false
+    },
+    "telemetry": {
+      "type": "object",
+      "description": "Toggle individual analytics modules. All default to true.",
+      "properties": {
+        "anomaly_detection": { "type": "boolean", "default": true, "description": "Welford's algorithm z-score flagging for unusual session patterns" },
+        "quality_predictor": { "type": "boolean", "default": true, "description": "Heuristic session quality prediction at turn 10+" },
+        "cost_tracking": { "type": "boolean", "default": true, "description": "Token categorization: explore/implement/waste/saved" },
+        "error_prevention": { "type": "boolean", "default": true, "description": "Bayesian transition matrices for error prediction" },
+        "token_forecast": { "type": "boolean", "default": true, "description": "Linear regression token budget forecasting" },
+        "smart_truncation": { "type": "boolean", "default": true, "description": "Keyword relevance and edited-file boosting for output truncation" },
+        "project_dna": { "type": "boolean", "default": true, "description": "Per-project statistical baselines" },
+        "rule_effectiveness": { "type": "boolean", "default": true, "description": "Quality delta scoring per rule" },
+        "drift_velocity": { "type": "boolean", "default": true, "description": "Denial density monitoring and rule re-injection" },
+        "compaction_optimizer": { "type": "boolean", "default": true, "description": "Context compaction timing optimization" },
+        "command_recovery": { "type": "boolean", "default": true, "description": "CLI flag fixes and install suggestions" }
+      },
+      "additionalProperties": false
+    },
+    "tools": {
+      "type": "object",
+      "description": "Tool integration toggles. Keys are tool names (rg, fd, bat, etc.).",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "restrictions": {
+      "type": "object",
+      "description": "Restriction management",
+      "properties": {
+        "disabled": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "List of rule IDs to disable (e.g., ['substitution.cat', 'read.post-edit'])"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

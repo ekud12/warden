@@ -1,0 +1,3 @@
+# Project-level Warden overrides for the warden repo itself.
+# Allows git mutating commands since this is the warden source repo.
+git_readonly = false

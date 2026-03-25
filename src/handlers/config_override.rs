@@ -28,7 +28,11 @@ pub static OVERRIDES: LazyLock<ConfigOverrides> = LazyLock::new(|| {
     let dir = common::hooks_dir();
     let path = {
         let new_path = dir.join("overrides.json");
-        if new_path.exists() { new_path } else { dir.join(format!("{}-overrides.json", crate::constants::NAME)) }
+        if new_path.exists() {
+            new_path
+        } else {
+            dir.join(format!("{}-overrides.json", crate::constants::NAME))
+        }
     };
     match std::fs::read_to_string(&path) {
         Ok(content) => serde_json::from_str(&content).unwrap_or_default(),

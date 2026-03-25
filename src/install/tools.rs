@@ -22,76 +22,94 @@ pub struct ToolInfo {
 /// All tools Warden can integrate with
 pub static TOOLS: &[ToolInfo] = &[
     ToolInfo {
-        name: "ripgrep", binary: "rg",
+        name: "ripgrep",
+        binary: "rg",
         description: "Fast regex search (replaces grep)",
         install_cargo: Some("cargo install ripgrep"),
         install_brew: Some("brew install ripgrep"),
         install_scoop: Some("scoop install ripgrep"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "fd", binary: "fd",
+        name: "fd",
+        binary: "fd",
         description: "Fast file finder (replaces find)",
         install_cargo: Some("cargo install fd-find"),
         install_brew: Some("brew install fd"),
         install_scoop: Some("scoop install fd"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "bat", binary: "bat",
+        name: "bat",
+        binary: "bat",
         description: "Cat with syntax highlighting",
         install_cargo: Some("cargo install bat"),
         install_brew: Some("brew install bat"),
         install_scoop: Some("scoop install bat"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "eza", binary: "eza",
+        name: "eza",
+        binary: "eza",
         description: "Modern ls replacement",
         install_cargo: Some("cargo install eza"),
         install_brew: Some("brew install eza"),
         install_scoop: Some("scoop install eza"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "dust", binary: "dust",
+        name: "dust",
+        binary: "dust",
         description: "Disk usage visualization (replaces du)",
         install_cargo: Some("cargo install du-dust"),
         install_brew: Some("brew install dust"),
         install_scoop: Some("scoop install dust"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "just", binary: "just",
+        name: "just",
+        binary: "just",
         description: "Task runner (Justfile support)",
         install_cargo: Some("cargo install just"),
         install_brew: Some("brew install just"),
         install_scoop: Some("scoop install just"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "jq", binary: "jq",
+        name: "jq",
+        binary: "jq",
         description: "JSON processor",
         install_cargo: None,
         install_brew: Some("brew install jq"),
         install_scoop: Some("scoop install jq"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "xh", binary: "xh",
+        name: "xh",
+        binary: "xh",
         description: "HTTP client (replaces curl)",
         install_cargo: Some("cargo install xh"),
         install_brew: Some("brew install xh"),
         install_scoop: Some("scoop install xh"),
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
     ToolInfo {
-        name: "ouch", binary: "ouch",
+        name: "ouch",
+        binary: "ouch",
         description: "Archive tool (replaces tar/zip/unzip)",
         install_cargo: Some("cargo install ouch"),
         install_brew: Some("brew install ouch"),
         install_scoop: None,
-        install_npm: None, required: false,
+        install_npm: None,
+        required: false,
     },
 ];
 
@@ -104,13 +122,14 @@ pub struct ToolStatus {
 
 /// Check which tools are installed
 pub fn detect_tools() -> Vec<ToolStatus> {
-    TOOLS.iter().map(|tool| {
-        ToolStatus {
+    TOOLS
+        .iter()
+        .map(|tool| ToolStatus {
             name: tool.name,
             binary: tool.binary,
             installed: is_installed(tool.binary),
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 /// Check if a binary is available on PATH
@@ -135,7 +154,10 @@ pub fn detect_package_manager() -> Option<&'static str> {
         vec!["apt", "brew", "pacman", "cargo"]
     };
 
-    candidates.into_iter().find(|&pm| is_installed(pm)).map(|v| v as _)
+    candidates
+        .into_iter()
+        .find(|&pm| is_installed(pm))
+        .map(|v| v as _)
 }
 
 /// Get the install command for a tool using the given package manager

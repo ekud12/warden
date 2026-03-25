@@ -70,7 +70,9 @@ pub fn update_session_end(
     let all_keys: Vec<String> = effectiveness.rules.keys().cloned().collect();
     for rule_id in &all_keys {
         if !fired_set.contains(rule_id) {
-            let Some(entry) = effectiveness.rules.get_mut(rule_id) else { continue; };
+            let Some(entry) = effectiveness.rules.get_mut(rule_id) else {
+                continue;
+            };
             entry.quality_sum_when_not += quality_score as u64;
             entry.sessions_not_fired += 1;
         }
@@ -79,7 +81,9 @@ pub fn update_session_end(
 
 /// Format top/bottom rules by effectiveness
 pub fn format_report(effectiveness: &RuleEffectiveness) -> String {
-    let mut scores: Vec<(&String, f64, u32)> = effectiveness.rules.iter()
+    let mut scores: Vec<(&String, f64, u32)> = effectiveness
+        .rules
+        .iter()
         .filter(|(_, s)| s.sessions_fired >= 2) // need at least 2 sessions
         .map(|(id, s)| (id, s.effectiveness(), s.fire_count))
         .collect();
@@ -91,7 +95,13 @@ pub fn format_report(effectiveness: &RuleEffectiveness) -> String {
     output.push_str(&format!("{}\n", "-".repeat(50)));
 
     for (id, delta, fires) in &scores {
-        let _indicator = if *delta > 5.0 { "+" } else if *delta < -5.0 { "-" } else { " " };
+        let _indicator = if *delta > 5.0 {
+            "+"
+        } else if *delta < -5.0 {
+            "-"
+        } else {
+            " "
+        };
         output.push_str(&format!("{:<30} {:>+9.1} {:>8}\n", id, delta, fires));
     }
 
@@ -129,7 +139,10 @@ mod tests {
         update_session_end(&mut eff, &[], 40); // low quality when not fired
 
         let score = eff.rules.get("safety.rm-rf").unwrap();
-        assert!(score.effectiveness() > 0.0, "rule should show positive effectiveness");
+        assert!(
+            score.effectiveness() > 0.0,
+            "rule should show positive effectiveness"
+        );
     }
 
     #[test]

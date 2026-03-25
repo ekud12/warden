@@ -27,8 +27,7 @@ static COMPILED: LazyLock<Vec<(Regex, String)>> = LazyLock::new(|| {
         .collect()
 });
 
-static CODE_BLOCK_RE: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(r"(?s)```.*?```").ok());
+static CODE_BLOCK_RE: LazyLock<Option<Regex>> = LazyLock::new(|| Regex::new(r"(?s)```.*?```").ok());
 
 /// Strip fenced code blocks to avoid false positives on injection pattern discussions
 fn strip_code_blocks(text: &str) -> String {

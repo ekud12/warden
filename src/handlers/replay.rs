@@ -44,10 +44,13 @@ fn replay_session(project_dir: &std::path::Path) {
     let redb_content = if common::storage::is_available() {
         let events = common::storage::read_last_events(500);
         if !events.is_empty() {
-            Some(events.iter()
-                .filter_map(|e| String::from_utf8(e.clone()).ok())
-                .collect::<Vec<_>>()
-                .join("\n"))
+            Some(
+                events
+                    .iter()
+                    .filter_map(|e| String::from_utf8(e.clone()).ok())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
         } else {
             None
         }
@@ -63,7 +66,10 @@ fn replay_session(project_dir: &std::path::Path) {
             match fs::read_to_string(&notes_path) {
                 Ok(c) => c,
                 Err(_) => {
-                    eprintln!("No session data found in {} (tried redb + JSONL)", project_dir.display());
+                    eprintln!(
+                        "No session data found in {} (tried redb + JSONL)",
+                        project_dir.display()
+                    );
                     return;
                 }
             }
@@ -72,18 +78,23 @@ fn replay_session(project_dir: &std::path::Path) {
 
     let project_name = fs::read_to_string(project_dir.join("project.txt"))
         .unwrap_or_else(|_| "unknown".to_string())
-        .trim().to_string();
+        .trim()
+        .to_string();
 
     println!("=== Session Replay: {} ===\n", project_name);
 
     // Find the last session-end to determine current session boundaries
     let lines: Vec<&str> = content.lines().collect();
-    let session_start = lines.iter().rposition(|line| {
-        serde_json::from_str::<serde_json::Value>(line)
-            .ok()
-            .and_then(|e| e.get("type")?.as_str().map(|s| s == "session-end"))
-            .unwrap_or(false)
-    }).map(|i| i + 1).unwrap_or(0);
+    let session_start = lines
+        .iter()
+        .rposition(|line| {
+            serde_json::from_str::<serde_json::Value>(line)
+                .ok()
+                .and_then(|e| e.get("type")?.as_str().map(|s| s == "session-end"))
+                .unwrap_or(false)
+        })
+        .map(|i| i + 1)
+        .unwrap_or(0);
 
     let session_lines = &lines[session_start..];
 
@@ -110,7 +121,11 @@ fn replay_session(project_dir: &std::path::Path) {
             }
             "error" => {
                 errors += 1;
-                timeline.push(format!("  [{}] Error: {}", short_ts(ts), truncate(detail, 80)));
+                timeline.push(format!(
+                    "  [{}] Error: {}",
+                    short_ts(ts),
+                    truncate(detail, 80)
+                ));
             }
             "milestone" => {
                 milestones += 1;
@@ -122,10 +137,18 @@ fn replay_session(project_dir: &std::path::Path) {
             }
             "session-summary" => {
                 if let Some(data) = entry.get("data") {
-                    let quality = data.get("quality_score").and_then(|v| v.as_u64()).unwrap_or(0);
-                    let turns = data.get("duration_turns").and_then(|v| v.as_u64()).unwrap_or(0);
-                    println!("Quality: {}/100 | Turns: {} | Edits: {} | Errors: {} | Milestones: {}",
-                        quality, turns, edits, errors, milestones);
+                    let quality = data
+                        .get("quality_score")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let turns = data
+                        .get("duration_turns")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    println!(
+                        "Quality: {}/100 | Turns: {} | Edits: {} | Errors: {} | Milestones: {}",
+                        quality, turns, edits, errors, milestones
+                    );
                     println!();
                 }
             }
@@ -149,7 +172,10 @@ fn replay_session(project_dir: &std::path::Path) {
         }
     }
 
-    println!("\nSummary: {} edits, {} errors, {} milestones", edits, errors, milestones);
+    println!(
+        "\nSummary: {} edits, {} errors, {} milestones",
+        edits, errors, milestones
+    );
 }
 
 /// Diff two sessions side by side
@@ -172,18 +198,40 @@ fn diff_sessions(hash_a: &str, hash_b: &str) {
     let stats_b = load_session_summary(&dir_b);
 
     let fields = [
-        ("Quality", stats_a.get("quality_score"), stats_b.get("quality_score")),
-        ("Turns", stats_a.get("duration_turns"), stats_b.get("duration_turns")),
+        (
+            "Quality",
+            stats_a.get("quality_score"),
+            stats_b.get("quality_score"),
+        ),
+        (
+            "Turns",
+            stats_a.get("duration_turns"),
+            stats_b.get("duration_turns"),
+        ),
         ("Edits", stats_a.get("edits"), stats_b.get("edits")),
         ("Errors", stats_a.get("errors"), stats_b.get("errors")),
-        ("Milestones", stats_a.get("milestones"), stats_b.get("milestones")),
-        ("Tokens saved", stats_a.get("tokens_saved"), stats_b.get("tokens_saved")),
+        (
+            "Milestones",
+            stats_a.get("milestones"),
+            stats_b.get("milestones"),
+        ),
+        (
+            "Tokens saved",
+            stats_a.get("tokens_saved"),
+            stats_b.get("tokens_saved"),
+        ),
     ];
 
     for (name, a, b) in &fields {
         let va = a.and_then(|v| v.as_u64()).unwrap_or(0);
         let vb = b.and_then(|v| v.as_u64()).unwrap_or(0);
-        let indicator = if va > vb { ">" } else if va < vb { "<" } else { "=" };
+        let indicator = if va > vb {
+            ">"
+        } else if va < vb {
+            "<"
+        } else {
+            "="
+        };
         println!("{:<15} {:>10} {} {:<10}", name, va, indicator, vb);
     }
 }
@@ -194,9 +242,10 @@ fn load_session_summary(project_dir: &std::path::Path) -> serde_json::Value {
     for line in content.lines().rev() {
         if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line)
             && entry.get("type").and_then(|v| v.as_str()) == Some("session-summary")
-                && let Some(data) = entry.get("data") {
-                    return data.clone();
-                }
+            && let Some(data) = entry.get("data")
+        {
+            return data.clone();
+        }
     }
     serde_json::Value::Object(serde_json::Map::new())
 }
@@ -206,10 +255,15 @@ fn list_projects(projects_dir: &std::path::Path) {
         for entry in entries.flatten() {
             let dir = entry.path();
             if dir.is_dir() {
-                let hash = dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let hash = dir
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string();
                 let name = fs::read_to_string(dir.join("project.txt"))
                     .unwrap_or_else(|_| "unknown".to_string())
-                    .trim().to_string();
+                    .trim()
+                    .to_string();
                 eprintln!("  {} — {}", hash, name);
             }
         }
@@ -222,7 +276,11 @@ fn short_ts(ts: &str) -> &str {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() } else { format!("{}...", &s[..max]) }
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}...", &s[..max])
+    }
 }
 
 // ─── Deterministic replay through current rules ──────────────────────────────
@@ -235,8 +293,8 @@ pub struct ReplayReport {
     pub new_denials: u32,
     pub removed_denials: u32,
     pub false_positives: u32,
-    pub noisy_advisories: u32,    // advisory repeated 3+ times without behavior change
-    pub helpful_advisories: u32,  // advisory followed by milestone within 5 turns
+    pub noisy_advisories: u32, // advisory repeated 3+ times without behavior change
+    pub helpful_advisories: u32, // advisory followed by milestone within 5 turns
 }
 
 /// Replay events through current rules, comparing against recorded decisions
@@ -249,7 +307,8 @@ pub fn replay_through_rules(events: &[Vec<u8>]) -> ReplayReport {
     let mut last_denied_cmd: Option<String> = None;
     let mut last_denied_turn: u32 = 0;
     let mut last_advisory_turn: u32 = 0;
-    let mut advisory_categories: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut advisory_categories: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
 
     for raw in events {
         let entry: serde_json::Value = match serde_json::from_slice(raw) {
@@ -263,11 +322,18 @@ pub fn replay_through_rules(events: &[Vec<u8>]) -> ReplayReport {
 
         // Track advisory quality
         if event_type.contains("advisory") || event_type.contains("injection") {
-            let cat = detail.split_whitespace().next().unwrap_or("unknown").to_string();
+            let cat = detail
+                .split_whitespace()
+                .next()
+                .unwrap_or("unknown")
+                .to_string();
             *advisory_categories.entry(cat).or_insert(0) += 1;
             last_advisory_turn = turn;
         }
-        if event_type == "milestone" && turn.saturating_sub(last_advisory_turn) <= 5 && last_advisory_turn > 0 {
+        if event_type == "milestone"
+            && turn.saturating_sub(last_advisory_turn) <= 5
+            && last_advisory_turn > 0
+        {
             report.helpful_advisories += 1;
         }
 
@@ -295,9 +361,11 @@ pub fn replay_through_rules(events: &[Vec<u8>]) -> ReplayReport {
         // False positive detection
         if was_denied {
             if let Some(ref prev) = last_denied_cmd
-                && prev == cmd && turn.saturating_sub(last_denied_turn) <= 2 {
-                    report.false_positives += 1;
-                }
+                && prev == cmd
+                && turn.saturating_sub(last_denied_turn) <= 2
+            {
+                report.false_positives += 1;
+            }
             last_denied_cmd = Some(cmd.to_string());
             last_denied_turn = turn;
         }
@@ -313,7 +381,12 @@ pub fn replay_through_rules(events: &[Vec<u8>]) -> ReplayReport {
 pub fn format_replay_report(r: &ReplayReport) -> String {
     format!(
         "Replay: {} events. Denials: {} correct, {} new, {} removed, {} FP. Advisories: {} helpful, {} noisy",
-        r.total_events, r.correct_denials, r.new_denials, r.removed_denials, r.false_positives,
-        r.helpful_advisories, r.noisy_advisories
+        r.total_events,
+        r.correct_denials,
+        r.new_denials,
+        r.removed_denials,
+        r.false_positives,
+        r.helpful_advisories,
+        r.noisy_advisories
     )
 }

@@ -39,10 +39,20 @@ pub fn update_read_state(file_path: &str) {
                     mtime,
                 },
             );
-            common::log("posttool-session", &format!("READ tracked: {} (turn {})", common::truncate(file_path, 60), state.turn));
+            common::log(
+                "posttool-session",
+                &format!(
+                    "READ tracked: {} (turn {})",
+                    common::truncate(file_path, 60),
+                    state.turn
+                ),
+            );
         }
         None => {
-            common::log("posttool-session", &format!("READ hash-fail: {}", common::truncate(file_path, 60)));
+            common::log(
+                "posttool-session",
+                &format!("READ hash-fail: {}", common::truncate(file_path, 60)),
+            );
         }
     }
 

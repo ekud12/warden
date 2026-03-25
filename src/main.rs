@@ -23,10 +23,10 @@ mod constants;
 mod daemon;
 mod dream;
 mod handlers;
-mod scorecard;
 mod install;
 mod ipc;
 mod rules;
+mod scorecard;
 
 use std::process;
 
@@ -60,9 +60,10 @@ fn main() {
                     let _ = install::install_binary();
                     install_assistant::<assistant::claude_code::ClaudeCode>();
                     if !install::path::is_on_path()
-                        && let Ok(msg) = install::path::add_to_path() {
-                            eprintln!("{}", msg);
-                        }
+                        && let Ok(msg) = install::path::add_to_path()
+                    {
+                        eprintln!("{}", msg);
+                    }
                     // Pre-start daemon so first session connects instantly
                     if !ipc::daemon_is_running() {
                         ipc::spawn_daemon();
@@ -74,15 +75,19 @@ fn main() {
                     let _ = install::install_binary();
                     install_assistant::<assistant::gemini_cli::GeminiCli>();
                     if !install::path::is_on_path()
-                        && let Ok(msg) = install::path::add_to_path() {
-                            eprintln!("{}", msg);
-                        }
+                        && let Ok(msg) = install::path::add_to_path()
+                    {
+                        eprintln!("{}", msg);
+                    }
                     if !ipc::daemon_is_running() {
                         ipc::spawn_daemon();
                         eprintln!("Daemon started");
                     }
                 }
-                _ => eprintln!("Usage: {} install <claude-code|gemini-cli>", constants::NAME),
+                _ => eprintln!(
+                    "Usage: {} install <claude-code|gemini-cli>",
+                    constants::NAME
+                ),
             }
         }
 
@@ -148,7 +153,10 @@ fn main() {
                 "enable" => {
                     let id = args.get(3).map(|s| s.as_str()).unwrap_or("");
                     if id.is_empty() {
-                        eprintln!("Usage: {} restrictions enable <restriction-id>", constants::NAME);
+                        eprintln!(
+                            "Usage: {} restrictions enable <restriction-id>",
+                            constants::NAME
+                        );
                     } else {
                         toggle_restriction(id, false);
                     }
@@ -156,7 +164,10 @@ fn main() {
                 "disable" => {
                     let id = args.get(3).map(|s| s.as_str()).unwrap_or("");
                     if id.is_empty() {
-                        eprintln!("Usage: {} restrictions disable <restriction-id>", constants::NAME);
+                        eprintln!(
+                            "Usage: {} restrictions disable <restriction-id>",
+                            constants::NAME
+                        );
                     } else {
                         toggle_restriction(id, true);
                     }
@@ -201,7 +212,8 @@ fn main() {
 
         // ── Daemon subcommands ──
         "daemon" => {
-            let mtime: u64 = args.get(2)
+            let mtime: u64 = args
+                .get(2)
                 .and_then(|s| s.parse().ok())
                 .unwrap_or_else(ipc::get_binary_mtime);
             daemon::run_server(mtime);
@@ -287,7 +299,11 @@ fn install_assistant<A: assistant::Assistant + Default>() {
     let adapter = A::default();
     // On Windows, use relay (windowless) for hook commands to prevent CMD flicker.
     // On Unix, use warden directly (no console flash issue).
-    let binary_name = if cfg!(windows) { "warden-relay.exe" } else { "warden" };
+    let binary_name = if cfg!(windows) {
+        "warden-relay.exe"
+    } else {
+        "warden"
+    };
     let binary_path = install::bin_dir().join(binary_name);
     install_relay();
 
@@ -333,7 +349,11 @@ fn install_assistant<A: assistant::Assistant + Default>() {
     match serde_json::to_string_pretty(&settings) {
         Ok(output) => {
             if std::fs::write(&settings_path, &output).is_ok() {
-                eprintln!("Installed {} hooks into {}", adapter.name(), settings_path.display());
+                eprintln!(
+                    "Installed {} hooks into {}",
+                    adapter.name(),
+                    settings_path.display()
+                );
             } else {
                 eprintln!("Failed to write {}", settings_path.display());
                 eprintln!("Generated config (paste manually):");
@@ -350,7 +370,11 @@ fn install_assistant<A: assistant::Assistant + Default>() {
 fn install_relay() {
     let source = std::env::current_exe().unwrap_or_default();
     let source_dir = source.parent().unwrap_or(std::path::Path::new("."));
-    let relay_name = if cfg!(windows) { "warden-relay.exe" } else { "warden-relay" };
+    let relay_name = if cfg!(windows) {
+        "warden-relay.exe"
+    } else {
+        "warden-relay"
+    };
     let relay_src = source_dir.join(relay_name);
 
     let dest = install::bin_dir().join(relay_name);
@@ -361,11 +385,23 @@ fn install_relay() {
 }
 
 const HOOK_SUBCMDS: &[&str] = &[
-    "pretool-bash", "pretool-read", "pretool-write", "pretool-redirect",
-    "permission-approve", "posttool-session", "posttool-mcp",
-    "session-start", "session-end", "precompact-memory", "postcompact",
-    "stop-check", "userprompt-context", "subagent-context", "subagent-stop",
-    "postfailure-guide", "task-completed",
+    "pretool-bash",
+    "pretool-read",
+    "pretool-write",
+    "pretool-redirect",
+    "permission-approve",
+    "posttool-session",
+    "posttool-mcp",
+    "session-start",
+    "session-end",
+    "precompact-memory",
+    "postcompact",
+    "stop-check",
+    "userprompt-context",
+    "subagent-context",
+    "subagent-stop",
+    "postfailure-guide",
+    "task-completed",
 ];
 
 fn is_hook_subcmd(s: &str) -> bool {
@@ -386,30 +422,32 @@ fn dispatch_hook_ci(subcmd: &str, raw: &str) {
 fn dispatch_hook(subcmd: &str, raw: &str) {
     // Panic isolation: catch_unwind ensures a panicking handler never blocks the AI.
     // Fail open: on panic, log error and exit 0.
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        match subcmd {
-            "pretool-bash" => handlers::pretool_bash::run(raw),
-            "pretool-read" => handlers::pretool_read::run(raw),
-            "pretool-write" => handlers::pretool_write::run(raw),
-            "pretool-redirect" => handlers::pretool_redirect::run(raw),
-            "permission-approve" => handlers::permission_approve::run(raw),
-            "posttool-session" => handlers::posttool_session::run(raw),
-            "posttool-mcp" => handlers::posttool_mcp::run(raw),
-            "session-start" => handlers::session_start::run(raw),
-            "session-end" => handlers::session_end::run(raw),
-            "precompact-memory" => handlers::precompact_memory::run(raw),
-            "postcompact" => handlers::postcompact::run(raw),
-            "stop-check" => handlers::stop_check::run(raw),
-            "userprompt-context" => handlers::userprompt_context::run(raw),
-            "subagent-context" => handlers::subagent_context::run(raw),
-            "subagent-stop" => handlers::subagent_stop::run(raw),
-            "postfailure-guide" => handlers::postfailure_guide::run(raw),
-            "task-completed" => handlers::task_completed::run(raw),
-            _ => {}
-        }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match subcmd {
+        "pretool-bash" => handlers::pretool_bash::run(raw),
+        "pretool-read" => handlers::pretool_read::run(raw),
+        "pretool-write" => handlers::pretool_write::run(raw),
+        "pretool-redirect" => handlers::pretool_redirect::run(raw),
+        "permission-approve" => handlers::permission_approve::run(raw),
+        "posttool-session" => handlers::posttool_session::run(raw),
+        "posttool-mcp" => handlers::posttool_mcp::run(raw),
+        "session-start" => handlers::session_start::run(raw),
+        "session-end" => handlers::session_end::run(raw),
+        "precompact-memory" => handlers::precompact_memory::run(raw),
+        "postcompact" => handlers::postcompact::run(raw),
+        "stop-check" => handlers::stop_check::run(raw),
+        "userprompt-context" => handlers::userprompt_context::run(raw),
+        "subagent-context" => handlers::subagent_context::run(raw),
+        "subagent-stop" => handlers::subagent_stop::run(raw),
+        "postfailure-guide" => handlers::postfailure_guide::run(raw),
+        "task-completed" => handlers::task_completed::run(raw),
+        _ => {}
     }));
     if result.is_err() {
-        eprintln!("{}: handler '{}' panicked — failing open", constants::NAME, subcmd);
+        eprintln!(
+            "{}: handler '{}' panicked — failing open",
+            constants::NAME,
+            subcmd
+        );
     }
 }
 
@@ -458,7 +496,8 @@ fn toggle_restriction(id: &str, disable: bool) {
     }
 
     // Write back — update or create [restrictions] section
-    let disabled_str = disabled.iter()
+    let disabled_str = disabled
+        .iter()
         .map(|d| format!("\"{}\"", d))
         .collect::<Vec<_>>()
         .join(", ");
@@ -492,9 +531,14 @@ fn toggle_restriction(id: &str, disable: bool) {
         let mut insert_at = lines.len();
         let mut in_sect = false;
         for (i, line) in lines.iter().enumerate() {
-            if line.trim() == "[restrictions]" { in_sect = true; }
-            else if in_sect && line.trim().starts_with('[') { insert_at = i; break; }
-            else if in_sect { insert_at = i + 1; }
+            if line.trim() == "[restrictions]" {
+                in_sect = true;
+            } else if in_sect && line.trim().starts_with('[') {
+                insert_at = i;
+                break;
+            } else if in_sect {
+                insert_at = i + 1;
+            }
         }
         lines.insert(insert_at, new_line);
     }
@@ -529,9 +573,9 @@ fn set_config_value(path: &std::path::Path, key: &str, value: &str) {
             && (trimmed.starts_with(&format!("{} =", field))
                 || trimmed.starts_with(&format!("# {} =", field))
                 || trimmed.starts_with(&format!("#{} =", field)))
-            {
-                key_idx = Some(i);
-            }
+        {
+            key_idx = Some(i);
+        }
     }
 
     let new_line = format!("{} = {}", field, value);
@@ -556,7 +600,10 @@ fn set_config_value(path: &std::path::Path, key: &str, value: &str) {
 fn get_config_value(path: &std::path::Path, key: &str) {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
-        Err(_) => { eprintln!("No config found"); return; }
+        Err(_) => {
+            eprintln!("No config found");
+            return;
+        }
     };
 
     let parts: Vec<&str> = key.split('.').collect();
@@ -574,17 +621,23 @@ fn get_config_value(path: &std::path::Path, key: &str) {
             in_section = true;
         } else if in_section && trimmed.starts_with('[') {
             break;
-        } else if in_section && trimmed.starts_with(&format!("{} =", field))
-            && let Some(val) = trimmed.split('=').nth(1) {
-                println!("{}", val.trim());
-                return;
-            }
+        } else if in_section
+            && trimmed.starts_with(&format!("{} =", field))
+            && let Some(val) = trimmed.split('=').nth(1)
+        {
+            println!("{}", val.trim());
+            return;
+        }
     }
     eprintln!("{}: not set", key);
 }
 
 fn print_help() {
-    eprintln!("{} v{} — AI Coding Session Guardian", constants::NAME, env!("CARGO_PKG_VERSION"));
+    eprintln!(
+        "{} v{} — AI Coding Session Guardian",
+        constants::NAME,
+        env!("CARGO_PKG_VERSION")
+    );
     eprintln!();
     eprintln!("USAGE:");
     eprintln!("  {} <command>", constants::NAME);
@@ -605,4 +658,3 @@ fn print_help() {
     eprintln!("  userprompt-context      Per-turn telemetry + adaptation + advisories");
     eprintln!("  ...and more (see docs)");
 }
-

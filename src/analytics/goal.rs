@@ -40,16 +40,14 @@ pub fn format_anchor(goal: &str, turn: u32) -> String {
 
 /// Compute topic coherence: Jaccard similarity between initial and current file sets
 /// Returns (similarity 0.0-1.0, list of drifted dirs)
-pub fn topic_coherence(
-    initial_set: &[String],
-    current_files: &[String],
-) -> (f64, Vec<String>) {
+pub fn topic_coherence(initial_set: &[String], current_files: &[String]) -> (f64, Vec<String>) {
     if initial_set.is_empty() || current_files.is_empty() {
         return (1.0, Vec::new());
     }
 
     // Extract directory components from current files
-    let current_dirs: std::collections::HashSet<String> = current_files.iter()
+    let current_dirs: std::collections::HashSet<String> = current_files
+        .iter()
         .filter_map(|f| {
             let normalized = f.replace('\\', "/");
             normalized.rsplit('/').nth(1).map(|d| d.to_string())
@@ -59,13 +57,21 @@ pub fn topic_coherence(
     let initial_dirs: std::collections::HashSet<&String> = initial_set.iter().collect();
 
     // Jaccard similarity
-    let intersection = current_dirs.iter().filter(|d| initial_dirs.contains(d)).count();
+    let intersection = current_dirs
+        .iter()
+        .filter(|d| initial_dirs.contains(d))
+        .count();
     let union = initial_dirs.len() + current_dirs.len() - intersection;
 
-    let similarity = if union > 0 { intersection as f64 / union as f64 } else { 1.0 };
+    let similarity = if union > 0 {
+        intersection as f64 / union as f64
+    } else {
+        1.0
+    };
 
     // Find drifted directories (in current but not in initial)
-    let drifted: Vec<String> = current_dirs.into_iter()
+    let drifted: Vec<String> = current_dirs
+        .into_iter()
         .filter(|d| !initial_dirs.contains(d))
         .take(3)
         .collect();
@@ -80,7 +86,10 @@ mod tests {
     #[test]
     fn extract_fix_goal() {
         let goal = extract_goal("fix the authentication middleware in src/auth");
-        assert_eq!(goal, Some("fix the authentication middleware in src/auth".to_string()));
+        assert_eq!(
+            goal,
+            Some("fix the authentication middleware in src/auth".to_string())
+        );
     }
 
     #[test]
@@ -99,7 +108,10 @@ mod tests {
     fn coherence_same_dirs() {
         // Initial set is directory names (e.g., "auth", "api"), extracted the same way
         let initial = vec!["auth".to_string(), "api".to_string()];
-        let current = vec!["src/auth/middleware.rs".to_string(), "src/api/client.rs".to_string()];
+        let current = vec![
+            "src/auth/middleware.rs".to_string(),
+            "src/api/client.rs".to_string(),
+        ];
         let (sim, _) = topic_coherence(&initial, &current);
         assert!(sim > 0.5, "same dirs should have high similarity: {}", sim);
     }
@@ -107,9 +119,16 @@ mod tests {
     #[test]
     fn coherence_different_dirs() {
         let initial = vec!["auth".to_string()];
-        let current = vec!["tests/integration/test_db.rs".to_string(), "docs/readme.md".to_string()];
+        let current = vec![
+            "tests/integration/test_db.rs".to_string(),
+            "docs/readme.md".to_string(),
+        ];
         let (sim, drifted) = topic_coherence(&initial, &current);
-        assert!(sim < 0.5, "different dirs should have low similarity: {}", sim);
+        assert!(
+            sim < 0.5,
+            "different dirs should have low similarity: {}",
+            sim
+        );
         assert!(!drifted.is_empty());
     }
 }

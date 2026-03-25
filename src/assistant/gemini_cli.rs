@@ -7,28 +7,48 @@ use std::path::PathBuf;
 pub struct GeminiCli;
 
 impl Assistant for GeminiCli {
-    fn name(&self) -> &str { "gemini-cli" }
+    fn name(&self) -> &str {
+        "gemini-cli"
+    }
 
     fn parse_input(&self, raw: &str) -> Option<HookInput> {
         // Gemini CLI uses similar JSON but with different field names
         let v: serde_json::Value = serde_json::from_str(raw).ok()?;
         Some(HookInput {
-            tool_name: v.get("tool").and_then(|t| t.get("name")).and_then(|n| n.as_str()).map(|s| s.to_string()),
+            tool_name: v
+                .get("tool")
+                .and_then(|t| t.get("name"))
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string()),
             tool_input: v.get("tool").and_then(|t| t.get("arguments")).cloned(),
             tool_output: v.get("tool").and_then(|t| t.get("result")).cloned(),
-            command: v.get("tool")
+            command: v
+                .get("tool")
                 .and_then(|t| t.get("arguments"))
                 .and_then(|a| a.get("command"))
                 .and_then(|c| c.as_str())
                 .map(|s| s.to_string()),
-            exit_code: v.get("tool")
+            exit_code: v
+                .get("tool")
                 .and_then(|t| t.get("result"))
                 .and_then(|r| r.get("exitCode"))
                 .and_then(|e| e.as_i64()),
-            session_id: v.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            reason: v.get("reason").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            hook_event: v.get("hook_event").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            agent_type: v.get("agent_type").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            session_id: v
+                .get("session_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            reason: v
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            hook_event: v
+                .get("hook_event")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            agent_type: v
+                .get("agent_type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         })
     }
 
@@ -36,7 +56,8 @@ impl Assistant for GeminiCli {
         serde_json::json!({
             "decision": "deny",
             "reason": message
-        }).to_string()
+        })
+        .to_string()
     }
 
     fn format_allow(&self, advisory: Option<&str>) -> String {
@@ -54,13 +75,15 @@ impl Assistant for GeminiCli {
     fn format_context(&self, text: &str) -> String {
         serde_json::json!({
             "systemMessage": text
-        }).to_string()
+        })
+        .to_string()
     }
 
     fn format_updated_output(&self, output: &serde_json::Value) -> String {
         serde_json::json!({
             "updatedOutput": output
-        }).to_string()
+        })
+        .to_string()
     }
 
     fn settings_path(&self) -> PathBuf {
@@ -73,7 +96,8 @@ impl Assistant for GeminiCli {
     fn generate_hooks_config(&self, binary_path: &std::path::Path) -> String {
         let bin = binary_path.to_string_lossy().replace('\\', "/");
         // Gemini CLI uses BeforeTool/AfterTool event names
-        format!(r#"{{
+        format!(
+            r#"{{
   "hooks": {{
     "BeforeTool": [
       {{ "matcher": "run_shell_command", "hooks": [{{ "type": "command", "command": "{bin} pretool-bash" }}] }},
@@ -90,6 +114,7 @@ impl Assistant for GeminiCli {
       {{ "matcher": "", "hooks": [{{ "type": "command", "command": "{bin} session-end" }}] }}
     ]
   }}
-}}"#)
+}}"#
+        )
     }
 }

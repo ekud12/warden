@@ -19,7 +19,10 @@ pub struct BetaPrior {
 
 impl Default for BetaPrior {
     fn default() -> Self {
-        Self { alpha: 1.0, beta: 1.0 } // Uniform prior
+        Self {
+            alpha: 1.0,
+            beta: 1.0,
+        } // Uniform prior
     }
 }
 
@@ -81,7 +84,8 @@ pub fn check_patterns(
         if p > threshold {
             warnings.push(format!(
                 "Editing across {} directories — historical error rate: {:.0}%.",
-                edited_dirs, p * 100.0
+                edited_dirs,
+                p * 100.0
             ));
         }
     }
@@ -91,7 +95,8 @@ pub fn check_patterns(
         if p > threshold {
             warnings.push(format!(
                 "{} turns without testing — historical error rate: {:.0}%.",
-                turns_since_test, p * 100.0
+                turns_since_test,
+                p * 100.0
             ));
         }
     }
@@ -152,8 +157,12 @@ mod tests {
     #[test]
     fn beta_prior_updates() {
         let mut prior = BetaPrior::default();
-        for _ in 0..8 { prior.update(true); }  // 8 errors
-        for _ in 0..2 { prior.update(false); } // 2 no-errors
+        for _ in 0..8 {
+            prior.update(true);
+        } // 8 errors
+        for _ in 0..2 {
+            prior.update(false);
+        } // 2 no-errors
         assert!(prior.probability() > 0.7);
         assert!(prior.has_enough_data());
     }
@@ -161,8 +170,12 @@ mod tests {
     #[test]
     fn check_patterns_high_risk() {
         let mut priors = ErrorPriors::default();
-        for _ in 0..10 { priors.edits_without_build.update(true); }
-        for _ in 0..2 { priors.edits_without_build.update(false); }
+        for _ in 0..10 {
+            priors.edits_without_build.update(true);
+        }
+        for _ in 0..2 {
+            priors.edits_without_build.update(false);
+        }
 
         let result = check_patterns(&priors, 3, 1, 2, 0.5);
         assert!(result.is_some());

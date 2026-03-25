@@ -56,7 +56,9 @@ pub fn run(raw: &str) {
 
     // ── Cost tracking: categorize token usage ──
     {
-        let output_size = input.tool_output.as_ref()
+        let output_size = input
+            .tool_output
+            .as_ref()
             .map(|v| v.to_string().len() as u64 / 4) // ~1 token per 4 chars
             .unwrap_or(0);
         let input_size = ti.map(|v| v.to_string().len() as u64 / 4).unwrap_or(0);
@@ -76,10 +78,16 @@ pub fn run(raw: &str) {
     {
         let action_type = match tool {
             "Bash" => {
-                let exit_code = input.tool_output.as_ref()
+                let exit_code = input
+                    .tool_output
+                    .as_ref()
                     .and_then(|v| v.get("exit_code").or_else(|| v.get("returncode")))
                     .and_then(|v| v.as_i64());
-                if exit_code == Some(0) { "bash_ok" } else { "bash_fail" }
+                if exit_code == Some(0) {
+                    "bash_ok"
+                } else {
+                    "bash_fail"
+                }
             }
             "Read" => "read",
             "Write" | "Edit" | "MultiEdit" => "edit",
@@ -89,27 +97,32 @@ pub fn run(raw: &str) {
         // Record action
         state.action_history.push(action_type.to_string());
         if state.action_history.len() > 20 {
-            state.action_history.drain(..state.action_history.len() - 20);
+            state
+                .action_history
+                .drain(..state.action_history.len() - 20);
         }
         // Record Markov transition
         if state.action_history.len() >= 2 {
             let prev = state.action_history[state.action_history.len() - 2].clone();
             crate::analytics::markov::record_transition(
-                &mut state.action_transitions, &prev, action_type
+                &mut state.action_transitions,
+                &prev,
+                action_type,
             );
         }
         // Record working set directories
-        let file_path = ti.and_then(|v| v.get("file_path").or_else(|| v.get("path")))
-            .and_then(|v| v.as_str()).unwrap_or("");
+        let file_path = ti
+            .and_then(|v| v.get("file_path").or_else(|| v.get("path")))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         if !file_path.is_empty() {
             let dir = file_path.replace('\\', "/");
             if let Some(d) = dir.rsplit('/').nth(1) {
                 let d = d.to_string();
                 // Initial working set (first 5 dirs, frozen)
-                if state.initial_working_set.len() < 5
-                    && !state.initial_working_set.contains(&d) {
-                        state.initial_working_set.push(d.clone());
-                    }
+                if state.initial_working_set.len() < 5 && !state.initial_working_set.contains(&d) {
+                    state.initial_working_set.push(d.clone());
+                }
                 // Track touch on initial set (for context switch decay)
                 if state.initial_working_set.contains(&d) {
                     state.last_initial_set_touch_turn = state.turn;
@@ -144,10 +157,7 @@ pub fn run(raw: &str) {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         let exit_code = to
-            .and_then(|v| {
-                v.get("exit_code")
-                    .or_else(|| v.get("returncode"))
-            })
+            .and_then(|v| v.get("exit_code").or_else(|| v.get("returncode")))
             .and_then(|v| v.as_i64());
 
         let output = format!("{}\n{}", stdout, stderr);
@@ -164,7 +174,10 @@ pub fn run(raw: &str) {
         let offload_threshold = rules::RULES.offload_threshold;
         if offload_threshold > 0 && output.len() > offload_threshold {
             if let Some((preview, path)) = common::scratch::offload(&output, "bash") {
-                common::log("offload", &format!("Bash output ({} bytes) → {}", output.len(), path.display()));
+                common::log(
+                    "offload",
+                    &format!("Bash output ({} bytes) → {}", output.len(), path.display()),
+                );
                 common::additional_context(&preview);
             }
             // Cleanup old scratch files periodically
@@ -193,9 +206,13 @@ pub fn run(raw: &str) {
 
         // Scan Read output for injection
         if let Some(output) = &input.tool_output
-            && let Some(text) = output.get("content").or_else(|| output.get("output")).and_then(|v| v.as_str()) {
-                scan_for_injection_with_threshold("read-output", text);
-            }
+            && let Some(text) = output
+                .get("content")
+                .or_else(|| output.get("output"))
+                .and_then(|v| v.as_str())
+        {
+            scan_for_injection_with_threshold("read-output", text);
+        }
 
         return;
     }
@@ -203,10 +220,7 @@ pub fn run(raw: &str) {
     // ── WRITE/EDIT/MULTIEDIT: Edit Tracking ──
     if tool == "Write" || tool == "Edit" || tool == "MultiEdit" {
         let file_path = ti
-            .and_then(|v| {
-                v.get("file_path")
-                    .or_else(|| v.get("path"))
-            })
+            .and_then(|v| v.get("file_path").or_else(|| v.get("path")))
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
@@ -220,7 +234,10 @@ pub fn run(raw: &str) {
                     common::add_session_note("edit", file_path);
                     common::log("posttool-session", &format!("EDIT {}", file_path));
                 } else {
-                    common::log("posttool-session", &format!("EDIT (dedup skip) {}", file_path));
+                    common::log(
+                        "posttool-session",
+                        &format!("EDIT (dedup skip) {}", file_path),
+                    );
                 }
             }
 
@@ -231,10 +248,14 @@ pub fn run(raw: &str) {
             {
                 let mut state = common::read_session_state();
                 if state.advisory_ready("cochange")
-                    && let Some(hint) = crate::handlers::git_guardian::suggest_cochanges(file_path) {
-                        common::additional_context(&hint);
-                        common::log("posttool-session", &format!("co-change: {}", common::truncate(&hint, 80)));
-                    }
+                    && let Some(hint) = crate::handlers::git_guardian::suggest_cochanges(file_path)
+                {
+                    common::additional_context(&hint);
+                    common::log(
+                        "posttool-session",
+                        &format!("co-change: {}", common::truncate(&hint, 80)),
+                    );
+                }
                 common::write_session_state(&state);
             }
 
@@ -242,10 +263,14 @@ pub fn run(raw: &str) {
             if CODE_EXTS.as_ref().is_some_and(|re| re.is_match(file_path)) {
                 let mut state = common::read_session_state();
                 if state.advisory_ready("typos")
-                    && let Some(findings) = run_typos(file_path) {
-                        common::log("posttool-session", &format!("typos: {}", common::truncate(&findings, 80)));
-                        common::additional_context(&findings);
-                    }
+                    && let Some(findings) = run_typos(file_path)
+                {
+                    common::log(
+                        "posttool-session",
+                        &format!("typos: {}", common::truncate(&findings, 80)),
+                    );
+                    common::additional_context(&findings);
+                }
                 common::write_session_state(&state);
             }
 
@@ -278,7 +303,11 @@ fn run_typos(file_path: &str) -> Option<String> {
     let lines: Vec<&str> = result.stdout.lines().take(5).collect();
     let truncated = if total > 5 { " (showing first 5)" } else { "" };
 
-    Some(format!("Typos detected{}:\n{}", truncated, lines.join("\n")))
+    Some(format!(
+        "Typos detected{}:\n{}",
+        truncated,
+        lines.join("\n")
+    ))
 }
 
 /// Scan text for injection with per-category session threshold (max 5 per category)
@@ -292,7 +321,10 @@ fn scan_for_injection_with_threshold(source: &str, text: &str) {
     let mut should_warn = false;
 
     for m in &matches {
-        let count = state.injection_warn_counts.entry(m.category.clone()).or_insert(0);
+        let count = state
+            .injection_warn_counts
+            .entry(m.category.clone())
+            .or_insert(0);
         if *count < 5 {
             *count += 1;
             should_warn = true;
@@ -356,7 +388,15 @@ fn check_doom_loop(tool: &str, tool_input: Option<&serde_json::Value>) {
              check error output carefully, or ask the user for guidance.\nArgs: {}",
             tool, current, args_preview
         );
-        common::log("doom-loop", &format!("{} x{}: {}", tool, current, common::truncate(&args_preview, 80)));
+        common::log(
+            "doom-loop",
+            &format!(
+                "{} x{}: {}",
+                tool,
+                current,
+                common::truncate(&args_preview, 80)
+            ),
+        );
         common::additional_context(&warning);
     } else {
         state.enforce_bounds();

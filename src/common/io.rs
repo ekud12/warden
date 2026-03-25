@@ -175,9 +175,8 @@ pub fn hooks_dir() -> &'static Path {
 
 /// Resolve the active assistant's rules directory (e.g. ~/.claude/rules/ for Claude Code).
 /// Cached after first call via LazyLock.
-static ASSISTANT_RULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    crate::assistant::detect_assistant().rules_dir()
-});
+static ASSISTANT_RULES_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| crate::assistant::detect_assistant().rules_dir());
 
 pub fn assistant_rules_dir() -> &'static Path {
     &ASSISTANT_RULES_DIR
@@ -227,13 +226,18 @@ pub fn log_structured(hook_name: &str, level: LogLevel, action: &str, detail: &s
         let state = super::read_session_state();
         state.turn
     };
-    let line = format!("{} [{}] t={} {}: {}", ts, level.as_str(), turn, action, detail);
+    let line = format!(
+        "{} [{}] t={} {}: {}",
+        ts,
+        level.as_str(),
+        turn,
+        action,
+        detail
+    );
 
     if LOG_BUFFERED.load(Ordering::Relaxed) {
         if let Ok(mut buf) = LOG_BUFFER.lock() {
-            buf.entry(hook_name.to_string())
-                .or_default()
-                .push(line);
+            buf.entry(hook_name.to_string()).or_default().push(line);
         }
         return;
     }
@@ -254,9 +258,7 @@ pub fn log(hook_name: &str, message: &str) {
     // Buffer in daemon mode — one file open per flush instead of per log call
     if LOG_BUFFERED.load(Ordering::Relaxed) {
         if let Ok(mut buf) = LOG_BUFFER.lock() {
-            buf.entry(hook_name.to_string())
-                .or_default()
-                .push(line);
+            buf.entry(hook_name.to_string()).or_default().push(line);
         }
         return;
     }
@@ -288,11 +290,7 @@ pub fn flush_log_buffer() {
 
         rotate_if_needed(&path, 102_400, 51_200);
 
-        if let Ok(mut f) = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-        {
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
             for line in &lines {
                 let _ = writeln!(f, "{}", line);
             }
@@ -311,11 +309,7 @@ fn write_log_line(hook_name: &str, line: &str) {
 
     rotate_if_needed(&path, 102_400, 51_200);
 
-    if let Ok(mut f) = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "{}", line);
     }
 }
@@ -334,11 +328,7 @@ pub fn add_session_note_ext(note_type: &str, detail: &str, data: Option<&serde_j
 
     rotate_if_needed(&path, 102_400, 51_200);
 
-    if let Ok(mut f) = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-    {
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
         let mut entry = serde_json::json!({
             "ts": now_iso(),
             "type": note_type,
@@ -367,13 +357,14 @@ pub fn add_session_note_ext(note_type: &str, detail: &str, data: Option<&serde_j
 /// Read the last N bytes from a file (for dedup checks)
 pub fn read_tail(path: &Path, bytes: u64) -> String {
     if let Ok(mut f) = fs::File::open(path)
-        && let Ok(meta) = f.metadata() {
-            let start = meta.len().saturating_sub(bytes);
-            let _ = f.seek(SeekFrom::Start(start));
-            let mut buf = String::new();
-            let _ = f.read_to_string(&mut buf);
-            return buf;
-        }
+        && let Ok(meta) = f.metadata()
+    {
+        let start = meta.len().saturating_sub(bytes);
+        let _ = f.seek(SeekFrom::Start(start));
+        let mut buf = String::new();
+        let _ = f.read_to_string(&mut buf);
+        return buf;
+    }
     String::new()
 }
 
@@ -441,10 +432,10 @@ fn try_file_lock(lock_path: &Path) -> Option<FileLock> {
     {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::Storage::FileSystem::{
-            CreateFileW, FILE_ATTRIBUTE_NORMAL, CREATE_ALWAYS,
-        };
         use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+        use windows_sys::Win32::Storage::FileSystem::{
+            CREATE_ALWAYS, CreateFileW, FILE_ATTRIBUTE_NORMAL,
+        };
 
         let wide_path: Vec<u16> = OsStr::new(lock_path)
             .encode_wide()
@@ -456,7 +447,7 @@ fn try_file_lock(lock_path: &Path) -> Option<FileLock> {
             let handle = CreateFileW(
                 wide_path.as_ptr(),
                 0x80000000 | 0x40000000, // GENERIC_READ | GENERIC_WRITE
-                0, // No sharing — exclusive
+                0,                       // No sharing — exclusive
                 std::ptr::null(),
                 CREATE_ALWAYS,
                 FILE_ATTRIBUTE_NORMAL,
@@ -479,7 +470,9 @@ fn try_file_lock(lock_path: &Path) -> Option<FileLock> {
             .create_new(true)
             .open(lock_path)
         {
-            Ok(_) => Some(FileLock { _path: lock_path.to_path_buf() }),
+            Ok(_) => Some(FileLock {
+                _path: lock_path.to_path_buf(),
+            }),
             Err(_) => None,
         }
     }

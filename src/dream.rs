@@ -81,12 +81,12 @@ pub struct ErrorCluster {
 }
 
 const TASK_ORDER: &[DreamTask] = &[
-    DreamTask::LearnEffectiveness,    // highest value — feeds back into injection budget
-    DreamTask::BuildResumePacket,     // second — ready for session resume
-    DreamTask::ClusterErrors,         // third — compress noisy error history
+    DreamTask::LearnEffectiveness, // highest value — feeds back into injection budget
+    DreamTask::BuildResumePacket,  // second — ready for session resume
+    DreamTask::ClusterErrors,      // third — compress noisy error history
     DreamTask::UpdateWorkingSetRanking,
     DreamTask::BuildDeadEndMemory,
-    DreamTask::ConsolidateEvents,     // lowest priority — general housekeeping
+    DreamTask::ConsolidateEvents, // lowest priority — general housekeeping
 ];
 
 /// Cycle counter for round-robin task selection
@@ -123,10 +123,12 @@ pub fn process_batch(batch: DreamBatch) {
 /// E5: Learn which interventions preceded progress
 fn learn_effectiveness() {
     let events = common::storage::read_last_events(200);
-    if events.len() < 10 { return; }
+    if events.len() < 10 {
+        return;
+    }
 
-    let mut scores: InterventionScores = common::storage::read_json("dream", "intervention_scores")
-        .unwrap_or_default();
+    let mut scores: InterventionScores =
+        common::storage::read_json("dream", "intervention_scores").unwrap_or_default();
 
     let mut last_advisory_category: Option<String> = None;
     let mut last_advisory_turn: u32 = 0;
@@ -142,27 +144,27 @@ fn learn_effectiveness() {
         match event_type {
             // Track advisory emissions
             t if t.contains("advisory") || t.contains("injection") => {
-                let category = entry.get("detail")
+                let category = entry
+                    .get("detail")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown")
-                    .split_whitespace().next()
+                    .split_whitespace()
+                    .next()
                     .unwrap_or("unknown")
                     .to_string();
                 last_advisory_category = Some(category);
-                last_advisory_turn = entry.get("turn")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
+                last_advisory_turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
             }
             // Milestone within 5 turns of advisory = positive signal
             "milestone" => {
-                let turn = entry.get("turn")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
+                let turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                 if let Some(ref cat) = last_advisory_category
-                    && turn > 0 && turn.saturating_sub(last_advisory_turn) <= 5 {
-                        let score = scores.scores.entry(cat.clone()).or_insert(0.5);
-                        *score = (*score + crate::config::DREAM_LEARNING_RATE).min(1.0);
-                    }
+                    && turn > 0
+                    && turn.saturating_sub(last_advisory_turn) <= 5
+                {
+                    let score = scores.scores.entry(cat.clone()).or_insert(0.5);
+                    *score = (*score + crate::config::DREAM_LEARNING_RATE).min(1.0);
+                }
             }
             _ => {}
         }
@@ -206,13 +208,16 @@ fn cluster_errors() {
             Err(_) => continue,
         };
 
-        if entry.get("type").and_then(|v| v.as_str()) != Some("error") { continue; }
+        if entry.get("type").and_then(|v| v.as_str()) != Some("error") {
+            continue;
+        }
 
         let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
         let turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
 
         // Extract file from error detail (heuristic: first path-like token)
-        let file = detail.split_whitespace()
+        let file = detail
+            .split_whitespace()
             .find(|w| w.contains('/') || w.contains('\\') || w.contains('.'))
             .unwrap_or("unknown")
             .to_string();
@@ -231,9 +236,7 @@ fn cluster_errors() {
         cluster.last_turn = turn;
     }
 
-    let significant: Vec<ErrorCluster> = clusters.into_values()
-        .filter(|c| c.count >= 2)
-        .collect();
+    let significant: Vec<ErrorCluster> = clusters.into_values().filter(|c| c.count >= 2).collect();
 
     if !significant.is_empty() {
         let _ = common::storage::write_json("dream", "error_clusters", &significant);
@@ -248,9 +251,15 @@ fn update_working_set() {
     for (path, entry) in &state.files_read {
         let recency = if state.turn > 0 {
             1.0 - ((state.turn - entry.turn) as f64 / state.turn as f64)
-        } else { 1.0 };
+        } else {
+            1.0
+        };
         let frequency = 1.0; // Simplified — would need per-file access count
-        let outcome = if state.files_edited.contains(path) { 1.5 } else { 1.0 };
+        let outcome = if state.files_edited.contains(path) {
+            1.5
+        } else {
+            1.0
+        };
         let score = recency * frequency * outcome;
 
         rankings.push(RankedItem {
@@ -262,7 +271,11 @@ fn update_working_set() {
         });
     }
 
-    rankings.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    rankings.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     rankings.truncate(20);
 
     let _ = common::storage::write_json("dream", "working_set", &rankings);
@@ -271,7 +284,9 @@ fn update_working_set() {
 /// E6: Build dead-end memory from session state
 fn build_dead_end_memory() {
     let state = common::read_session_state();
-    if state.dead_ends.is_empty() && state.failed_commands.is_empty() { return; }
+    if state.dead_ends.is_empty() && state.failed_commands.is_empty() {
+        return;
+    }
 
     let mut memory: Vec<String> = Vec::new();
     memory.extend(state.dead_ends.iter().cloned());
@@ -290,7 +305,10 @@ fn consolidate_events() {
     // Future: aggregate event counts, prune old events, build summaries
     // For now, just verify events table health
     let count = common::storage::read_last_events(1).len();
-    common::log("dream", &format!("Event store health check: {} events accessible", count));
+    common::log(
+        "dream",
+        &format!("Event store health check: {} events accessible", count),
+    );
 }
 
 /// Read the current resume packet (for MCP or post-compaction injection)
@@ -322,7 +340,11 @@ pub fn text_similarity(a: &str, b: &str) -> f64 {
     let b_words: std::collections::HashSet<&str> = b.split_whitespace().collect();
     let intersection = a_words.intersection(&b_words).count();
     let union = a_words.union(&b_words).count();
-    if union == 0 { 0.0 } else { intersection as f64 / union as f64 }
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f64 / union as f64
+    }
 }
 
 /// Cluster strings by similarity. Returns groups of indices.
@@ -332,11 +354,15 @@ pub fn cluster_by_similarity(items: &[String], threshold: f64) -> Vec<Vec<usize>
     let mut assigned: std::collections::HashSet<usize> = std::collections::HashSet::new();
 
     for i in 0..items.len() {
-        if assigned.contains(&i) { continue; }
+        if assigned.contains(&i) {
+            continue;
+        }
         let mut cluster = vec![i];
         assigned.insert(i);
         for j in (i + 1)..items.len() {
-            if assigned.contains(&j) { continue; }
+            if assigned.contains(&j) {
+                continue;
+            }
             if text_similarity(&items[i], &items[j]) > threshold {
                 cluster.push(j);
                 assigned.insert(j);

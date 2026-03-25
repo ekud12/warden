@@ -26,9 +26,15 @@ fn check_json(file_path: &str) {
     if let Err(e) = serde_json::from_str::<serde_json::Value>(&content) {
         common::additional_context(&format!(
             "JSON syntax error in {}: {} (line {}, column {})",
-            file_path, e, e.line(), e.column()
+            file_path,
+            e,
+            e.line(),
+            e.column()
         ));
-        common::log("posttool-session", &format!("SYNTAX JSON error: {} line {}", file_path, e.line()));
+        common::log(
+            "posttool-session",
+            &format!("SYNTAX JSON error: {} line {}", file_path, e.line()),
+        );
     }
 }
 
@@ -40,9 +46,18 @@ fn check_toml(file_path: &str) {
 
     if let Err(e) = content.parse::<toml::Table>() {
         let msg = e.message();
-        let span = e.span().map(|s| format!(" (offset {})", s.start)).unwrap_or_default();
-        common::additional_context(&format!("TOML syntax error in {}: {}{}", file_path, msg, span));
-        common::log("posttool-session", &format!("SYNTAX TOML error: {} {}", file_path, msg));
+        let span = e
+            .span()
+            .map(|s| format!(" (offset {})", s.start))
+            .unwrap_or_default();
+        common::additional_context(&format!(
+            "TOML syntax error in {}: {}{}",
+            file_path, msg, span
+        ));
+        common::log(
+            "posttool-session",
+            &format!("SYNTAX TOML error: {} {}", file_path, msg),
+        );
     }
 }
 
@@ -60,9 +75,13 @@ fn check_yaml(file_path: &str) {
         if line.starts_with('\t') {
             common::additional_context(&format!(
                 "YAML error in {} line {}: Tab character found. YAML requires space indentation.",
-                file_path, i + 1
+                file_path,
+                i + 1
             ));
-            common::log("posttool-session", &format!("SYNTAX YAML tab error: {} line {}", file_path, i + 1));
+            common::log(
+                "posttool-session",
+                &format!("SYNTAX YAML tab error: {} line {}", file_path, i + 1),
+            );
             return;
         }
     }
@@ -83,7 +102,10 @@ fn check_yaml(file_path: &str) {
                 "YAML syntax error in {}: Unbalanced braces/brackets",
                 file_path
             ));
-            common::log("posttool-session", &format!("SYNTAX YAML brace error: {}", file_path));
+            common::log(
+                "posttool-session",
+                &format!("SYNTAX YAML brace error: {}", file_path),
+            );
             return;
         }
     }
@@ -92,6 +114,9 @@ fn check_yaml(file_path: &str) {
             "YAML syntax error in {}: Unbalanced braces/brackets ({} open braces, {} open brackets)",
             file_path, braces, brackets
         ));
-        common::log("posttool-session", &format!("SYNTAX YAML balance error: {}", file_path));
+        common::log(
+            "posttool-session",
+            &format!("SYNTAX YAML balance error: {}", file_path),
+        );
     }
 }

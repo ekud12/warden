@@ -39,7 +39,11 @@ pub fn detect_recurring(session_notes_path: &Path) -> Option<String> {
             || note_type == "dep-error"
         {
             // Use first word as error type key
-            let error_key = detail.split_whitespace().next().unwrap_or(detail).to_string();
+            let error_key = detail
+                .split_whitespace()
+                .next()
+                .unwrap_or(detail)
+                .to_string();
             current_errors.push(error_key);
         }
     }
@@ -79,5 +83,8 @@ pub fn detect_recurring(session_notes_path: &Path) -> Option<String> {
         .map(|(key, count)| format!("{} ({}x)", key, count))
         .collect();
 
-    Some(format!("Recurring issues across sessions: {}. Consider addressing root cause.", items.join(", ")))
+    Some(format!(
+        "Recurring issues across sessions: {}. Consider addressing root cause.",
+        items.join(", ")
+    ))
 }

@@ -1,5 +1,6 @@
 fn main() {
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+    #[cfg(target_os = "windows")]
+    {
         let bin_name = std::env::var("CARGO_BIN_NAME").unwrap_or_default();
         let description = match bin_name.as_str() {
             "warden-relay" => "Warden Relay",

@@ -4,8 +4,8 @@
 // Instead of iterating 149 regexes sequentially, one RegexSet.is_match() call
 // tests all patterns simultaneously via a single DFA pass.
 
-use std::sync::LazyLock;
 use regex::RegexSet;
+use std::sync::LazyLock;
 
 use super::PATTERNS;
 use crate::common;
@@ -19,24 +19,32 @@ use crate::rules;
 static EXPANSION_RISK: LazyLock<RegexSet> = LazyLock::new(|| {
     RegexSet::new([
         r"\$\{?\w+\}?\s+-(r|f|rf|fr)\b",             // $VAR -rf
-        r"`[^`]*`\s+-(r|f|rf|fr)\b",                  // `cmd` -rf
-        r"\$\([^)]*\)\s+-(r|f|rf|fr)\b",              // $(cmd) -rf
-        r"\beval\s+",                                  // eval anything
-        r"\bsource\s+/dev/",                           // source from device
-        r#"\bsh\s+-c\s+["']?\$"#,                      // sh -c "$VAR"
-        r#"\bbash\s+-c\s+["']?\$"#,                    // bash -c "$VAR"
-        r"\bxargs\s+.*\b(rm|chmod|chown|dd|mkfs)\b",  // xargs + dangerous cmd
-    ]).unwrap()
+        r"`[^`]*`\s+-(r|f|rf|fr)\b",                 // `cmd` -rf
+        r"\$\([^)]*\)\s+-(r|f|rf|fr)\b",             // $(cmd) -rf
+        r"\beval\s+",                                // eval anything
+        r"\bsource\s+/dev/",                         // source from device
+        r#"\bsh\s+-c\s+["']?\$"#,                    // sh -c "$VAR"
+        r#"\bbash\s+-c\s+["']?\$"#,                  // bash -c "$VAR"
+        r"\bxargs\s+.*\b(rm|chmod|chown|dd|mkfs)\b", // xargs + dangerous cmd
+    ])
+    .unwrap()
 });
 
 /// Check if command uses variable expansion or indirect execution in dangerous positions
 pub fn check_expansion_risk(cmd: &str) -> bool {
     if EXPANSION_RISK.is_match(cmd) {
         record_deny_savings();
-        common::log_structured("pretool-bash", common::LogLevel::Deny, "expansion-risk", &common::truncate(cmd, 60));
-        common::deny("PreToolUse",
+        common::log_structured(
+            "pretool-bash",
+            common::LogLevel::Deny,
+            "expansion-risk",
+            &common::truncate(cmd, 60),
+        );
+        common::deny(
+            "PreToolUse",
             "BLOCKED: Command uses variable expansion or indirect execution in a potentially dangerous context. \
-             Use literal commands instead of variables/subshells for destructive operations.");
+             Use literal commands instead of variables/subshells for destructive operations.",
+        );
         return true;
     }
     false
@@ -59,12 +67,13 @@ pub fn record_deny_savings_with_rule(rule_id: Option<&str>) {
     state.savings_deny += 1;
     state.record_denial();
     if let Some(id) = rule_id
-        && !state.rules_fired.iter().any(|r| r == id) {
-            state.rules_fired.push(id.to_string());
-            if state.rules_fired.len() > 50 {
-                state.rules_fired.drain(..state.rules_fired.len() - 50);
-            }
+        && !state.rules_fired.iter().any(|r| r == id)
+    {
+        state.rules_fired.push(id.to_string());
+        if state.rules_fired.len() > 50 {
+            state.rules_fired.drain(..state.rules_fired.len() - 50);
         }
+    }
     common::write_session_state(&state);
 }
 
@@ -75,11 +84,22 @@ pub fn check_safety(cmd: &str) -> bool {
         if !is_safety_excluded(cmd) {
             // Shadow mode: log but don't block
             if PATTERNS.safety_shadow.get(idx).copied().unwrap_or(false) {
-                common::log("pretool-bash", &format!("SHADOW safety: would deny: {}", &PATTERNS.safety_messages[idx]));
+                common::log(
+                    "pretool-bash",
+                    &format!(
+                        "SHADOW safety: would deny: {}",
+                        &PATTERNS.safety_messages[idx]
+                    ),
+                );
                 continue;
             }
             record_deny_savings();
-            common::log_structured("pretool-bash", common::LogLevel::Deny, "safety", &common::truncate(cmd, 60));
+            common::log_structured(
+                "pretool-bash",
+                common::LogLevel::Deny,
+                "safety",
+                &common::truncate(cmd, 60),
+            );
             common::deny("PreToolUse", &PATTERNS.safety_messages[idx]);
             return true;
         }
@@ -90,12 +110,28 @@ pub fn check_safety(cmd: &str) -> bool {
 /// Check hallucination patterns — single RegexSet pass
 pub fn check_hallucination(cmd: &str) -> bool {
     if let Some(idx) = PATTERNS.hallucination_set.matches(cmd).into_iter().next() {
-        if PATTERNS.hallucination_shadow.get(idx).copied().unwrap_or(false) {
-            common::log("pretool-bash", &format!("SHADOW hallucination: would deny: {}", &PATTERNS.hallucination_messages[idx]));
+        if PATTERNS
+            .hallucination_shadow
+            .get(idx)
+            .copied()
+            .unwrap_or(false)
+        {
+            common::log(
+                "pretool-bash",
+                &format!(
+                    "SHADOW hallucination: would deny: {}",
+                    &PATTERNS.hallucination_messages[idx]
+                ),
+            );
             return false;
         }
         record_deny_savings();
-        common::log_structured("pretool-bash", common::LogLevel::Deny, "hallucination", &common::truncate(cmd, 60));
+        common::log_structured(
+            "pretool-bash",
+            common::LogLevel::Deny,
+            "hallucination",
+            &common::truncate(cmd, 60),
+        );
         common::deny("PreToolUse", &PATTERNS.hallucination_messages[idx]);
         return true;
     }
@@ -104,8 +140,18 @@ pub fn check_hallucination(cmd: &str) -> bool {
 
 /// Check hallucination advisory patterns — single RegexSet pass
 pub fn check_hallucination_advisory(cmd: &str) -> bool {
-    if let Some(idx) = PATTERNS.hallucination_advisory_set.matches(cmd).into_iter().next() {
-        common::log_structured("pretool-bash", common::LogLevel::Advisory, "hallucination", &common::truncate(cmd, 60));
+    if let Some(idx) = PATTERNS
+        .hallucination_advisory_set
+        .matches(cmd)
+        .into_iter()
+        .next()
+    {
+        common::log_structured(
+            "pretool-bash",
+            common::LogLevel::Advisory,
+            "hallucination",
+            &common::truncate(cmd, 60),
+        );
         common::allow_with_advisory("PreToolUse", &PATTERNS.hallucination_advisory_messages[idx]);
         return true;
     }
@@ -117,15 +163,37 @@ pub fn check_destructive(cmd: &str) -> bool {
     let matches: Vec<usize> = PATTERNS.destructive_set.matches(cmd).into_iter().collect();
     for idx in matches {
         if !is_destructive_excluded(cmd) {
-            if PATTERNS.destructive_shadow.get(idx).copied().unwrap_or(false) {
-                common::log("pretool-bash", &format!("SHADOW destructive: would deny: {}", &PATTERNS.destructive_messages[idx]));
+            if PATTERNS
+                .destructive_shadow
+                .get(idx)
+                .copied()
+                .unwrap_or(false)
+            {
+                common::log(
+                    "pretool-bash",
+                    &format!(
+                        "SHADOW destructive: would deny: {}",
+                        &PATTERNS.destructive_messages[idx]
+                    ),
+                );
                 continue;
             }
             let restriction_id = format!("destructive.{}", idx);
-            if is_disabled(&restriction_id) { continue; }
+            if is_disabled(&restriction_id) {
+                continue;
+            }
             record_deny_savings_with_rule(Some(&restriction_id));
-            common::log_structured("pretool-bash", common::LogLevel::Deny, "destructive", &common::truncate(cmd, 60));
-            common::deny_with_id("PreToolUse", &PATTERNS.destructive_messages[idx], &restriction_id);
+            common::log_structured(
+                "pretool-bash",
+                common::LogLevel::Deny,
+                "destructive",
+                &common::truncate(cmd, 60),
+            );
+            common::deny_with_id(
+                "PreToolUse",
+                &PATTERNS.destructive_messages[idx],
+                &restriction_id,
+            );
             return true;
         }
     }
@@ -134,20 +202,24 @@ pub fn check_destructive(cmd: &str) -> bool {
 
 /// Check zero-trace patterns in echo/printf/tee — returns true if command was denied
 pub fn check_zero_trace(cmd: &str) -> bool {
-    if let (Some(zt_cmd), Some(zt_write)) =
-        (&PATTERNS.zero_trace_cmd, &PATTERNS.zero_trace_write)
-        && zt_cmd.is_match(cmd) && zt_write.is_match(cmd) {
-            let is_path_context = PATTERNS
-                .zero_trace_path_exclude
-                .as_ref()
-                .is_some_and(|re| re.is_match(cmd));
-            if !is_path_context {
-                record_deny_savings();
-                common::log_structured("pretool-bash", common::LogLevel::Deny, "zero-trace", cmd);
-                common::deny("PreToolUse", "BLOCKED: Do not include AI/Claude/Copilot/LLM attribution in echo/printf/tee commands. Remove the attribution text and retry.");
-                return true;
-            }
+    if let (Some(zt_cmd), Some(zt_write)) = (&PATTERNS.zero_trace_cmd, &PATTERNS.zero_trace_write)
+        && zt_cmd.is_match(cmd)
+        && zt_write.is_match(cmd)
+    {
+        let is_path_context = PATTERNS
+            .zero_trace_path_exclude
+            .as_ref()
+            .is_some_and(|re| re.is_match(cmd));
+        if !is_path_context {
+            record_deny_savings();
+            common::log_structured("pretool-bash", common::LogLevel::Deny, "zero-trace", cmd);
+            common::deny(
+                "PreToolUse",
+                "BLOCKED: Do not include AI/Claude/Copilot/LLM attribution in echo/printf/tee commands. Remove the attribution text and retry.",
+            );
+            return true;
         }
+    }
     false
 }
 
@@ -165,7 +237,12 @@ pub fn check_substitutions(cmd: &str) -> bool {
                 continue;
             }
             record_deny_savings_with_rule(Some(&restriction_id));
-            common::log_structured("pretool-bash", common::LogLevel::Deny, "substitution", &common::truncate(cmd, 40));
+            common::log_structured(
+                "pretool-bash",
+                common::LogLevel::Deny,
+                "substitution",
+                &common::truncate(cmd, 40),
+            );
             common::deny_with_id("PreToolUse", msg, &restriction_id);
             return true;
         }
@@ -176,7 +253,12 @@ pub fn check_substitutions(cmd: &str) -> bool {
 /// Check advisory patterns — single RegexSet pass
 pub fn check_advisories(cmd: &str) -> bool {
     if let Some(idx) = PATTERNS.advisories_set.matches(cmd).into_iter().next() {
-        common::log_structured("pretool-bash", common::LogLevel::Advisory, "advisory", &common::truncate(cmd, 60));
+        common::log_structured(
+            "pretool-bash",
+            common::LogLevel::Advisory,
+            "advisory",
+            &common::truncate(cmd, 60),
+        );
         common::allow_with_advisory("PreToolUse", &PATTERNS.advisories_messages[idx]);
         return true;
     }
@@ -186,7 +268,9 @@ pub fn check_advisories(cmd: &str) -> bool {
 /// Safety pattern exclusions (replaces regex lookaheads which the regex crate doesn't support).
 /// Returns true if the command should NOT be denied despite matching a safety pattern.
 fn is_safety_excluded(cmd: &str) -> bool {
-    if cmd.contains("clean") && (cmd.contains("--dry-run") || cmd.contains(" -n ") || cmd.ends_with(" -n")) {
+    if cmd.contains("clean")
+        && (cmd.contains("--dry-run") || cmd.contains(" -n ") || cmd.ends_with(" -n"))
+    {
         return true;
     }
     if cmd.contains("stash") && (cmd.contains("list") || cmd.contains("show")) {

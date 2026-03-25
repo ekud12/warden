@@ -51,18 +51,12 @@ pub fn run(raw: &str) {
             Err(_) => continue,
         };
 
-        let note_type = entry
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
         match note_type {
             "edit" => {
                 // Only count edits to aidex-supported file extensions
-                let detail = entry
-                    .get("detail")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
                 if is_aidex_supported_file(detail) {
                     has_recent_edit = true;
                 }
@@ -71,10 +65,7 @@ pub fn run(raw: &str) {
                 unresolved_errors += 1;
             }
             "milestone" => {
-                let detail = entry
-                    .get("detail")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
                 if detail.contains("aidex_update") {
                     has_aidex_update = true;
                 }
@@ -127,8 +118,9 @@ fn aidex_exists() -> bool {
     }
     // Check if PWD env points somewhere with .aidex
     if let Ok(pwd) = std::env::var("PWD")
-        && Path::new(&pwd).join(".aidex").exists() {
-            return true;
-        }
+        && Path::new(&pwd).join(".aidex").exists()
+    {
+        return true;
+    }
     false
 }

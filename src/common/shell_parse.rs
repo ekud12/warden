@@ -29,7 +29,10 @@ impl Segment {
             // Valid env var: all uppercase/lowercase/digits/underscore, no spaces
             if !before_eq.is_empty()
                 && before_eq.chars().all(|c| c.is_alphanumeric() || c == '_')
-                && before_eq.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                && before_eq
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphabetic() || c == '_')
             {
                 // Skip past the value
                 let after_eq = &rest[eq_pos + 1..];
@@ -247,8 +250,12 @@ pub fn parse_argv(text: &str) -> ParsedCommand {
         if !program_found {
             if let Some(eq_pos) = token.find('=') {
                 let key = &token[..eq_pos];
-                if !key.is_empty() && key.chars().all(|c| c.is_alphanumeric() || c == '_')
-                    && key.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+                if !key.is_empty()
+                    && key.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    && key
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_alphabetic() || c == '_')
                 {
                     let val = token[eq_pos + 1..].to_string();
                     env_vars.push((key.to_string(), val));
@@ -280,17 +287,23 @@ pub fn parse_argv(text: &str) -> ParsedCommand {
         }
         // Redirect attached to token: ">file", ">>file"
         if let Some(target) = token.strip_prefix(">>") {
-            if !target.is_empty() { redirects.push(Redirect::Append(target.to_string())); }
+            if !target.is_empty() {
+                redirects.push(Redirect::Append(target.to_string()));
+            }
             i += 1;
             continue;
         }
         if let Some(target) = token.strip_prefix('>') {
-            if !target.is_empty() { redirects.push(Redirect::Out(target.to_string())); }
+            if !target.is_empty() {
+                redirects.push(Redirect::Out(target.to_string()));
+            }
             i += 1;
             continue;
         }
         if let Some(target) = token.strip_prefix('<') {
-            if !target.is_empty() { redirects.push(Redirect::In(target.to_string())); }
+            if !target.is_empty() {
+                redirects.push(Redirect::In(target.to_string()));
+            }
             i += 1;
             continue;
         }
@@ -299,7 +312,13 @@ pub fn parse_argv(text: &str) -> ParsedCommand {
         i += 1;
     }
 
-    ParsedCommand { program, args, env_vars, redirects, has_expansion }
+    ParsedCommand {
+        program,
+        args,
+        env_vars,
+        redirects,
+        has_expansion,
+    }
 }
 
 /// Check if a token contains shell expansion markers
@@ -315,14 +334,22 @@ fn contains_expansion(token: &str) -> bool {
             in_single_quote = false;
             continue;
         }
-        if in_single_quote { continue; }
+        if in_single_quote {
+            continue;
+        }
 
         // $VAR, ${VAR}, $(cmd)
-        if ch == '$' { return true; }
+        if ch == '$' {
+            return true;
+        }
         // `cmd` backtick expansion
-        if ch == '`' { return true; }
+        if ch == '`' {
+            return true;
+        }
         // Tilde expansion at start
-        if ch == '~' && i == 0 { continue; } // ~ alone is not dangerous expansion
+        if ch == '~' && i == 0 {
+            continue;
+        } // ~ alone is not dangerous expansion
     }
     false
 }
@@ -487,7 +514,13 @@ mod tests {
         let cmd = parse_argv("FOO=bar BAZ=1 cargo build --release");
         assert_eq!(cmd.program, "cargo");
         assert_eq!(cmd.args, vec!["build", "--release"]);
-        assert_eq!(cmd.env_vars, vec![("FOO".to_string(), "bar".to_string()), ("BAZ".to_string(), "1".to_string())]);
+        assert_eq!(
+            cmd.env_vars,
+            vec![
+                ("FOO".to_string(), "bar".to_string()),
+                ("BAZ".to_string(), "1".to_string())
+            ]
+        );
     }
 
     #[test]
@@ -535,7 +568,10 @@ mod tests {
     fn argv_complex_combined() {
         let cmd = parse_argv("RUST_LOG=debug cargo test --lib > output.log 2>&1");
         assert_eq!(cmd.program, "cargo");
-        assert_eq!(cmd.env_vars, vec![("RUST_LOG".to_string(), "debug".to_string())]);
+        assert_eq!(
+            cmd.env_vars,
+            vec![("RUST_LOG".to_string(), "debug".to_string())]
+        );
         assert!(cmd.args.contains(&"test".to_string()));
         assert!(cmd.args.contains(&"--lib".to_string()));
         assert!(!cmd.redirects.is_empty());

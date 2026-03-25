@@ -25,7 +25,9 @@ pub fn run(args: &[String]) {
                 last_n = args[i + 1].parse().unwrap_or(0);
                 i += 2;
             }
-            _ => { i += 1; }
+            _ => {
+                i += 1;
+            }
         }
     }
 
@@ -41,7 +43,8 @@ pub fn run(args: &[String]) {
                 continue;
             }
 
-            let hash8 = dir.file_name()
+            let hash8 = dir
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown")
                 .to_string();
@@ -128,19 +131,27 @@ pub fn run(args: &[String]) {
     match format {
         "csv" => print_csv(&summaries),
         _ => {
-            println!("{}", serde_json::to_string_pretty(&summaries).unwrap_or_else(|_| "[]".to_string()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&summaries).unwrap_or_else(|_| "[]".to_string())
+            );
         }
     }
 }
 
 fn print_csv(summaries: &[serde_json::Value]) {
-    println!("ts,project,quality_score,turns,edits,errors,milestones,tokens_in,tokens_out,tokens_saved,savings_pct");
+    println!(
+        "ts,project,quality_score,turns,edits,errors,milestones,tokens_in,tokens_out,tokens_saved,savings_pct"
+    );
     for s in summaries {
-        println!("{},{},{},{},{},{},{},{},{},{},{}",
+        println!(
+            "{},{},{},{},{},{},{},{},{},{},{}",
             s.get("ts").and_then(|v| v.as_str()).unwrap_or(""),
             s.get("project").and_then(|v| v.as_str()).unwrap_or(""),
             s.get("quality_score").and_then(|v| v.as_u64()).unwrap_or(0),
-            s.get("duration_turns").and_then(|v| v.as_u64()).unwrap_or(0),
+            s.get("duration_turns")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
             s.get("edits").and_then(|v| v.as_u64()).unwrap_or(0),
             s.get("errors").and_then(|v| v.as_u64()).unwrap_or(0),
             s.get("milestones").and_then(|v| v.as_u64()).unwrap_or(0),

@@ -29,10 +29,21 @@ pub fn run(raw: &str) {
     if legacy_state.exists() {
         common::storage::migrate_from_json(&proj_dir);
         // Rename legacy files to .bak
-        for name in ["session-state.json", "stats.json", "rule-effectiveness.json", "session-notes.jsonl"] {
+        for name in [
+            "session-state.json",
+            "stats.json",
+            "rule-effectiveness.json",
+            "session-notes.jsonl",
+        ] {
             let src = proj_dir.join(name);
             if src.exists() {
-                let _ = fs::rename(&src, src.with_extension(format!("{}.bak", src.extension().unwrap_or_default().to_str().unwrap_or(""))));
+                let _ = fs::rename(
+                    &src,
+                    src.with_extension(format!(
+                        "{}.bak",
+                        src.extension().unwrap_or_default().to_str().unwrap_or("")
+                    )),
+                );
             }
         }
         common::log("session-start", "Migrated legacy JSON files to redb");
@@ -44,7 +55,10 @@ pub fn run(raw: &str) {
     if is_reinit {
         // Mid-session re-fire (e.g. after deploy/daemon restart) — preserve state,
         // just re-inject rules and restart daemon if needed.
-        common::log("session-start", &format!("Re-init at turn {} (skipping state reset)", existing.turn));
+        common::log(
+            "session-start",
+            &format!("Re-init at turn {} (skipping state reset)", existing.turn),
+        );
     } else {
         // True fresh session — reset state
         common::write_session_state(&common::SessionState::default());
@@ -65,9 +79,10 @@ pub fn run(raw: &str) {
     if std::env::var("WARDEN_NO_DAEMON").is_err() && !crate::ipc::daemon_is_running() {
         // Clean stale PID if process is dead
         if let Some(pid) = crate::ipc::read_pid()
-            && (!crate::ipc::pid_is_alive(pid) || !crate::ipc::pid_is_warden(pid)) {
-                crate::ipc::remove_pid_file();
-            }
+            && (!crate::ipc::pid_is_alive(pid) || !crate::ipc::pid_is_warden(pid))
+        {
+            crate::ipc::remove_pid_file();
+        }
         crate::ipc::spawn_daemon();
         common::log("session-start", "Auto-started daemon");
     }
@@ -80,15 +95,17 @@ pub fn run(raw: &str) {
     // Load tool enforcement rules from the active assistant's rules directory
     let rules_path = common::assistant_rules_dir().join("tool-enforcement.md");
     if let Ok(rules) = fs::read_to_string(&rules_path)
-        && !rules.trim().is_empty() {
-            context_parts.push(rules.trim().to_string());
-        }
+        && !rules.trim().is_empty()
+    {
+        context_parts.push(rules.trim().to_string());
+    }
 
     // On re-init, skip heavy context — rules re-injection is enough
     if is_reinit {
         context_parts.push(format!(
             "{} re-initialized (daemon restart at turn {}). Session state preserved.",
-            constants::NAME, existing.turn
+            constants::NAME,
+            existing.turn
         ));
         if !context_parts.is_empty() {
             common::additional_context(&context_parts.join("\n\n"));
@@ -106,9 +123,10 @@ pub fn run(raw: &str) {
     // Aidex note → redb (silent)
     let aidex_note = cwd.join(".aidex").join("note.md");
     if let Ok(content) = fs::read_to_string(&aidex_note)
-        && !content.trim().is_empty() {
-            let _ = common::storage::write_json("dream", "aidex_note", &content.trim().to_string());
-        }
+        && !content.trim().is_empty()
+    {
+        let _ = common::storage::write_json("dream", "aidex_note", &content.trim().to_string());
+    }
 
     // Cross-session recurring errors → redb (silent)
     let session_path = common::project_dir().join("session-notes.jsonl");
@@ -133,22 +151,26 @@ pub fn run(raw: &str) {
     // Custom providers → redb (silent)
     let providers_dir = common::hooks_dir().join("providers");
     if providers_dir.is_dir()
-        && let Ok(entries) = fs::read_dir(&providers_dir) {
-            let mut provider_outputs: Vec<String> = Vec::new();
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file()
-                    && let Some(output) = common::subprocess::run_with_timeout(
-                        path.to_str().unwrap_or(""), &[], std::time::Duration::from_secs(2),
-                    )
-                    && !output.stdout.trim().is_empty() {
-                        provider_outputs.push(output.stdout.trim().to_string());
-                    }
-            }
-            if !provider_outputs.is_empty() {
-                let _ = common::storage::write_json("dream", "provider_outputs", &provider_outputs);
+        && let Ok(entries) = fs::read_dir(&providers_dir)
+    {
+        let mut provider_outputs: Vec<String> = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file()
+                && let Some(output) = common::subprocess::run_with_timeout(
+                    path.to_str().unwrap_or(""),
+                    &[],
+                    std::time::Duration::from_secs(2),
+                )
+                && !output.stdout.trim().is_empty()
+            {
+                provider_outputs.push(output.stdout.trim().to_string());
             }
         }
+        if !provider_outputs.is_empty() {
+            let _ = common::storage::write_json("dream", "provider_outputs", &provider_outputs);
+        }
+    }
 
     // Inject ONLY tool enforcement rules
     if !context_parts.is_empty() {
@@ -187,7 +209,10 @@ fn increment_session_count() -> u32 {
         .unwrap_or(0) as u32;
     count += 1;
     let data = serde_json::json!({ "sessions_completed": count });
-    let _ = std::fs::write(&stats_path, serde_json::to_string_pretty(&data).unwrap_or_default());
+    let _ = std::fs::write(
+        &stats_path,
+        serde_json::to_string_pretty(&data).unwrap_or_default(),
+    );
     count
 }
 
@@ -198,7 +223,10 @@ fn cleanup_stale_tmp() {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().map(|e| e == "tmp").unwrap_or(false) {
-                common::log("session-start", &format!("Cleaning stale tmp: {:?}", path.file_name()));
+                common::log(
+                    "session-start",
+                    &format!("Cleaning stale tmp: {:?}", path.file_name()),
+                );
                 let _ = fs::remove_file(&path);
             }
         }
@@ -207,23 +235,36 @@ fn cleanup_stale_tmp() {
 
 /// Auto-detect project type from workspace files
 fn detect_project_type(cwd: &std::path::Path) -> &'static str {
-    if cwd.join("Cargo.toml").exists() { "rust" }
-    else if cwd.join("package.json").exists() { "node" }
-    else if cwd.join("pyproject.toml").exists() || cwd.join("setup.py").exists() { "python" }
-    else if cwd.join("go.mod").exists() { "go" }
-    else if cwd.join("pom.xml").exists() || cwd.join("build.gradle").exists() { "java" }
-    else if has_extension(cwd, "sln") || has_extension(cwd, "csproj") { "dotnet" }
-    else if cwd.join("composer.json").exists() { "php" }
-    else if cwd.join("Gemfile").exists() { "ruby" }
-    else if cwd.join("Package.swift").exists() { "swift" }
-    else { "unknown" }
+    if cwd.join("Cargo.toml").exists() {
+        "rust"
+    } else if cwd.join("package.json").exists() {
+        "node"
+    } else if cwd.join("pyproject.toml").exists() || cwd.join("setup.py").exists() {
+        "python"
+    } else if cwd.join("go.mod").exists() {
+        "go"
+    } else if cwd.join("pom.xml").exists() || cwd.join("build.gradle").exists() {
+        "java"
+    } else if has_extension(cwd, "sln") || has_extension(cwd, "csproj") {
+        "dotnet"
+    } else if cwd.join("composer.json").exists() {
+        "php"
+    } else if cwd.join("Gemfile").exists() {
+        "ruby"
+    } else if cwd.join("Package.swift").exists() {
+        "swift"
+    } else {
+        "unknown"
+    }
 }
 
 /// Check if any file with the given extension exists in the directory (non-recursive)
 fn has_extension(dir: &std::path::Path, ext: &str) -> bool {
     std::fs::read_dir(dir)
-        .map(|entries| entries.flatten().any(|e| {
-            e.path().extension().map(|x| x == ext).unwrap_or(false)
-        }))
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|e| e.path().extension().map(|x| x == ext).unwrap_or(false))
+        })
         .unwrap_or(false)
 }

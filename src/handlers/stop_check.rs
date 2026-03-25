@@ -94,12 +94,20 @@ pub fn run(raw: &str) {
     }
 
     // Missing aidex_update is advisory-only (not blocking)
-    if has_aidex && has_recent_edit && !has_aidex_update {
-        common::log("stop-check", "ADVISORY — edits without aidex_update");
-        common::additional_context(
-            "Consider running aidex_update for indexed files before ending the session.",
-        );
-        return;
+    // Only fire if .aidex/ exists in the project AND edits happened to supported files
+    // AND enough edits to warrant the advisory (>= 5)
+    let aidex_dir_exists = std::env::current_dir()
+        .map(|d| d.join(".aidex").is_dir())
+        .unwrap_or(false);
+    if has_aidex && aidex_dir_exists && has_recent_edit && !has_aidex_update {
+        let state = common::read_session_state();
+        if state.files_edited.len() >= 5 {
+            common::log("stop-check", "ADVISORY — edits without aidex_update");
+            common::additional_context(
+                "Consider running aidex_update for indexed files before ending the session.",
+            );
+            return;
+        }
     }
 
     common::log("stop-check", "PASS — clean stop");

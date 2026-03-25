@@ -388,6 +388,7 @@ pub fn run(_raw: &str) {
         if let Ok(content) = std::fs::read_to_string(&rules_path) {
             let condensed = common::truncate(&content, 800);
             parts.push(format!("## Rules Reminder (turn {})\n{}", turn, condensed));
+            state.last_rules_reinject_turn = turn;
             common::log_structured("userprompt-context", common::LogLevel::Info, "rules-reinject", &format!("turn {}", turn));
         }
     }
@@ -474,6 +475,12 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 /// Event-based rule reinjection: only reinject when there's evidence the agent
 /// is ignoring rules, not on a periodic timer. Reduces context waste.
 fn should_reinject_rules(state: &common::SessionState) -> bool {
+    // Cooldown: don't reinject if we did within the last 5 turns
+    if state.last_rules_reinject_turn > 0
+        && state.turn.saturating_sub(state.last_rules_reinject_turn) < 5 {
+        return false;
+    }
+
     // 3+ denials in last 5 turns = agent is fighting rules
     let recent_denials = state.recent_denial_turns.iter()
         .filter(|&&t| t + 5 >= state.turn)

@@ -18,10 +18,7 @@ use crate::rules;
 use serde_json::Value;
 
 /// MCP tools whose output naturally contains instruction-like text — skip injection scan
-const SKIP_INJECTION_SCAN: &[&str] = &[
-    "mcp__playwright__",
-    "mcp__context7__",
-];
+const SKIP_INJECTION_SCAN: &[&str] = &["mcp__playwright__", "mcp__context7__"];
 
 pub fn run(raw: &str) {
     let input = common::parse_input_or_return!(raw);
@@ -53,11 +50,17 @@ pub fn run(raw: &str) {
     let max_output = get_max_mcp_output();
 
     // Injection scan on MCP output (skip web-content tools)
-    if !SKIP_INJECTION_SCAN.iter().any(|prefix| tool_name.starts_with(prefix)) {
+    if !SKIP_INJECTION_SCAN
+        .iter()
+        .any(|prefix| tool_name.starts_with(prefix))
+    {
         let matches = common::sanitize::scan_for_injection(&serialized);
         if !matches.is_empty() {
             let warning = common::sanitize::build_warning(&matches);
-            common::log("injection-detect", &format!("mcp-{}: {}", tool_name, warning));
+            common::log(
+                "injection-detect",
+                &format!("mcp-{}: {}", tool_name, warning),
+            );
             common::additional_context(&warning);
         }
     }
@@ -115,13 +118,15 @@ fn get_max_mcp_output() -> usize {
 
 /// MCP tools that need full unmodified output — never trim these
 const FULL_OUTPUT_TOOLS: &[&str] = &[
-    "mcp__playwright__",     // All playwright tools (snapshots, screenshots, DOM)
-    "mcp__context7__",       // Library docs — trimming defeats the purpose
+    "mcp__playwright__", // All playwright tools (snapshots, screenshots, DOM)
+    "mcp__context7__",   // Library docs — trimming defeats the purpose
     "mcp__sequential-thinking__", // Reasoning chains must stay intact
 ];
 
 fn is_full_output_tool(tool_name: &str) -> bool {
-    FULL_OUTPUT_TOOLS.iter().any(|prefix| tool_name.starts_with(prefix))
+    FULL_OUTPUT_TOOLS
+        .iter()
+        .any(|prefix| tool_name.starts_with(prefix))
 }
 
 /// Recursively trim a JSON value tree
@@ -130,10 +135,8 @@ fn trim_value(value: Value) -> Value {
         Value::String(s) => trim_string(s),
         Value::Array(arr) => trim_array(arr),
         Value::Object(map) => {
-            let trimmed: serde_json::Map<String, Value> = map
-                .into_iter()
-                .map(|(k, v)| (k, trim_value(v)))
-                .collect();
+            let trimmed: serde_json::Map<String, Value> =
+                map.into_iter().map(|(k, v)| (k, trim_value(v))).collect();
             Value::Object(trimmed)
         }
         other => other, // Numbers, bools, nulls pass through

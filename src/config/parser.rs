@@ -6,7 +6,9 @@
 use serde::Deserialize;
 use std::sync::LazyLock;
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
@@ -24,7 +26,9 @@ pub struct AssistantConfig {
     pub assistant_type: String,
 }
 
-fn default_auto() -> String { "auto".to_string() }
+fn default_auto() -> String {
+    "auto".to_string()
+}
 
 #[derive(Deserialize)]
 #[serde(default)]

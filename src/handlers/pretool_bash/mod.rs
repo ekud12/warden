@@ -91,39 +91,41 @@ pub(crate) static PATTERNS: LazyLock<CompiledPatterns> = LazyLock::new(|| {
     // Validate a regex pattern with size limits to prevent ReDoS from user-supplied TOML
     let validated_regex = |pat: &str| -> bool {
         regex::RegexBuilder::new(pat)
-            .size_limit(1 << 16)      // 64KB DFA size limit
-            .dfa_size_limit(1 << 18)  // 256KB DFA limit
-            .nest_limit(50)           // nesting depth limit
+            .size_limit(1 << 16) // 64KB DFA size limit
+            .dfa_size_limit(1 << 18) // 256KB DFA limit
+            .nest_limit(50) // nesting depth limit
             .build()
             .is_ok()
     };
 
     // Build RegexSet + parallel message/shadow/id Vecs from pattern pairs (with ReDoS protection)
-    let compile_set_with_messages = |pairs: &[rules::RuleEntry]| -> (RegexSet, Vec<String>, Vec<bool>, Vec<String>) {
-        let mut valid_patterns: Vec<String> = Vec::new();
-        let mut messages: Vec<String> = Vec::new();
-        let mut shadow_flags: Vec<bool> = Vec::new();
-        let mut rule_ids: Vec<String> = Vec::new();
-        for (id, pat, msg, shadow) in pairs {
-            if validated_regex(pat) {
-                valid_patterns.push(pat.clone());
-                messages.push(msg.clone());
-                shadow_flags.push(*shadow);
-                rule_ids.push(id.clone());
+    let compile_set_with_messages =
+        |pairs: &[rules::RuleEntry]| -> (RegexSet, Vec<String>, Vec<bool>, Vec<String>) {
+            let mut valid_patterns: Vec<String> = Vec::new();
+            let mut messages: Vec<String> = Vec::new();
+            let mut shadow_flags: Vec<bool> = Vec::new();
+            let mut rule_ids: Vec<String> = Vec::new();
+            for (id, pat, msg, shadow) in pairs {
+                if validated_regex(pat) {
+                    valid_patterns.push(pat.clone());
+                    messages.push(msg.clone());
+                    shadow_flags.push(*shadow);
+                    rule_ids.push(id.clone());
+                }
             }
-        }
-        let set = regex::RegexSetBuilder::new(&valid_patterns)
-            .size_limit(1 << 20)
-            .dfa_size_limit(1 << 22)
-            .nest_limit(50)
-            .build()
-            .unwrap_or_else(|_| RegexSet::empty());
-        (set, messages, shadow_flags, rule_ids)
-    };
+            let set = regex::RegexSetBuilder::new(&valid_patterns)
+                .size_limit(1 << 20)
+                .dfa_size_limit(1 << 22)
+                .nest_limit(50)
+                .build()
+                .unwrap_or_else(|_| RegexSet::empty());
+            (set, messages, shadow_flags, rule_ids)
+        };
 
     // Build RegexSet from string list (no messages, with ReDoS protection)
     let compile_set_from_list = |pats: &[String]| -> RegexSet {
-        let valid: Vec<&str> = pats.iter()
+        let valid: Vec<&str> = pats
+            .iter()
             .filter(|p| validated_regex(p))
             .map(|s| s.as_str())
             .collect();
@@ -135,12 +137,14 @@ pub(crate) static PATTERNS: LazyLock<CompiledPatterns> = LazyLock::new(|| {
             .unwrap_or_else(|_| RegexSet::empty())
     };
 
-    let just_verbose_joined = r.just_verbose
+    let just_verbose_joined = r
+        .just_verbose
         .iter()
         .map(|s| regex::escape(s))
         .collect::<Vec<_>>()
         .join("|");
-    let just_short_joined = r.just_short
+    let just_short_joined = r
+        .just_short
         .iter()
         .map(|s| regex::escape(s))
         .collect::<Vec<_>>()
@@ -156,38 +160,115 @@ pub(crate) static PATTERNS: LazyLock<CompiledPatterns> = LazyLock::new(|| {
     let mut advisories_pairs = r.advisories_pairs.clone();
     let mut auto_allow_patterns = r.auto_allow_patterns.clone();
 
-    for (i, (pat, msg)) in overrides.safety.iter().enumerate() { safety_pairs.push((format!("override_safety.{}", i), pat.clone(), msg.clone(), false)); }
-    for (i, (pat, msg)) in overrides.hallucination.iter().enumerate() { hallucination_pairs.push((format!("override_hallucination.{}", i), pat.clone(), msg.clone(), false)); }
-    for (i, (pat, msg)) in overrides.hallucination_advisory.iter().enumerate() { hallucination_advisory_pairs.push((format!("override_hallucination_advisory.{}", i), pat.clone(), msg.clone(), false)); }
-    for (i, (pat, msg)) in overrides.substitutions.iter().enumerate() { substitutions_pairs.push((format!("override_substitution.{}", i), pat.clone(), msg.clone(), false)); }
-    for (i, (pat, msg)) in overrides.advisories.iter().enumerate() { advisories_pairs.push((format!("override_advisory.{}", i), pat.clone(), msg.clone(), false)); }
-    for pat in &overrides.auto_allow { auto_allow_patterns.push(pat.clone()); }
+    for (i, (pat, msg)) in overrides.safety.iter().enumerate() {
+        safety_pairs.push((
+            format!("override_safety.{}", i),
+            pat.clone(),
+            msg.clone(),
+            false,
+        ));
+    }
+    for (i, (pat, msg)) in overrides.hallucination.iter().enumerate() {
+        hallucination_pairs.push((
+            format!("override_hallucination.{}", i),
+            pat.clone(),
+            msg.clone(),
+            false,
+        ));
+    }
+    for (i, (pat, msg)) in overrides.hallucination_advisory.iter().enumerate() {
+        hallucination_advisory_pairs.push((
+            format!("override_hallucination_advisory.{}", i),
+            pat.clone(),
+            msg.clone(),
+            false,
+        ));
+    }
+    for (i, (pat, msg)) in overrides.substitutions.iter().enumerate() {
+        substitutions_pairs.push((
+            format!("override_substitution.{}", i),
+            pat.clone(),
+            msg.clone(),
+            false,
+        ));
+    }
+    for (i, (pat, msg)) in overrides.advisories.iter().enumerate() {
+        advisories_pairs.push((
+            format!("override_advisory.{}", i),
+            pat.clone(),
+            msg.clone(),
+            false,
+        ));
+    }
+    for pat in &overrides.auto_allow {
+        auto_allow_patterns.push(pat.clone());
+    }
 
     // Build RegexSets (single DFA pass for boolean matching)
-    let (safety_set, safety_messages, safety_shadow, safety_ids) = compile_set_with_messages(&safety_pairs);
-    let (hallucination_set, hallucination_messages, hallucination_shadow, hallucination_ids) = compile_set_with_messages(&hallucination_pairs);
-    let (hallucination_advisory_set, hallucination_advisory_messages, _, hallucination_advisory_ids) = compile_set_with_messages(&hallucination_advisory_pairs);
-    let (destructive_set, destructive_messages, destructive_shadow, destructive_ids) = compile_set_with_messages(&r.destructive_pairs);
-    let (advisories_set, advisories_messages, _, advisories_ids) = compile_set_with_messages(&advisories_pairs);
+    let (safety_set, safety_messages, safety_shadow, safety_ids) =
+        compile_set_with_messages(&safety_pairs);
+    let (hallucination_set, hallucination_messages, hallucination_shadow, hallucination_ids) =
+        compile_set_with_messages(&hallucination_pairs);
+    let (
+        hallucination_advisory_set,
+        hallucination_advisory_messages,
+        _,
+        hallucination_advisory_ids,
+    ) = compile_set_with_messages(&hallucination_advisory_pairs);
+    let (destructive_set, destructive_messages, destructive_shadow, destructive_ids) =
+        compile_set_with_messages(&r.destructive_pairs);
+    let (advisories_set, advisories_messages, _, advisories_ids) =
+        compile_set_with_messages(&advisories_pairs);
     let auto_allow_set = compile_set_from_list(&auto_allow_patterns);
 
     // Substitutions stay sequential (need per-pattern tool availability check)
     let substitutions = compile_merged_pairs(&substitutions_pairs);
 
     CompiledPatterns {
-        safety_set, safety_messages, safety_shadow, safety_ids,
-        hallucination_set, hallucination_messages, hallucination_shadow, hallucination_ids,
-        hallucination_advisory_set, hallucination_advisory_messages, hallucination_advisory_ids,
-        destructive_set, destructive_messages, destructive_shadow, destructive_ids,
-        advisories_set, advisories_messages, advisories_ids,
+        safety_set,
+        safety_messages,
+        safety_shadow,
+        safety_ids,
+        hallucination_set,
+        hallucination_messages,
+        hallucination_shadow,
+        hallucination_ids,
+        hallucination_advisory_set,
+        hallucination_advisory_messages,
+        hallucination_advisory_ids,
+        destructive_set,
+        destructive_messages,
+        destructive_shadow,
+        destructive_ids,
+        advisories_set,
+        advisories_messages,
+        advisories_ids,
         auto_allow_set,
         substitutions,
         cd_just_re: Regex::new(r#"^\s*cd\s+["']?([^"'&;]+?)["']?\s*&&\s*just\s+(.+)$"#).ok(),
-        zero_trace_cmd: if r.zero_trace_cmd.is_empty() { None } else { Regex::new(&r.zero_trace_cmd).ok() },
-        zero_trace_path_exclude: if r.zero_trace_path_exclude.is_empty() { None } else { Regex::new(&r.zero_trace_path_exclude).ok() },
-        zero_trace_write: if r.zero_trace_write.is_empty() { None } else { Regex::new(&r.zero_trace_write).ok() },
-        verbose: config::VERBOSE_PATTERNS.iter().filter_map(|p| Regex::new(p).ok()).collect(),
-        short: config::SHORT_COMMANDS.iter().filter_map(|p| Regex::new(p).ok()).collect(),
+        zero_trace_cmd: if r.zero_trace_cmd.is_empty() {
+            None
+        } else {
+            Regex::new(&r.zero_trace_cmd).ok()
+        },
+        zero_trace_path_exclude: if r.zero_trace_path_exclude.is_empty() {
+            None
+        } else {
+            Regex::new(&r.zero_trace_path_exclude).ok()
+        },
+        zero_trace_write: if r.zero_trace_write.is_empty() {
+            None
+        } else {
+            Regex::new(&r.zero_trace_write).ok()
+        },
+        verbose: config::VERBOSE_PATTERNS
+            .iter()
+            .filter_map(|p| Regex::new(p).ok())
+            .collect(),
+        short: config::SHORT_COMMANDS
+            .iter()
+            .filter_map(|p| Regex::new(p).ok())
+            .collect(),
         just_verbose_re: Regex::new(&format!(r"(?i)^\s*just\s+({})\b", just_verbose_joined)).ok(),
         just_short_re: Regex::new(&format!(r"(?i)^\s*just\s+({})\b", just_short_joined)).ok(),
         port_re: Regex::new(r"(?:localhost|127\.0\.0\.1):(\d+)").ok(),
@@ -211,32 +292,46 @@ pub fn run(raw: &str) {
     // -1. Health gate: deny HTTP calls to unhealthy managed processes
     if let Some(port) = extract_localhost_port(cmd)
         && let Some((name, health)) = crate::handlers::proc_mgmt::get_process_on_port(port)
-            && health != "healthy" {
-                safety::record_deny_savings();
-                common::log("pretool-bash", &format!("DENY health-gate: {} port {} is {}", name, port, health));
-                common::deny(
-                    "PreToolUse",
-                    &format!(
-                        "Service '{}' (port {}) is {}. Use: {} proc wait --name {}",
-                        name, port, health, crate::constants::NAME, name
-                    ),
-                );
-                return;
-            }
+        && health != "healthy"
+    {
+        safety::record_deny_savings();
+        common::log(
+            "pretool-bash",
+            &format!("DENY health-gate: {} port {} is {}", name, port, health),
+        );
+        common::deny(
+            "PreToolUse",
+            &format!(
+                "Service '{}' (port {}) is {}. Use: {} proc wait --name {}",
+                name,
+                port,
+                health,
+                crate::constants::NAME,
+                name
+            ),
+        );
+        return;
+    }
 
     // 0. cd+just transform: "cd /path && just recipe" → "just recipe"
     //    The cd is unnecessary — just walks up to find the Justfile, and recipes
     //    have working-directory annotations for subdirectory context.
     if let Some(ref re) = PATTERNS.cd_just_re
-        && let Some(caps) = re.captures(cmd) {
-            let Some(recipe_match) = caps.get(2) else { return; };
-            let recipe_part = recipe_match.as_str().trim();
-            let new_cmd = format!("just {}", recipe_part);
-            common::log("pretool-bash", &format!("TRANSFORM cd+just → {}", common::truncate(&new_cmd, 80)));
-            let updated = serde_json::json!({ "command": new_cmd });
-            common::allow_with_update("PreToolUse", updated);
+        && let Some(caps) = re.captures(cmd)
+    {
+        let Some(recipe_match) = caps.get(2) else {
             return;
-        }
+        };
+        let recipe_part = recipe_match.as_str().trim();
+        let new_cmd = format!("just {}", recipe_part);
+        common::log(
+            "pretool-bash",
+            &format!("TRANSFORM cd+just → {}", common::truncate(&new_cmd, 80)),
+        );
+        let updated = serde_json::json!({ "command": new_cmd });
+        common::allow_with_update("PreToolUse", updated);
+        return;
+    }
 
     // 1. Commands starting with "just " — skip to truncation check only
     //    (only relevant if Justfile exists; without it, just commands would fail anyway)
@@ -249,33 +344,58 @@ pub fn run(raw: &str) {
     let has_justfile = just::justfile_exists();
 
     // 2a. Variable expansion / indirect execution risk — DENY
-    if safety::check_expansion_risk(cmd) { return; }
+    if safety::check_expansion_risk(cmd) {
+        return;
+    }
 
     // 2b. Safety patterns — DENY
-    if safety::check_safety(cmd) { return; }
+    if safety::check_safety(cmd) {
+        return;
+    }
 
     // 2.5. Hallucination hardening — DENY
-    if safety::check_hallucination(cmd) { return; }
+    if safety::check_hallucination(cmd) {
+        return;
+    }
 
     // 2.75. Hallucination advisories — suspicious but possibly legitimate
-    if safety::check_hallucination_advisory(cmd) { return; }
+    if safety::check_hallucination_advisory(cmd) {
+        return;
+    }
 
     // 2.8. Control character detection — DENY commands with embedded control chars
     if let Some(desc) = common::detect_suspicious_chars(cmd) {
         safety::record_deny_savings();
-        common::log_structured("pretool-bash", common::LogLevel::Deny, "control-chars", &desc);
-        common::deny("PreToolUse", &format!("BLOCKED: Command contains suspicious characters ({}). Remove them and retry.", desc));
+        common::log_structured(
+            "pretool-bash",
+            common::LogLevel::Deny,
+            "control-chars",
+            &desc,
+        );
+        common::deny(
+            "PreToolUse",
+            &format!(
+                "BLOCKED: Command contains suspicious characters ({}). Remove them and retry.",
+                desc
+            ),
+        );
         return;
     }
 
     // 3. Destructive patterns — DENY
-    if safety::check_destructive(cmd) { return; }
+    if safety::check_destructive(cmd) {
+        return;
+    }
 
     // 4. Zero-trace patterns (AI attribution in echo/printf/tee)
-    if safety::check_zero_trace(cmd) { return; }
+    if safety::check_zero_trace(cmd) {
+        return;
+    }
 
     // 5. Substitution patterns — DENY
-    if safety::check_substitutions(cmd) { return; }
+    if safety::check_substitutions(cmd) {
+        return;
+    }
 
     // 5.5. Pre-execution command dedup (after all safety checks)
     let (deduped, mut state) = dedup::check_dedup(cmd);
@@ -289,31 +409,42 @@ pub fn run(raw: &str) {
     }
 
     // 6. Just-first transform — only when Justfile exists in project
-    if has_justfile
-        && let Some(result) = just::try_just_transform(cmd) {
-            match result {
-                just::JustResult::Transform(new_cmd) => {
-                    common::log("pretool-bash", &format!("TRANSFORM {} -> {}", common::truncate(cmd, 60), common::truncate(&new_cmd, 60)));
-                    let updated = serde_json::json!({ "command": new_cmd });
-                    common::allow_with_update("PreToolUse", updated);
-                    return;
-                }
-                just::JustResult::Deny(msg) => {
-                    safety::record_deny_savings();
-                    common::log("pretool-bash", &format!("DENY just: {}", msg));
-                    common::deny("PreToolUse", &msg);
-                    return;
-                }
-                just::JustResult::Advisory(msg) => {
-                    common::log("pretool-bash", &format!("ADVISORY just: {}", common::truncate(&msg, 80)));
-                    common::allow_with_advisory("PreToolUse", &msg);
-                    return;
-                }
+    if has_justfile && let Some(result) = just::try_just_transform(cmd) {
+        match result {
+            just::JustResult::Transform(new_cmd) => {
+                common::log(
+                    "pretool-bash",
+                    &format!(
+                        "TRANSFORM {} -> {}",
+                        common::truncate(cmd, 60),
+                        common::truncate(&new_cmd, 60)
+                    ),
+                );
+                let updated = serde_json::json!({ "command": new_cmd });
+                common::allow_with_update("PreToolUse", updated);
+                return;
+            }
+            just::JustResult::Deny(msg) => {
+                safety::record_deny_savings();
+                common::log("pretool-bash", &format!("DENY just: {}", msg));
+                common::deny("PreToolUse", &msg);
+                return;
+            }
+            just::JustResult::Advisory(msg) => {
+                common::log(
+                    "pretool-bash",
+                    &format!("ADVISORY just: {}", common::truncate(&msg, 80)),
+                );
+                common::allow_with_advisory("PreToolUse", &msg);
+                return;
             }
         }
+    }
 
     // 6.5. Advisory patterns — ALLOW with systemMessage (non-blocking)
-    if safety::check_advisories(cmd) { return; }
+    if safety::check_advisories(cmd) {
+        return;
+    }
 
     // 7. Truncation check
     truncation::handle_truncation(cmd);

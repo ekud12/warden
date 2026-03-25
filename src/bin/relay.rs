@@ -17,7 +17,11 @@ fn main() {
     // Find warden.exe next to this relay binary
     let relay_path = std::env::current_exe().unwrap_or_default();
     let bin_dir = relay_path.parent().unwrap_or(std::path::Path::new("."));
-    let warden = bin_dir.join(if cfg!(windows) { "warden.exe" } else { "warden" });
+    let warden = bin_dir.join(if cfg!(windows) {
+        "warden.exe"
+    } else {
+        "warden"
+    });
 
     if !warden.exists() {
         std::process::exit(0); // Fail open — never block the AI

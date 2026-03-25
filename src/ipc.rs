@@ -48,9 +48,13 @@ pub fn pipe_name() -> String {
         .or_else(|_| std::env::var("USER"))
         .unwrap_or_else(|_| "default".to_string());
     #[cfg(windows)]
-    { format!(r"\\.\pipe\{}-{}", crate::constants::PIPE_PREFIX, username) }
+    {
+        format!(r"\\.\pipe\{}-{}", crate::constants::PIPE_PREFIX, username)
+    }
     #[cfg(not(windows))]
-    { format!("/tmp/{}-{}.sock", crate::constants::PIPE_PREFIX, username) }
+    {
+        format!("/tmp/{}-{}.sock", crate::constants::PIPE_PREFIX, username)
+    }
 }
 
 /// Get the modification time of the current binary as epoch seconds.
@@ -169,7 +173,7 @@ pub fn pid_is_alive(pid: u32) -> bool {
 pub fn pid_is_warden(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::CloseHandle;
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
     };
 
     // SAFETY: handle validity checked (null guard); buf is stack-allocated MAX_PATH; handle closed after query.
@@ -264,7 +268,14 @@ pub fn spawn_daemon() {
             .spawn()
         {
             Ok(child) => {
-                crate::common::log("ipc", &format!("Daemon spawned (pid={}, mtime={})", child.id(), source_mtime));
+                crate::common::log(
+                    "ipc",
+                    &format!(
+                        "Daemon spawned (pid={}, mtime={})",
+                        child.id(),
+                        source_mtime
+                    ),
+                );
             }
             Err(e) => {
                 crate::common::log("ipc", &format!("Failed to spawn daemon: {}", e));
@@ -282,7 +293,14 @@ pub fn spawn_daemon() {
             .spawn()
         {
             Ok(child) => {
-                crate::common::log("ipc", &format!("Daemon spawned (pid={}, mtime={})", child.id(), source_mtime));
+                crate::common::log(
+                    "ipc",
+                    &format!(
+                        "Daemon spawned (pid={}, mtime={})",
+                        child.id(),
+                        source_mtime
+                    ),
+                );
             }
             Err(e) => {
                 crate::common::log("ipc", &format!("Failed to spawn daemon: {}", e));

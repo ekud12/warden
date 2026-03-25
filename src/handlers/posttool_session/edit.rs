@@ -8,12 +8,19 @@ pub fn update_edit_state(file_path: &str) {
 
     // Premature execution detection: editing before enough evidence gathered
     // Skip for continued sessions (files_read carries over) or if files were already read
-    if state.turn <= 5 && state.files_read.len() < 3 && state.files_edited.is_empty()
-        && state.last_compaction_turn == 0 {
-        common::log("intelligence", &format!(
-            "Early editing: only {} files examined before first edit at turn {}",
-            state.files_read.len(), state.turn
-        ));
+    if state.turn <= 5
+        && state.files_read.len() < 3
+        && state.files_edited.is_empty()
+        && state.last_compaction_turn == 0
+    {
+        common::log(
+            "intelligence",
+            &format!(
+                "Early editing: only {} files examined before first edit at turn {}",
+                state.files_read.len(),
+                state.turn
+            ),
+        );
     }
 
     // Reset explore count — editing means committing to an approach

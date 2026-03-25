@@ -57,7 +57,8 @@ pub fn compute_from_events(events: &[Vec<u8>]) -> Scorecard {
     let mut last_denial_cmd: Option<String> = None;
     let mut last_denial_turn: u32 = 0;
     let mut last_advisory_turn: u32 = 0;
-    let mut advisory_categories: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut advisory_categories: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
     let mut turns_with_injection: std::collections::HashSet<u32> = std::collections::HashSet::new();
     let mut milestone_turns: Vec<u32> = Vec::new();
     let mut max_turn: u32 = 0;
@@ -72,7 +73,9 @@ pub fn compute_from_events(events: &[Vec<u8>]) -> Scorecard {
         let turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
         let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
 
-        if turn > max_turn { max_turn = turn; }
+        if turn > max_turn {
+            max_turn = turn;
+        }
 
         match event_type {
             "deny" | "denial" => {
@@ -81,9 +84,11 @@ pub fn compute_from_events(events: &[Vec<u8>]) -> Scorecard {
 
                 // False positive detection: same command retried within 2 turns
                 if let Some(ref prev_cmd) = last_denial_cmd
-                    && *prev_cmd == cmd && turn.saturating_sub(last_denial_turn) <= 2 {
-                        sc.false_positives += 1;
-                    }
+                    && *prev_cmd == cmd
+                    && turn.saturating_sub(last_denial_turn) <= 2
+                {
+                    sc.false_positives += 1;
+                }
                 last_denial_cmd = Some(cmd);
                 last_denial_turn = turn;
             }
@@ -103,7 +108,11 @@ pub fn compute_from_events(events: &[Vec<u8>]) -> Scorecard {
                 turns_with_injection.insert(turn);
 
                 // Track category for repetition detection
-                let category = detail.split_whitespace().next().unwrap_or("unknown").to_string();
+                let category = detail
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("unknown")
+                    .to_string();
                 *advisory_categories.entry(category).or_insert(0) += 1;
             }
             "truncation" | "compression" => {
@@ -158,14 +167,30 @@ fn compute_overall(sc: &Scorecard) -> u32 {
     use crate::config;
     let mut score: i32 = config::SCORECARD_BASELINE;
 
-    score += if sc.false_positives == 0 { config::SCORECARD_SAFETY_BONUS } else { -(sc.false_positives as i32 * config::SCORECARD_FP_PENALTY) };
-    score += if sc.tokens_saved > 10_000 { config::SCORECARD_EFFICIENCY_HIGH } else if sc.tokens_saved > 1_000 { config::SCORECARD_EFFICIENCY_MED } else { 0 };
+    score += if sc.false_positives == 0 {
+        config::SCORECARD_SAFETY_BONUS
+    } else {
+        -(sc.false_positives as i32 * config::SCORECARD_FP_PENALTY)
+    };
+    score += if sc.tokens_saved > 10_000 {
+        config::SCORECARD_EFFICIENCY_HIGH
+    } else if sc.tokens_saved > 1_000 {
+        config::SCORECARD_EFFICIENCY_MED
+    } else {
+        0
+    };
 
     // Focus: +15 for milestones, -5 per loop
     score += (sc.milestones_reached as i32 * config::SCORECARD_MILESTONE_PER).min(15);
     score -= (sc.loop_recurrences as i32 * config::SCORECARD_LOOP_PENALTY).min(15);
 
-    score += if sc.silent_ratio > 0.7 { config::SCORECARD_SILENCE_BONUS_HIGH } else if sc.silent_ratio > 0.5 { config::SCORECARD_SILENCE_BONUS_MED } else { 0 };
+    score += if sc.silent_ratio > 0.7 {
+        config::SCORECARD_SILENCE_BONUS_HIGH
+    } else if sc.silent_ratio > 0.5 {
+        config::SCORECARD_SILENCE_BONUS_MED
+    } else {
+        0
+    };
     score -= (sc.repeated_advisories as i32 * config::SCORECARD_REPEAT_PENALTY).min(10);
 
     score.clamp(0, 100) as u32
@@ -174,13 +199,28 @@ fn compute_overall(sc: &Scorecard) -> u32 {
 /// Format scorecard for display
 pub fn format_scorecard(sc: &Scorecard) -> String {
     let mut out = String::new();
-    out.push_str(&format!("Safety:     {} denials, {} false positives\n", sc.denials_fired, sc.false_positives));
-    out.push_str(&format!("Efficiency: {}K tokens saved, {} compression events, {} retries\n",
-        sc.tokens_saved / 1000, sc.compression_events, sc.retries_after_compression));
-    out.push_str(&format!("Focus:      {} loops, {:.0}% advisory follow-through, {:.1} turns/milestone\n",
-        sc.loop_recurrences, sc.advisory_follow_through * 100.0, sc.milestone_spacing));
-    out.push_str(&format!("UX:         {} injections, {} repeated, {:.0}% silent turns\n",
-        sc.total_injections, sc.repeated_advisories, sc.silent_ratio * 100.0));
+    out.push_str(&format!(
+        "Safety:     {} denials, {} false positives\n",
+        sc.denials_fired, sc.false_positives
+    ));
+    out.push_str(&format!(
+        "Efficiency: {}K tokens saved, {} compression events, {} retries\n",
+        sc.tokens_saved / 1000,
+        sc.compression_events,
+        sc.retries_after_compression
+    ));
+    out.push_str(&format!(
+        "Focus:      {} loops, {:.0}% advisory follow-through, {:.1} turns/milestone\n",
+        sc.loop_recurrences,
+        sc.advisory_follow_through * 100.0,
+        sc.milestone_spacing
+    ));
+    out.push_str(&format!(
+        "UX:         {} injections, {} repeated, {:.0}% silent turns\n",
+        sc.total_injections,
+        sc.repeated_advisories,
+        sc.silent_ratio * 100.0
+    ));
     out.push_str(&format!("\nOverall: {}/100\n", sc.overall_score));
     out
 }

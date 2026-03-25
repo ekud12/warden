@@ -31,15 +31,19 @@ pub fn run(raw: &str) {
     // A.10: Re-inject tool enforcement rules (must survive compaction)
     let rules_path = common::assistant_rules_dir().join("tool-enforcement.md");
     if let Ok(rules) = fs::read_to_string(&rules_path)
-        && !rules.trim().is_empty() {
-            context_parts.push(rules.trim().to_string());
-        }
+        && !rules.trim().is_empty()
+    {
+        context_parts.push(rules.trim().to_string());
+    }
 
     // A.10: Compact resume packet from dream state (replaces verbose summary)
     if let Some(packet) = crate::dream::get_resume_packet() {
         let mut resume = format!("Session: {} turns.", state.turn);
         if !packet.high_salience_files.is_empty() {
-            resume.push_str(&format!(" Files: {}.", packet.high_salience_files.join(", ")));
+            resume.push_str(&format!(
+                " Files: {}.",
+                packet.high_salience_files.join(", ")
+            ));
         }
         if !packet.last_verified_state.is_empty() {
             resume.push_str(&format!(" Verified: {}.", packet.last_verified_state));
@@ -55,7 +59,13 @@ pub fn run(raw: &str) {
         // Fallback: minimal summary when dream state hasn't run
         let mut summary = format!("Session: {} turns", state.turn);
         if !state.files_edited.is_empty() {
-            let recent: Vec<&str> = state.files_edited.iter().rev().take(5).map(|s| s.as_str()).collect();
+            let recent: Vec<&str> = state
+                .files_edited
+                .iter()
+                .rev()
+                .take(5)
+                .map(|s| s.as_str())
+                .collect();
             summary.push_str(&format!(", edited: {}", recent.join(", ")));
         }
         if state.errors_unresolved > 0 {
@@ -70,8 +80,12 @@ pub fn run(raw: &str) {
     if !context_parts.is_empty() {
         let combined = context_parts.join("\n\n");
         // Phase 7.2: Track resume packet size for compaction validation
-        common::log_structured("precompact", common::LogLevel::Info, "resume-size",
-            &format!("{}chars {}parts", combined.len(), context_parts.len()));
+        common::log_structured(
+            "precompact",
+            common::LogLevel::Info,
+            "resume-size",
+            &format!("{}chars {}parts", combined.len(), context_parts.len()),
+        );
         common::additional_context(&combined);
     } else {
         common::log("precompact-memory", "No session data to summarize");

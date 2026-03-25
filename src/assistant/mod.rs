@@ -56,23 +56,23 @@ pub trait Assistant: Send + Sync {
 
     /// Directory where this assistant stores user rules (e.g. tool-enforcement.md)
     fn rules_dir(&self) -> PathBuf {
-        self.settings_path().parent().map(|p| p.join("rules")).unwrap_or_default()
+        self.settings_path()
+            .parent()
+            .map(|p| p.join("rules"))
+            .unwrap_or_default()
     }
 }
 
 /// Detect which assistant is running based on environment variables
 pub fn detect_assistant() -> Box<dyn Assistant> {
     // Check for Claude Code env vars
-    if std::env::var("CLAUDE_SESSION_ID").is_ok()
-        || std::env::var("CLAUDE_CODE_ENTRYPOINT").is_ok()
+    if std::env::var("CLAUDE_SESSION_ID").is_ok() || std::env::var("CLAUDE_CODE_ENTRYPOINT").is_ok()
     {
         return Box::new(claude_code::ClaudeCode);
     }
 
     // Check for Gemini CLI env vars
-    if std::env::var("GEMINI_SESSION_ID").is_ok()
-        || std::env::var("GEMINI_PROJECT_DIR").is_ok()
-    {
+    if std::env::var("GEMINI_SESSION_ID").is_ok() || std::env::var("GEMINI_PROJECT_DIR").is_ok() {
         return Box::new(gemini_cli::GeminiCli);
     }
 

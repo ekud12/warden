@@ -33,13 +33,22 @@ pub fn run(_raw: &str) {
     if state.turn == 1 && state.session_goal.is_empty() {
         // Extract user prompt text from the raw input
         if let Some(input) = common::parse_input(_raw) {
-            let text = input.tool_input.as_ref()
-                .and_then(|v| v.get("message").or_else(|| v.get("content")).or_else(|| v.get("prompt")))
+            let text = input
+                .tool_input
+                .as_ref()
+                .and_then(|v| {
+                    v.get("message")
+                        .or_else(|| v.get("content"))
+                        .or_else(|| v.get("prompt"))
+                })
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             if let Some(goal) = analytics::goal::extract_goal(text) {
                 state.session_goal = goal;
-                common::log("userprompt-context", &format!("Goal extracted: {}", &state.session_goal));
+                common::log(
+                    "userprompt-context",
+                    &format!("Goal extracted: {}", &state.session_goal),
+                );
             }
         }
     }
@@ -52,9 +61,14 @@ pub fn run(_raw: &str) {
             explore_count: state.explore_count,
             files_edited_count: state.files_edited.len().min(u16::MAX as usize) as u16,
             files_read_count: state.files_read.len().min(u16::MAX as usize) as u16,
-            tokens_in_delta: state.estimated_tokens_in.saturating_sub(state.prev_snapshot_tokens_in),
-            tokens_out_delta: state.estimated_tokens_out.saturating_sub(state.prev_snapshot_tokens_out),
-            milestones_hit: state.last_edit_turn == state.turn - 1 && !state.last_milestone.is_empty(),
+            tokens_in_delta: state
+                .estimated_tokens_in
+                .saturating_sub(state.prev_snapshot_tokens_in),
+            tokens_out_delta: state
+                .estimated_tokens_out
+                .saturating_sub(state.prev_snapshot_tokens_out),
+            milestones_hit: state.last_edit_turn == state.turn - 1
+                && !state.last_milestone.is_empty(),
             edits_this_turn: state.last_edit_turn == state.turn - 1,
             denials_this_turn: state.denial_rate(1) as u8,
         };
@@ -78,7 +92,10 @@ pub fn run(_raw: &str) {
         state.action_transitions.clear();
         state.initial_working_set = state.rolling_working_set.clone();
         state.last_initial_set_touch_turn = state.turn;
-        common::log("userprompt-context", &format!("Context switch detected at turn {}", turn));
+        common::log(
+            "userprompt-context",
+            &format!("Context switch detected at turn {}", turn),
+        );
     }
 
     // ── Predictive intelligence ──
@@ -86,36 +103,53 @@ pub fn run(_raw: &str) {
     // Goal anchoring: re-inject session goal every 5 turns (skip after context switch)
     let goal_anchor = if !state.session_goal.is_empty()
         && !state.context_switch_detected
-        && turn >= 5 && turn.is_multiple_of(5) {
-            Some(analytics::goal::format_anchor(&state.session_goal, turn))
-        } else { None };
+        && turn >= 5
+        && turn.is_multiple_of(5)
+    {
+        Some(analytics::goal::format_anchor(&state.session_goal, turn))
+    } else {
+        None
+    };
 
     // Action entropy drift detection
     let entropy_advisory = if state.advisory_ready("entropy") {
         let has_recent_edits = state.last_edit_turn + 3 >= turn;
         analytics::entropy::check_drift(&state.action_history, has_recent_edits)
-    } else { None };
+    } else {
+        None
+    };
 
     // Markov action prediction
     let markov_advisory = if state.action_history.len() >= 3 && state.advisory_ready("markov") {
-        let current = state.action_history.last().map(|s| s.as_str()).unwrap_or("");
+        let current = state
+            .action_history
+            .last()
+            .map(|s| s.as_str())
+            .unwrap_or("");
         analytics::markov::check_patterns(&state.action_transitions, current, &state.action_history)
-    } else { None };
+    } else {
+        None
+    };
 
     // Topic coherence check (every 10 turns after turn 10)
-    let coherence_advisory = if turn >= 10 && turn.is_multiple_of(10)
+    let coherence_advisory = if turn >= 10
+        && turn.is_multiple_of(10)
         && !state.initial_working_set.is_empty()
-        && state.advisory_ready("coherence") {
-            let (sim, drifted) = analytics::goal::topic_coherence(
-                &state.initial_working_set, &state.files_edited,
-            );
-            if sim < 0.3 && !drifted.is_empty() {
-                Some(format!(
-                    "Focus seems to have shifted to {} — if intentional, this is fine.",
-                    drifted.join(", ")
-                ))
-            } else { None }
-        } else { None };
+        && state.advisory_ready("coherence")
+    {
+        let (sim, drifted) =
+            analytics::goal::topic_coherence(&state.initial_working_set, &state.files_edited);
+        if sim < 0.3 && !drifted.is_empty() {
+            Some(format!(
+                "Focus seems to have shifted to {} — if intentional, this is fine.",
+                drifted.join(", ")
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
     // Exploration budget: advisory at adaptive threshold
     let explore_ready = if explore_count >= explore_budget {
@@ -161,8 +195,9 @@ pub fn run(_raw: &str) {
             state.turn,
             state.estimated_tokens_in + state.estimated_tokens_out,
             rules::RULES.token_budget_advisory,
-        ).map(|f| analytics::forecast::format_forecast(&f))
-         .filter(|s| !s.is_empty())
+        )
+        .map(|f| analytics::forecast::format_forecast(&f))
+        .filter(|s| !s.is_empty())
     } else {
         None
     };
@@ -175,12 +210,18 @@ pub fn run(_raw: &str) {
             state.errors_unresolved,
             state.estimated_tokens_saved,
             state.estimated_tokens_in + state.estimated_tokens_out,
-        ).map(|q| {
+        )
+        .map(|q| {
             let project_dir = common::project_dir();
             let stats = analytics::anomaly::load_stats(&project_dir);
-            let avg = if stats.quality_score.n >= 3 { Some(stats.quality_score.mean as u32) } else { None };
+            let avg = if stats.quality_score.n >= 3 {
+                Some(stats.quality_score.mean as u32)
+            } else {
+                None
+            };
             q.format(avg)
-        }).filter(|s| !s.is_empty())
+        })
+        .filter(|s| !s.is_empty())
     } else {
         None
     };
@@ -190,11 +231,20 @@ pub fn run(_raw: &str) {
         let project_dir = common::project_dir();
         let priors = analytics::error_prevention::load_priors(&project_dir);
         let edits_since_build = state.turn.saturating_sub(state.last_build_turn);
-        let edited_dirs = state.files_edited.iter()
+        let edited_dirs = state
+            .files_edited
+            .iter()
             .filter_map(|f| f.rsplit('/').nth(1))
-            .collect::<std::collections::HashSet<_>>().len() as u32;
+            .collect::<std::collections::HashSet<_>>()
+            .len() as u32;
         let turns_since_test = state.turn.saturating_sub(state.last_build_turn);
-        analytics::error_prevention::check_patterns(&priors, edits_since_build, edited_dirs, turns_since_test, 0.6)
+        analytics::error_prevention::check_patterns(
+            &priors,
+            edits_since_build,
+            edited_dirs,
+            turns_since_test,
+            0.6,
+        )
     } else {
         None
     };
@@ -240,10 +290,15 @@ pub fn run(_raw: &str) {
     let trust = crate::analytics::trust::compute_trust(&state);
 
     // Budget: how many advisories to inject based on trust level
-    let advisory_budget = if trust > crate::config::TRUST_BUDGET_HIGH { 1 }
-        else if trust > crate::config::TRUST_BUDGET_NORMAL { 3 }
-        else if trust > crate::config::TRUST_BUDGET_DEGRADED { 5 }
-        else { 15 };
+    let advisory_budget = if trust > crate::config::TRUST_BUDGET_HIGH {
+        1
+    } else if trust > crate::config::TRUST_BUDGET_NORMAL {
+        3
+    } else if trust > crate::config::TRUST_BUDGET_DEGRADED {
+        5
+    } else {
+        15
+    };
 
     // Collect ALL candidates with utility scores
     let mut candidates: Vec<(f32, &str, String)> = Vec::new(); // (utility, category, message)
@@ -254,11 +309,20 @@ pub fn run(_raw: &str) {
     // 1. Safety (1.0): drift detection
     let drift_threshold: u32 = state.adaptive.params.drift_threshold;
     if drift_threshold > 0 && state.denial_rate(10) >= drift_threshold {
-        candidates.push((1.0, "safety", format!(
-            "DRIFT: {} denials in 10 turns. Check: grep→rg, find→fd, cat→bat, curl→xh.",
-            state.denial_rate(10)
-        )));
-        common::log_structured("userprompt-context", common::LogLevel::Info, "drift-warning", &format!("turn {}", turn));
+        candidates.push((
+            1.0,
+            "safety",
+            format!(
+                "DRIFT: {} denials in 10 turns. Check: grep→rg, find→fd, cat→bat, curl→xh.",
+                state.denial_rate(10)
+            ),
+        ));
+        common::log_structured(
+            "userprompt-context",
+            common::LogLevel::Info,
+            "drift-warning",
+            &format!("turn {}", turn),
+        );
         state.recent_denial_turns.clear();
     }
 
@@ -290,9 +354,14 @@ pub fn run(_raw: &str) {
     if let Some(msg) = focus_report.advisory {
         candidates.push((0.5, "focus", msg));
     } else if explore_ready {
-        candidates.push((0.5, "focus", format!(
-            "{} exploration ops without editing. Commit to an approach.", explore_count
-        )));
+        candidates.push((
+            0.5,
+            "focus",
+            format!(
+                "{} exploration ops without editing. Commit to an approach.",
+                explore_count
+            ),
+        ));
     }
 
     // 7. Pressure (0.4): context pressure + token budget + cost
@@ -300,16 +369,31 @@ pub fn run(_raw: &str) {
         let deny_turn = rules::RULES.progressive_read_deny_turn;
         let advisory_turn = rules::RULES.progressive_read_advisory_turn;
         if turn >= deny_turn && state.advisory_ready("context_pressure") {
-            candidates.push((0.4, "pressure", "Context pressure: HIGH. Use targeted reads with offset+limit.".to_string()));
+            candidates.push((
+                0.4,
+                "pressure",
+                "Context pressure: HIGH. Use targeted reads with offset+limit.".to_string(),
+            ));
         } else if let Some(advisory) = token_advisory {
             candidates.push((0.4, "pressure", advisory));
         } else if turn >= advisory_turn && state.advisory_ready("context_pressure") {
-            candidates.push((0.4, "pressure", "Context pressure: moderate. Prefer targeted reads.".to_string()));
+            candidates.push((
+                0.4,
+                "pressure",
+                "Context pressure: moderate. Prefer targeted reads.".to_string(),
+            ));
         } else {
             let total_tokens = state.estimated_tokens_in + state.estimated_tokens_out;
             let estimated_cost = total_tokens as f64 / 1_000_000.0 * 9.0;
             if estimated_cost > 5.0 && state.advisory_ready("cost_budget") {
-                candidates.push((0.4, "pressure", format!("Cost: ${:.2}/$5.00. Focus on high-impact changes.", estimated_cost)));
+                candidates.push((
+                    0.4,
+                    "pressure",
+                    format!(
+                        "Cost: ${:.2}/$5.00. Focus on high-impact changes.",
+                        estimated_cost
+                    ),
+                ));
             }
         }
     }
@@ -326,13 +410,21 @@ pub fn run(_raw: &str) {
         ("git", git_uncommitted),
     ] {
         if let Some(m) = msg {
-            common::log_structured("userprompt-context", common::LogLevel::Info, cat,
-                &format!("silent {}", common::truncate(&m, 80)));
+            common::log_structured(
+                "userprompt-context",
+                common::LogLevel::Info,
+                cat,
+                &format!("silent {}", common::truncate(&m, 80)),
+            );
         }
     }
     for msg in &heuristic_parts {
-        common::log_structured("userprompt-context", common::LogLevel::Info, "session_health",
-            &format!("silent {}", common::truncate(msg, 80)));
+        common::log_structured(
+            "userprompt-context",
+            common::LogLevel::Info,
+            "session_health",
+            &format!("silent {}", common::truncate(msg, 80)),
+        );
     }
 
     // E.1: Intent-based dedup — keep only highest-utility candidate per category
@@ -349,9 +441,15 @@ pub fn run(_raw: &str) {
             let mut j = i + 1;
             while j < candidates.len() {
                 if jaccard_similarity(&candidates[i].2, &candidates[j].2) > 0.6 {
-                    if candidates[i].0 >= candidates[j].0 { candidates.remove(j); }
-                    else { candidates.remove(i); continue; }
-                } else { j += 1; }
+                    if candidates[i].0 >= candidates[j].0 {
+                        candidates.remove(j);
+                    } else {
+                        candidates.remove(i);
+                        continue;
+                    }
+                } else {
+                    j += 1;
+                }
             }
             i += 1;
         }
@@ -371,12 +469,22 @@ pub fn run(_raw: &str) {
 
     // Log ALL candidates silently to redb (nothing is lost)
     for (utility, category, msg) in &candidates {
-        common::log_structured("userprompt-context", common::LogLevel::Info, category,
-            &format!("u={:.1} trust={} {}", utility, trust, common::truncate(msg, 80)));
+        common::log_structured(
+            "userprompt-context",
+            common::LogLevel::Info,
+            category,
+            &format!(
+                "u={:.1} trust={} {}",
+                utility,
+                trust,
+                common::truncate(msg, 80)
+            ),
+        );
     }
 
     // Take top N by budget
-    let selected: Vec<String> = candidates.into_iter()
+    let selected: Vec<String> = candidates
+        .into_iter()
         .take(advisory_budget)
         .map(|(_, _, msg)| msg)
         .collect();
@@ -389,7 +497,12 @@ pub fn run(_raw: &str) {
             let condensed = common::truncate(&content, 800);
             parts.push(format!("## Rules Reminder (turn {})\n{}", turn, condensed));
             state.last_rules_reinject_turn = turn;
-            common::log_structured("userprompt-context", common::LogLevel::Info, "rules-reinject", &format!("turn {}", turn));
+            common::log_structured(
+                "userprompt-context",
+                common::LogLevel::Info,
+                "rules-reinject",
+                &format!("turn {}", turn),
+            );
         }
     }
 
@@ -427,7 +540,9 @@ fn build_files_in_context(state: &common::SessionState) -> String {
     let turn = state.turn;
 
     // Sort by turn descending, filter by salience
-    let mut entries: Vec<(&String, &common::FileReadEntry)> = state.files_read.iter()
+    let mut entries: Vec<(&String, &common::FileReadEntry)> = state
+        .files_read
+        .iter()
         .filter(|(_, entry)| turn.saturating_sub(entry.turn) <= 10) // salience decay: drop after 10 turns
         .collect();
     entries.sort_by(|a, b| b.1.turn.cmp(&a.1.turn));
@@ -455,7 +570,9 @@ fn detect_context_switch(state: &common::SessionState) -> bool {
     if state.initial_working_set.is_empty() || state.rolling_working_set.len() < 3 {
         return false;
     }
-    let new_dirs = state.rolling_working_set.iter()
+    let new_dirs = state
+        .rolling_working_set
+        .iter()
         .filter(|d| !state.initial_working_set.contains(d))
         .count();
     let ratio = new_dirs as f64 / state.rolling_working_set.len() as f64;
@@ -469,7 +586,11 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
     let b_words: std::collections::HashSet<&str> = b.split_whitespace().collect();
     let intersection = a_words.intersection(&b_words).count();
     let union = a_words.union(&b_words).count();
-    if union == 0 { 0.0 } else { intersection as f64 / union as f64 }
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f64 / union as f64
+    }
 }
 
 /// Event-based rule reinjection: only reinject when there's evidence the agent
@@ -477,15 +598,20 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 fn should_reinject_rules(state: &common::SessionState) -> bool {
     // Cooldown: don't reinject if we did within the last 5 turns
     if state.last_rules_reinject_turn > 0
-        && state.turn.saturating_sub(state.last_rules_reinject_turn) < 5 {
+        && state.turn.saturating_sub(state.last_rules_reinject_turn) < 5
+    {
         return false;
     }
 
     // 3+ denials in last 5 turns = agent is fighting rules
-    let recent_denials = state.recent_denial_turns.iter()
+    let recent_denials = state
+        .recent_denial_turns
+        .iter()
         .filter(|&&t| t + 5 >= state.turn)
         .count();
-    if recent_denials >= 3 { return true; }
+    if recent_denials >= 3 {
+        return true;
+    }
 
     // Just after compaction = rules may have been lost from context
     if state.last_compaction_turn > 0 && state.turn == state.last_compaction_turn + 1 {
@@ -531,11 +657,16 @@ fn heuristic_advisories(state: &mut common::SessionState) -> Vec<String> {
     let sig_stale = state.turn >= 15
         && state.turn_snapshots.len() >= stale_window
         && !state.turn_snapshots[state.turn_snapshots.len().saturating_sub(stale_window)..]
-            .iter().any(|s| s.milestones_hit);
+            .iter()
+            .any(|s| s.milestones_hit);
 
     let sig_token_burn = if state.turn_snapshots.len() >= 5 {
         let recent5 = &state.turn_snapshots[state.turn_snapshots.len() - 5..];
-        let avg_tokens: u64 = recent5.iter().map(|s| s.tokens_in_delta + s.tokens_out_delta).sum::<u64>() / 5;
+        let avg_tokens: u64 = recent5
+            .iter()
+            .map(|s| s.tokens_in_delta + s.tokens_out_delta)
+            .sum::<u64>()
+            / 5;
         avg_tokens > r.token_burn_threshold && !recent5.iter().any(|s| s.edits_this_turn)
     } else {
         false
@@ -544,15 +675,20 @@ fn heuristic_advisories(state: &mut common::SessionState) -> Vec<String> {
     let stag_window = r.stagnation_turns as usize;
     let sig_stagnation = if state.turn_snapshots.len() >= stag_window {
         let recent = &state.turn_snapshots[state.turn_snapshots.len() - stag_window..];
-        let explore_growing = recent.windows(2).all(|w| w[1].explore_count >= w[0].explore_count);
-        explore_growing && !recent.iter().any(|s| s.edits_this_turn) && !recent.iter().any(|s| s.milestones_hit)
+        let explore_growing = recent
+            .windows(2)
+            .all(|w| w[1].explore_count >= w[0].explore_count);
+        explore_growing
+            && !recent.iter().any(|s| s.edits_this_turn)
+            && !recent.iter().any(|s| s.milestones_hit)
     } else {
         false
     };
 
     let sig_ping_pong = if state.turn_snapshots.len() >= 6 {
         let recent6 = &state.turn_snapshots[state.turn_snapshots.len() - 6..];
-        let alternations = recent6.windows(2)
+        let alternations = recent6
+            .windows(2)
             .filter(|w| w[0].edits_this_turn && w[1].errors_unresolved > w[0].errors_unresolved)
             .count();
         alternations >= 3
@@ -567,16 +703,22 @@ fn heuristic_advisories(state: &mut common::SessionState) -> Vec<String> {
         advisories.push("Errors rising. Run build/test to verify before continuing.".to_string());
     }
     if sig_stale && state.advisory_ready("stale_session") {
-        advisories.push(format!("No milestones in {} turns. Consider a different approach.", stale_window));
+        advisories.push(format!(
+            "No milestones in {} turns. Consider a different approach.",
+            stale_window
+        ));
     }
     if sig_token_burn && state.advisory_ready("token_burn") {
         advisories.push("High token burn without edits. Focus on implementation.".to_string());
     }
     if sig_stagnation && state.advisory_ready("stagnation") {
-        advisories.push("Exploration without progress. Commit to an approach and start editing.".to_string());
+        advisories.push(
+            "Exploration without progress. Commit to an approach and start editing.".to_string(),
+        );
     }
     if sig_ping_pong && state.advisory_ready("ping_pong") {
-        advisories.push("Edit-error cycle detected. Verify your approach before more edits.".to_string());
+        advisories
+            .push("Edit-error cycle detected. Verify your approach before more edits.".to_string());
     }
 
     advisories

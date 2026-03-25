@@ -235,7 +235,11 @@ pub fn adapt(state: &mut common::SessionState) -> Option<String> {
 
     // Late overrides everything immediately (no hysteresis)
     if candidate == SessionPhase::Late && state.adaptive.phase != SessionPhase::Late {
-        return commit_transition(state, SessionPhase::Late, "Turn threshold reached — context pressure mode");
+        return commit_transition(
+            state,
+            SessionPhase::Late,
+            "Turn threshold reached — context pressure mode",
+        );
     }
 
     // Same as current phase — clear candidate
@@ -252,7 +256,11 @@ pub fn adapt(state: &mut common::SessionState) -> Option<String> {
     }
 
     // Existing candidate — check if sustained long enough
-    if state.turn.saturating_sub(state.adaptive.candidate_since_turn) >= HYSTERESIS_TURNS {
+    if state
+        .turn
+        .saturating_sub(state.adaptive.candidate_since_turn)
+        >= HYSTERESIS_TURNS
+    {
         let reason = transition_reason(&state.adaptive.phase, &candidate, state);
         let new_phase = candidate;
         state.adaptive.candidate_phase = None;
@@ -282,7 +290,10 @@ fn commit_transition(
 
     // Enforce bounds
     if state.adaptive.transitions.len() > MAX_TRANSITIONS {
-        state.adaptive.transitions.drain(..state.adaptive.transitions.len() - MAX_TRANSITIONS);
+        state
+            .adaptive
+            .transitions
+            .drain(..state.adaptive.transitions.len() - MAX_TRANSITIONS);
     }
 
     // Apply new phase params
@@ -305,7 +316,12 @@ fn commit_transition(
     });
     let detail = format!("{}→{} at turn {}", old_phase, new_phase, turn);
     common::add_session_note_ext("adaptation", &detail, Some(&data));
-    common::log_structured("adaptation", common::LogLevel::Info, "phase-change", &detail);
+    common::log_structured(
+        "adaptation",
+        common::LogLevel::Info,
+        "phase-change",
+        &detail,
+    );
 
     // Context injection for Claude
     Some(format!(

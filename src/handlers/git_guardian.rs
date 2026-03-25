@@ -30,12 +30,13 @@ pub fn check_branch_state() -> Vec<String> {
 
     // Check if branch is behind remote (quick: use rev-list count)
     if let Some(behind) = commits_behind(&branch)
-        && behind >= 10 {
-            warnings.push(format!(
-                "Branch `{}` is {} commits behind remote. Consider pulling or rebasing.",
-                branch, behind
-            ));
-        }
+        && behind >= 10
+    {
+        warnings.push(format!(
+            "Branch `{}` is {} commits behind remote. Consider pulling or rebasing.",
+            branch, behind
+        ));
+    }
 
     warnings
 }
@@ -69,29 +70,49 @@ pub fn check_uncommitted_duration(state: &common::SessionState) -> Option<String
 /// Suggest related files that usually change together (git co-change analysis)
 pub fn suggest_cochanges(edited_file: &str) -> Option<String> {
     // Get the short filename for matching
-    let short = edited_file.rsplit('/').next()
+    let short = edited_file
+        .rsplit('/')
+        .next()
         .or_else(|| edited_file.rsplit('\\').next())
         .unwrap_or(edited_file);
 
     // Use git log to find files that co-change with this file
-    let result = common::subprocess::run("git", &[
-        "log", "--pretty=format:", "--name-only", "--follow", "-10", "--", edited_file
-    ])?;
+    let result = common::subprocess::run(
+        "git",
+        &[
+            "log",
+            "--pretty=format:",
+            "--name-only",
+            "--follow",
+            "-10",
+            "--",
+            edited_file,
+        ],
+    )?;
 
     if result.exit_code != 0 || result.stdout.trim().is_empty() {
         return None;
     }
 
     // Count file co-occurrences in the same commits
-    let result2 = common::subprocess::run("git", &[
-        "log", "--pretty=format:---", "--name-only", "-10", "--", edited_file
-    ])?;
+    let result2 = common::subprocess::run(
+        "git",
+        &[
+            "log",
+            "--pretty=format:---",
+            "--name-only",
+            "-10",
+            "--",
+            edited_file,
+        ],
+    )?;
 
     if result2.exit_code != 0 {
         return None;
     }
 
-    let mut cochange_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut cochange_counts: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
     let mut in_commit = false;
 
     for line in result2.stdout.lines() {
@@ -109,7 +130,8 @@ pub fn suggest_cochanges(edited_file: &str) -> Option<String> {
     }
 
     // Find files that co-changed in >50% of commits (at least 3 times)
-    let suggestions: Vec<&String> = cochange_counts.iter()
+    let suggestions: Vec<&String> = cochange_counts
+        .iter()
         .filter(|(_, count)| **count >= 3)
         .map(|(file, _)| file)
         .take(3)
@@ -122,18 +144,21 @@ pub fn suggest_cochanges(edited_file: &str) -> Option<String> {
     Some(format!(
         "Co-change hint: `{}` usually changes with: {}",
         short,
-        suggestions.iter().map(|s| {
-            s.rsplit('/').next().unwrap_or(s)
-        }).collect::<Vec<_>>().join(", ")
+        suggestions
+            .iter()
+            .map(|s| { s.rsplit('/').next().unwrap_or(s) })
+            .collect::<Vec<_>>()
+            .join(", ")
     ))
 }
 
 /// Count how many commits the current branch is behind its upstream
 fn commits_behind(branch: &str) -> Option<u32> {
     let remote_ref = format!("origin/{}", branch);
-    let result = common::subprocess::run("git", &[
-        "rev-list", "--count", &format!("HEAD..{}", remote_ref)
-    ])?;
+    let result = common::subprocess::run(
+        "git",
+        &["rev-list", "--count", &format!("HEAD..{}", remote_ref)],
+    )?;
 
     if result.exit_code != 0 {
         return None;

@@ -79,8 +79,14 @@ pub fn record_session(project_name: &str) {
     state.total_tokens_saved += session.estimated_tokens_saved;
 
     // Track per-project
-    *state.project_sessions.entry(project_name.to_string()).or_insert(0) += 1;
-    *state.project_savings.entry(project_name.to_string()).or_insert(0) += session.estimated_tokens_saved;
+    *state
+        .project_sessions
+        .entry(project_name.to_string())
+        .or_insert(0) += 1;
+    *state
+        .project_savings
+        .entry(project_name.to_string())
+        .or_insert(0) += session.estimated_tokens_saved;
 
     // Track denial categories from log files
     record_denials_from_logs(&mut state);
@@ -105,17 +111,29 @@ fn record_denials_from_logs(state: &mut LearningState) {
     for line in &lines {
         if line.contains("[DENY]") {
             if line.contains("safety") {
-                *state.denials_by_category.entry("safety".into()).or_insert(0) += 1;
+                *state
+                    .denials_by_category
+                    .entry("safety".into())
+                    .or_insert(0) += 1;
             } else if line.contains("substitution") {
-                *state.denials_by_category.entry("substitution".into()).or_insert(0) += 1;
+                *state
+                    .denials_by_category
+                    .entry("substitution".into())
+                    .or_insert(0) += 1;
                 // Extract the tool name from substitution denials
                 if let Some(cmd) = extract_denied_command(line) {
                     *state.substitution_hits.entry(cmd).or_insert(0) += 1;
                 }
             } else if line.contains("hallucination") {
-                *state.denials_by_category.entry("hallucination".into()).or_insert(0) += 1;
+                *state
+                    .denials_by_category
+                    .entry("hallucination".into())
+                    .or_insert(0) += 1;
             } else if line.contains("destructive") {
-                *state.denials_by_category.entry("destructive".into()).or_insert(0) += 1;
+                *state
+                    .denials_by_category
+                    .entry("destructive".into())
+                    .or_insert(0) += 1;
             }
 
             // Track the denied command prefix
@@ -154,25 +172,33 @@ pub fn get_insights() -> Option<String> {
     let mut subs: Vec<(&String, &u64)> = state.substitution_hits.iter().collect();
     subs.sort_by(|a, b| b.1.cmp(a.1));
     if let Some((tool, count)) = subs.first()
-        && **count >= 5 {
-            insights.push(format!("{} denied {}x — consider training habit", tool, count));
-        }
+        && **count >= 5
+    {
+        insights.push(format!(
+            "{} denied {}x — consider training habit",
+            tool, count
+        ));
+    }
 
     // Most denied category
     let mut cats: Vec<(&String, &u64)> = state.denials_by_category.iter().collect();
     cats.sort_by(|a, b| b.1.cmp(a.1));
     if let Some((cat, count)) = cats.first()
-        && **count >= 10 {
-            insights.push(format!("top denial category: {} ({}x)", cat, count));
-        }
+        && **count >= 10
+    {
+        insights.push(format!("top denial category: {} ({}x)", cat, count));
+    }
 
     // Cross-project savings comparison
     if state.project_savings.len() >= 2 {
         let total_savings: u64 = state.project_savings.values().sum();
         let avg = total_savings / state.project_savings.len() as u64;
         if avg > 1000 {
-            insights.push(format!("avg {}K tokens saved/project across {} projects",
-                avg / 1000, state.project_savings.len()));
+            insights.push(format!(
+                "avg {}K tokens saved/project across {} projects",
+                avg / 1000,
+                state.project_savings.len()
+            ));
         }
     }
 
@@ -189,7 +215,10 @@ pub fn format_stats() -> String {
 
     let mut out = String::new();
     out.push_str(&format!("Sessions: {}\n", state.total_sessions));
-    out.push_str(&format!("Total tokens saved: {}\n\n", format_tokens(state.total_tokens_saved)));
+    out.push_str(&format!(
+        "Total tokens saved: {}\n\n",
+        format_tokens(state.total_tokens_saved)
+    ));
 
     // Denial categories
     if !state.denials_by_category.is_empty() {
@@ -220,8 +249,12 @@ pub fn format_stats() -> String {
         projects.sort_by(|a, b| b.1.cmp(a.1));
         for (proj, sessions) in &projects {
             let savings = state.project_savings.get(*proj).unwrap_or(&0);
-            out.push_str(&format!("  {} — {} sessions, {} tokens saved\n",
-                proj, sessions, format_tokens(*savings)));
+            out.push_str(&format!(
+                "  {} — {} sessions, {} tokens saved\n",
+                proj,
+                sessions,
+                format_tokens(*savings)
+            ));
         }
     }
 

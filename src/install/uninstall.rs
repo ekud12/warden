@@ -215,17 +215,16 @@ fn remove_from_path() {
 
         let mut found = false;
         for config in &configs {
-            if let Ok(content) = fs::read_to_string(config) {
-                if content.contains(bin_str.as_ref()) {
-                    // Remove the PATH line
-                    let cleaned: Vec<&str> = content
-                        .lines()
-                        .filter(|line| !line.contains(bin_str.as_ref()))
-                        .collect();
-                    let _ = fs::write(config, cleaned.join("\n"));
-                    eprintln!("removed from {}", config.display());
-                    found = true;
-                }
+            if let Ok(content) = fs::read_to_string(config)
+                && content.contains(bin_str.as_ref())
+            {
+                let cleaned: Vec<&str> = content
+                    .lines()
+                    .filter(|line| !line.contains(bin_str.as_ref()))
+                    .collect();
+                let _ = fs::write(config, cleaned.join("\n"));
+                eprintln!("removed from {}", config.display());
+                found = true;
             }
         }
         if !found {

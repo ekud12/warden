@@ -30,6 +30,9 @@ pub struct DaemonRequest {
     /// Rules.toml mtime -- daemon uses this to detect rule file changes
     #[serde(default)]
     pub rules_mtime: u64,
+    /// Client version — daemon uses this to detect version mismatches
+    #[serde(default)]
+    pub version: String,
 }
 
 /// Special exit code: daemon detected binary rebuild, client should restart
@@ -71,10 +74,29 @@ pub fn get_binary_mtime() -> u64 {
 
 /// Try to send a request to the daemon and get a response.
 /// Returns None if daemon isn't running or communication fails.
+/// If daemon appears dead (stale pidfile), attempts auto-restart with storm protection.
 pub fn try_daemon(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
     let pipe_path = pipe_name();
 
-    let mut pipe = connect_pipe(&pipe_path, Duration::from_millis(25))?;
+    let pipe_result = connect_pipe(&pipe_path, Duration::from_millis(25));
+    if pipe_result.is_none() {
+        // Pipe connection failed — check for stale daemon
+        if let Some(pid) = read_pid() {
+            if !pid_is_alive(pid) {
+                crate::common::log("ipc", &format!("Stale pidfile (pid={}) — cleaning up", pid));
+                remove_pid_file();
+                // Check restart storm before auto-restarting
+                if !restart_storm_active() {
+                    record_restart();
+                    return spawn_and_wait(subcmd, payload);
+                } else {
+                    crate::common::log("ipc", "Restart storm detected (3+ in 5min) — skipping auto-restart");
+                }
+            }
+        }
+        return None;
+    }
+    let mut pipe = pipe_result.unwrap();
 
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().to_string())
@@ -86,6 +108,7 @@ pub fn try_daemon(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
         binary_mtime: get_binary_mtime(),
         cwd,
         rules_mtime: crate::rules::rules_mtime(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
     };
 
     let request_bytes = serde_json::to_vec(&request).ok()?;
@@ -306,6 +329,64 @@ pub fn spawn_daemon() {
                 crate::common::log("ipc", &format!("Failed to spawn daemon: {}", e));
             }
         }
+    }
+}
+
+/// Spawn daemon and wait for it to become available.
+/// Returns None if daemon doesn't start within ~500ms.
+pub fn spawn_and_wait(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
+    spawn_daemon();
+    for _ in 0..3 {
+        std::thread::sleep(Duration::from_millis(150));
+        if let Some(resp) = try_daemon(subcmd, payload) {
+            return Some(resp);
+        }
+    }
+    None
+}
+
+/// Path to the restart tracking file
+fn restart_tracking_path() -> std::path::PathBuf {
+    crate::common::hooks_dir().join("daemon-restarts.json")
+}
+
+/// Check if 3+ restarts occurred in the last 5 minutes (storm protection)
+fn restart_storm_active() -> bool {
+    let path = restart_tracking_path();
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let timestamps: Vec<u64> = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let cutoff = now.saturating_sub(300); // 5 minutes
+    let recent = timestamps.iter().filter(|&&t| t > cutoff).count();
+    recent >= 3
+}
+
+/// Record a daemon restart timestamp
+fn record_restart() {
+    let path = restart_tracking_path();
+    let mut timestamps: Vec<u64> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Prune entries older than 5 minutes
+    let cutoff = now.saturating_sub(300);
+    timestamps.retain(|&t| t > cutoff);
+    timestamps.push(now);
+    if let Ok(json) = serde_json::to_string(&timestamps) {
+        let _ = std::fs::write(&path, json);
     }
 }
 

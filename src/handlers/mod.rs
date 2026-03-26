@@ -1,36 +1,42 @@
-// ─── handlers — all hook handler modules ──────────────────────────────────────
+// ─── handlers — active hook entry points ─────────────────────────────────────
+//
+// Only ACTIVE hook handlers remain here. Shim re-exports have been removed;
+// callers now use canonical engines:: paths directly.
+//
+// Migrated to engines:
+//   adaptation → engines::anchor::compass
+//   session_start → engines::anchor::session_start
+//   session_end → engines::anchor::session_end
+//   precompact_memory → engines::anchor::precompact
+//   postcompact → engines::anchor::postcompact
+//   token_budget → engines::anchor::budget
+//   git_summary → engines::anchor::git_summary
+//   posttool_session → engines::anchor::ledger
+//   learning → engines::dream::lore
+//   cross_session → engines::dream::lore
+//   describe → engines::harbor::describe
+//   explain → engines::harbor::explain
+//   export_sessions → engines::harbor::export_sessions
+//   mcp_server → engines::harbor::mcp
+//   replay → engines::harbor::replay
+//   tui → engines::harbor::tui
+//   proc_mgmt → engines::harbor::proc_mgmt
+// ──────────────────────────────────────────────────────────────────────────────
 
-pub mod adaptation;
 pub mod auto_changelog;
 pub mod config_override;
-pub mod cross_session;
-pub mod describe;
-pub mod explain;
-pub mod export_sessions;
 pub mod git_guardian;
-pub mod git_summary;
-pub mod learning;
-pub mod mcp_server;
 pub mod permission_approve;
-pub mod postcompact;
 pub mod postfailure_guide;
 pub mod posttool_mcp;
-pub mod posttool_session;
-pub mod precompact_memory;
 pub mod pretool_bash;
 pub mod pretool_read;
 pub mod pretool_redirect;
 pub mod pretool_write;
-pub mod proc_mgmt;
-pub mod replay;
-pub mod session_end;
-pub mod session_start;
 pub mod smart_filter;
 pub mod stop_check;
 pub mod subagent_context;
 pub mod subagent_stop;
 pub mod task_completed;
-pub mod token_budget;
 pub mod truncate_filter;
-pub mod tui;
 pub mod userprompt_context;

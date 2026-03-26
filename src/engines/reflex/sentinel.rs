@@ -18,8 +18,8 @@ pub fn check_command(cmd: &str) -> Vec<Signal> {
         if *shadow {
             continue;
         }
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if re.is_match(cmd) {
+        if let Ok(re) = regex::Regex::new(pattern)
+            && re.is_match(cmd) {
                 signals.push(Signal::with_verdict(
                     SignalCategory::Safety,
                     1.0,
@@ -28,7 +28,6 @@ pub fn check_command(cmd: &str) -> Vec<Signal> {
                     Verdict::Deny(format!("[{}] {}", id, msg)),
                 ));
             }
-        }
     }
 
     // Destructive patterns → Deny
@@ -36,8 +35,8 @@ pub fn check_command(cmd: &str) -> Vec<Signal> {
         if *shadow {
             continue;
         }
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if re.is_match(cmd) {
+        if let Ok(re) = regex::Regex::new(pattern)
+            && re.is_match(cmd) {
                 signals.push(Signal::with_verdict(
                     SignalCategory::Safety,
                     0.9,
@@ -46,7 +45,6 @@ pub fn check_command(cmd: &str) -> Vec<Signal> {
                     Verdict::Deny(format!("[{}] {}", id, msg)),
                 ));
             }
-        }
     }
 
     // Hallucination patterns → Deny
@@ -54,8 +52,8 @@ pub fn check_command(cmd: &str) -> Vec<Signal> {
         if *shadow {
             continue;
         }
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if re.is_match(cmd) {
+        if let Ok(re) = regex::Regex::new(pattern)
+            && re.is_match(cmd) {
                 signals.push(Signal::with_verdict(
                     SignalCategory::Safety,
                     0.95,
@@ -64,13 +62,12 @@ pub fn check_command(cmd: &str) -> Vec<Signal> {
                     Verdict::Deny(format!("[{}] {}", id, msg)),
                 ));
             }
-        }
     }
 
     // Hallucination advisory patterns → Advisory (non-blocking)
     for (_id, pattern, msg, _shadow) in &rules.hallucination_advisory_pairs {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if re.is_match(cmd) {
+        if let Ok(re) = regex::Regex::new(pattern)
+            && re.is_match(cmd) {
                 signals.push(Signal::with_verdict(
                     SignalCategory::Safety,
                     0.5,
@@ -79,7 +76,6 @@ pub fn check_command(cmd: &str) -> Vec<Signal> {
                     Verdict::Advisory(msg.clone()),
                 ));
             }
-        }
     }
 
     signals

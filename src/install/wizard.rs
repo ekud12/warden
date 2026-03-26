@@ -109,7 +109,7 @@ pub fn run() {
         .collect();
 
     if !missing.is_empty() {
-        if pm.is_some() {
+        if let Some(pm_name) = pm {
             let mut check_options: Vec<CheckOption> = missing
                 .iter()
                 .map(|tool| {
@@ -140,7 +140,6 @@ pub fn run() {
                     return;
                 }
                 Some(selected) => {
-                    let pm_name = pm.unwrap();
                     for &idx in &selected {
                         let tool_name = check_options[idx].label.as_str();
                         if tool_name == "Skip" {
@@ -162,13 +161,11 @@ pub fn run() {
             eprintln!();
             term::status_warn("No package manager detected. Install tools manually:");
             for status in &statuses {
-                if !status.installed {
-                    if let Some(tool) = tools::TOOLS.iter().find(|t| t.name == status.name) {
-                        if let Some(cmd) = tool.install_cargo {
+                if !status.installed
+                    && let Some(tool) = tools::TOOLS.iter().find(|t| t.name == status.name)
+                        && let Some(cmd) = tool.install_cargo {
                             term::hint(&format!("{}: {}", tool.name, cmd));
                         }
-                    }
-                }
             }
         }
     } else {
@@ -346,12 +343,10 @@ fn configure_claude_code() {
             }
         }
         sp.finish_fail("Could not merge hooks into settings.json");
+    } else if std::fs::write(&settings_path, &hooks_json).is_ok() {
+        sp.finish_ok("Claude Code hooks created");
     } else {
-        if std::fs::write(&settings_path, &hooks_json).is_ok() {
-            sp.finish_ok("Claude Code hooks created");
-        } else {
-            sp.finish_fail("Could not create settings.json");
-        }
+        sp.finish_fail("Could not create settings.json");
     }
 }
 

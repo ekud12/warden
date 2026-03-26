@@ -17,8 +17,8 @@ pub fn check_injection(content: &str) -> Vec<Signal> {
     let mut signals = Vec::new();
 
     for (pattern, category) in crate::config::INJECTION_PATTERNS {
-        if let Ok(re) = regex::Regex::new(pattern) {
-            if re.is_match(content) {
+        if let Ok(re) = regex::Regex::new(pattern)
+            && re.is_match(content) {
                 let msg = format!("Injection pattern [{}]: suspicious content detected", category);
                 signals.push(Signal::with_verdict(
                     SignalCategory::Safety,
@@ -28,7 +28,6 @@ pub fn check_injection(content: &str) -> Vec<Signal> {
                     Verdict::Advisory(msg),
                 ));
             }
-        }
     }
 
     signals
@@ -66,8 +65,8 @@ pub fn check_expansion_risk(cmd: &str) -> Vec<Signal> {
     // Variable expansion in dangerous context
     if cmd.contains("$") && (cmd.contains("rm ") || cmd.contains("chmod ") || cmd.contains("chown ")) {
         let re = regex::Regex::new(r"\$\{?\w+\}?\s*(?:-rf|-r|777|--recursive)").ok();
-        if let Some(re) = re {
-            if re.is_match(cmd) {
+        if let Some(re) = re
+            && re.is_match(cmd) {
                 signals.push(Signal::with_verdict(
                     SignalCategory::Safety,
                     1.0,
@@ -76,7 +75,6 @@ pub fn check_expansion_risk(cmd: &str) -> Vec<Signal> {
                     Verdict::Deny("BLOCKED: Variable expansion in destructive command".into()),
                 ));
             }
-        }
     }
 
     signals

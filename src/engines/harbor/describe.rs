@@ -32,7 +32,8 @@ fn run_default() {
     let mut any_override = false;
 
     // Pair-based override categories: (label, user overrides, compiled rule count)
-    let pair_categories: &[(&str, &[(String, String)], usize)] = &[
+    type OverrideCategory<'a> = (&'a str, &'a [(String, String)], usize);
+    let pair_categories: &[OverrideCategory] = &[
         ("safety", &OVERRIDES.safety, config::SAFETY.len()),
         (
             "substitutions",

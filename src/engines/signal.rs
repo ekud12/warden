@@ -30,7 +30,20 @@ pub struct Signal {
     pub source: &'static str,
     /// What this signal recommends the Gatekeeper do.
     /// `None` = purely advisory (context injection only, no blocking/transform).
+    #[cfg_attr(test, allow(dead_code))]
     pub verdict: Option<Verdict>,
+}
+
+impl Signal {
+    /// Create an advisory signal (no blocking verdict).
+    pub fn advisory(category: SignalCategory, utility: f64, message: String, source: &'static str) -> Self {
+        Self { category, utility, message, source, verdict: None }
+    }
+
+    /// Create a signal with a specific verdict recommendation.
+    pub fn with_verdict(category: SignalCategory, utility: f64, message: String, source: &'static str, verdict: Verdict) -> Self {
+        Self { category, utility, message, source, verdict: Some(verdict) }
+    }
 }
 
 /// The outcome of a Reflex engine decision.

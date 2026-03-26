@@ -228,8 +228,8 @@ pub fn check_zero_trace(cmd: &str) -> bool {
 pub enum SubstitutionResult {
     /// No substitution matched
     Pass,
-    /// Silently rewrite command (tool-name swap, compatible output)
-    Transform(String),
+    /// Rewrite command + teach the agent what happened
+    Transform { new_cmd: String, source: String, target: String },
     /// Block with message (incompatible output or dangerous)
     Deny,
 }
@@ -253,7 +253,11 @@ pub fn check_substitutions(cmd: &str) -> SubstitutionResult {
                 "pretool-bash",
                 &format!("TRANSFORM {} -> {}", common::truncate(cmd, 40), common::truncate(&new_cmd, 40)),
             );
-            return SubstitutionResult::Transform(new_cmd);
+            return SubstitutionResult::Transform {
+                new_cmd,
+                source: source.to_string(),
+                target: target.to_string(),
+            };
         }
     }
 

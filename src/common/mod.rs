@@ -20,7 +20,8 @@ pub use types::HookInput;
 
 // ─── output ──────────────────────────────────────────────────────────────────
 pub use output::{
-    additional_context, allow, allow_with_advisory, allow_with_update, deny, deny_with_id,
+    additional_context, allow, allow_with_advisory, allow_with_transform, allow_with_update,
+    deny, deny_with_id,
     permission_approve, start_capture, stop_block, take_capture, updated_mcp_output,
 };
 

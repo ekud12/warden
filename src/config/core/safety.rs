@@ -54,10 +54,10 @@ pub const SAFETY: &[(&str, &str)] = &[
         "BLOCKED: format on Windows drive. Extremely dangerous.",
     ),
     (r"\bdiskpart\b", "BLOCKED: diskpart can destroy partitions."),
-    (r"\bshutdown\b", "BLOCKED: System shutdown is not allowed."),
-    (r"\breboot\b", "BLOCKED: System reboot is not allowed."),
-    (r"\bpoweroff\b", "BLOCKED: System poweroff is not allowed."),
-    (r"\bhalt\b", "BLOCKED: System halt is not allowed."),
+    (r"^\s*shutdown\b", "BLOCKED: System shutdown is not allowed."),
+    (r"^\s*reboot\b", "BLOCKED: System reboot is not allowed."),
+    (r"^\s*poweroff\b", "BLOCKED: System poweroff is not allowed."),
+    (r"(?:^|\||\;|&&)\s*halt\b", "BLOCKED: System halt is not allowed."),
     // Process manipulation
     (
         r"\bkill\s+-9\s+1\b",

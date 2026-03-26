@@ -122,8 +122,15 @@ pub fn is_newer(current: &str, latest: &str) -> bool {
     l > c
 }
 
-/// Run the update check and print results
-pub fn run_check() {
+/// Run the update flow.
+///
+/// Default (`warden update`): check for updates, prompt to apply if available.
+/// `--check`: print-only, no prompt.
+/// `--yes`: skip prompt, apply directly (CI-friendly).
+pub fn run(args: &[String]) {
+    let check_only = args.iter().any(|a| a == "--check");
+    let auto_yes = args.iter().any(|a| a == "--yes" || a == "-y");
+
     let current = env!("CARGO_PKG_VERSION");
     let method = detect_install_method();
 
@@ -131,40 +138,6 @@ pub fn run_check() {
     term::print_colored(term::BRAND, "  Warden Update\n");
     term::print_colored(term::DIM, &format!("  Installed via: {}\n", method));
     term::print_colored(term::DIM, &format!("  Current: v{}\n", current));
-    eprintln!();
-
-    let spinner = term::Spinner::start("Checking for updates...");
-    let release = check_latest();
-    spinner.finish_ok("done");
-
-    match release {
-        Some(info) if is_newer(current, &info.version) => {
-            term::print_colored(term::SUCCESS, &format!("  New version available: v{}\n", info.version));
-            term::print_colored(term::DIM, &format!("  Release: {}\n", info.url));
-            eprintln!();
-            term::print_colored(term::TEXT, "  Upgrade:\n");
-            print_upgrade_instructions(&method, &info);
-            eprintln!();
-        }
-        Some(_) => {
-            term::print_colored(term::SUCCESS, "  Already on the latest version.\n");
-            eprintln!();
-        }
-        None => {
-            term::print_colored(term::WARN, "  Could not check for updates.\n");
-            term::hint("Check https://github.com/ekud12/warden/releases manually.");
-            eprintln!();
-        }
-    }
-}
-
-/// Run the actual update
-pub fn run_apply() {
-    let current = env!("CARGO_PKG_VERSION");
-    let method = detect_install_method();
-
-    eprintln!();
-    term::print_colored(term::BRAND, "  Warden Update — Apply\n");
     eprintln!();
 
     let spinner = term::Spinner::start("Checking for updates...");
@@ -180,14 +153,36 @@ pub fn run_apply() {
         }
         None => {
             term::print_colored(term::WARN, "  Could not check for updates.\n");
+            term::hint("Check https://github.com/ekud12/warden/releases manually.");
             eprintln!();
             return;
         }
     };
 
-    term::print_colored(term::TEXT, &format!("  Upgrading v{} → v{}\n", current, info.version));
+    term::print_colored(term::SUCCESS, &format!("  New version available: v{}\n", info.version));
+    term::print_colored(term::DIM, &format!("  Release: {}\n", info.url));
     eprintln!();
 
+    if check_only {
+        term::print_colored(term::TEXT, "  Upgrade:\n");
+        print_upgrade_instructions(&method, &info);
+        eprintln!();
+        return;
+    }
+
+    // Interactive prompt (or auto-yes)
+    let should_apply = auto_yes || term::confirm(
+        &format!("  Update v{} → v{}?", current, info.version),
+        true,
+    );
+
+    if !should_apply {
+        term::print_colored(term::DIM, "  Update skipped.\n");
+        eprintln!();
+        return;
+    }
+
+    eprintln!();
     match method {
         InstallMethod::Cargo => apply_cargo(&info),
         InstallMethod::Npm => apply_npm(&info),

@@ -144,7 +144,7 @@ pub struct SessionState {
     #[serde(default)]
     pub prev_snapshot_tokens_out: u64,
     #[serde(default)]
-    pub adaptive: crate::handlers::adaptation::AdaptiveState,
+    pub adaptive: crate::engines::anchor::compass::AdaptiveState,
     // ─── Predictive intelligence fields ──
     /// Extracted session goal from first user message
     #[serde(default)]

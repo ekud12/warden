@@ -1,5 +1,61 @@
 # Changelog
 
+## [2.0.0] - 2026-03-26
+
+### Architecture — 4-Engine Model
+
+Warden's 95 modules reorganized into 4 named engines with clear ownership and purpose.
+
+**Reflex Engine** — Act Now (<50ms)
+- Sentinel: safety + hallucination pattern matching (~300 patterns)
+- Loopbreaker: 2/3-gram detection, read spirals, entropy, action novelty
+- Tripwire: injection detection, variable expansion bypass
+- Gatekeeper: central decision trait (interface defined, implementation future)
+
+**Anchor Engine** — Stay Grounded (<100ms)
+- Compass: 5 session phases + 8 adaptive parameters + goal tracking
+- Focus: composite 0-100 focus score
+- Ledger: turn-by-turn event tracking (edits, reads, errors, milestones)
+- Debt: verification tracking (edits since last build/test)
+- Trust: composite 0-100 trust score, gates injection budget
+
+**Dream Engine** — Learn Quietly (async)
+- Imprint: error clustering + anomaly baselines (Welford's algorithm)
+- Trace: successful sequence mining + repair pattern learning
+- Lore: convention learning + cross-project knowledge + cross-session errors
+- Pruner: effectiveness scoring + artifact decay + cleanup
+- Replay: resume packet generation + working set ranking
+- Budget enforcement: every task has max_events, max_ms, max_artifacts
+
+**Harbor Engine** — Connect
+- Adapter: trait Assistant (Claude Code, Gemini CLI, future assistants)
+- MCP: 6-tool JSON-RPC 2.0 server (bidirectional)
+- CLI: describe, explain, export, replay, tui, proc_mgmt
+- Bridge: scaffold for LangChain, CrewAI, AutoGen integrations
+
+### Added
+- `engines/signal.rs` — Signal, SignalCategory, Verdict, Budget shared types
+- Signal wrappers on all analytics modules (typed `Signal { category, utility, message }`)
+- Budget enforcement on all 10 Dream tasks via `DreamTask::budget()`
+- Candle semantic embeddings behind `[features] semantic` flag (compiles on Windows)
+- `release-ship.yml` — automated version bump → tag → release workflow
+
+### Changed
+- Interactive `warden update` — prompts to apply, `--check` for print-only, `--yes` for CI
+- Precompact no longer re-injects full rules file (~1000 lines saved per compaction)
+- Daemon mtime check detects NEW rules files (was broken when startup_mtime=0)
+- README: v2.0.0 badge, 224+ tests, 4-engine architecture diagram
+- Bitmill docs: 18 pages (was 9), View Transitions, engine architecture pages
+
+### Removed
+- `negative_memory.rs` — dead code, duplicate of dream E6 build_dead_end_memory
+
+### Fixed
+- Integration test assertions: version_output (dynamic), help_output (flexible tagline)
+- XSS in bitmill search modal (HTML entity escaping)
+- Event listener accumulation on Astro View Transitions
+- `user-select: none` on body removed (was blocking text selection)
+
 ## [1.2.0] - 2026-03-25
 
 ### Added — Roadmap V1 (5 tracks)

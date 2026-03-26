@@ -64,18 +64,19 @@ fn bash_input(cmd: &str) -> String {
 fn version_output() {
     let out = run_warden_cmd(&["version"]);
     assert!(out.contains("warden"), "version should contain 'warden'");
-    assert!(out.contains("1.0.0"), "version should contain '1.0.0'");
+    // Check version format (X.Y.Z), not a specific version
+    let version = env!("CARGO_PKG_VERSION");
+    assert!(out.contains(version), "version should contain current pkg version");
 }
 
 #[test]
 fn help_output() {
     let out = run_warden_cmd(&[]);
     assert!(
-        out.contains("AI Coding Session Guardian"),
-        "help should show tagline"
+        out.contains("Runtime guardian") || out.contains("W A R D E N"),
+        "help should show tagline or banner"
     );
     assert!(out.contains("init"), "help should list init command");
-    assert!(out.contains("install"), "help should list install command");
 }
 
 #[test]

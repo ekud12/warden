@@ -291,7 +291,7 @@ pub fn run(raw: &str) {
 
     // -1. Health gate: deny HTTP calls to unhealthy managed processes
     if let Some(port) = extract_localhost_port(cmd)
-        && let Some((name, health)) = crate::handlers::proc_mgmt::get_process_on_port(port)
+        && let Some((name, health)) = crate::engines::harbor::proc_mgmt::get_process_on_port(port)
         && health != "healthy"
     {
         safety::record_deny_savings();

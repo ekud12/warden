@@ -1,0 +1,89 @@
+name: Ship Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.3.0)'
+        required: true
+        type: string
+      skip_tests:
+        description: 'Skip test step (for hotfixes)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  ship:
+    name: Bump, tag, and ship
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version format: $VERSION (expected: X.Y.Z)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+
+      - name: Check tag doesn't already exist
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists. Delete it first or use a different version."
+            exit 1
+          fi
+
+      - name: Bump version in Cargo.toml
+        run: |
+          sed -i "0,/^version = /s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+          echo "Cargo.toml version set to $VERSION"
+          grep '^version' Cargo.toml | head -1
+
+      - name: Update Cargo.lock
+        run: cargo generate-lockfile
+
+      - name: Run tests
+        if: ${{ !inputs.skip_tests }}
+        run: cargo test --release
+
+      - name: Update README badge
+        run: |
+          if grep -q 'badge/version-v' README.md; then
+            sed -i "s|badge/version-v[0-9.]*-|badge/version-v${VERSION}-|g" README.md
+            echo "README badge updated to v$VERSION"
+          fi
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock README.md
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: bump version to v$VERSION"
+          git push origin main
+
+      - name: Create and push tag
+        run: |
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+          echo "::notice::Tag $TAG created and pushed. Release workflow will trigger automatically."
+
+      - name: Summary
+        run: |
+          echo "## Release $TAG shipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version: $VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tag: $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "- The [Release workflow](../../actions/workflows/release.yml) will now build and publish." >> "$GITHUB_STEP_SUMMARY"

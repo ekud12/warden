@@ -280,8 +280,8 @@ pub fn run() {
 
     // Start daemon
     let sp = term::Spinner::start("Starting daemon...");
-    if !crate::ipc::daemon_is_running() {
-        crate::ipc::spawn_daemon();
+    if !crate::runtime::ipc::daemon_is_running() {
+        crate::runtime::ipc::spawn_daemon();
         sp.finish_ok("Daemon started");
     } else {
         sp.finish_ok("Daemon already running");

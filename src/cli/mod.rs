@@ -4,7 +4,7 @@
 // as well as help text, unknown command suggestions, and debug aliases.
 // ──────────────────────────────────────────────────────────────────────────────
 
-use crate::{assistant, config, constants, engines, handlers, install, ipc, rules, scorecard};
+use crate::{assistant, config, constants, engines, handlers, install, runtime, rules, scorecard};
 use std::process;
 
 pub const USER_COMMANDS: &[&str] = &[
@@ -75,9 +75,9 @@ pub fn run(subcmd: &str, args: &[String]) {
                         term::status_ok("Already on PATH");
                     }
 
-                    if !ipc::daemon_is_running() {
+                    if !runtime::ipc::daemon_is_running() {
                         let sp = term::Spinner::start("Starting daemon...");
-                        ipc::spawn_daemon();
+                        runtime::ipc::spawn_daemon();
                         sp.finish_ok("Daemon started");
                     } else {
                         term::status_ok("Daemon already running");
@@ -127,9 +127,9 @@ pub fn run(subcmd: &str, args: &[String]) {
                         term::status_ok("Already on PATH");
                     }
 
-                    if !ipc::daemon_is_running() {
+                    if !runtime::ipc::daemon_is_running() {
                         let sp = term::Spinner::start("Starting daemon...");
-                        ipc::spawn_daemon();
+                        runtime::ipc::spawn_daemon();
                         sp.finish_ok("Daemon started");
                     } else {
                         term::status_ok("Daemon already running");
@@ -291,11 +291,11 @@ pub fn run(subcmd: &str, args: &[String]) {
             let mtime: u64 = args
                 .get(2)
                 .and_then(|s| s.parse().ok())
-                .unwrap_or_else(ipc::get_binary_mtime);
-            crate::daemon::run_server(mtime);
+                .unwrap_or_else(runtime::ipc::get_binary_mtime);
+            crate::runtime::daemon::run_server(mtime);
         }
         "debug-daemon-stop" => {
-            if let Some(resp) = ipc::try_daemon("shutdown", "") {
+            if let Some(resp) = runtime::ipc::try_daemon("shutdown", "") {
                 if resp.exit_code == 0 {
                     eprintln!("Daemon stopped");
                 }
@@ -304,7 +304,7 @@ pub fn run(subcmd: &str, args: &[String]) {
             }
         }
         "debug-daemon-status" => {
-            if let Some(resp) = ipc::try_daemon("daemon-status", "") {
+            if let Some(resp) = runtime::ipc::try_daemon("daemon-status", "") {
                 println!("{}", resp.stdout);
             } else {
                 eprintln!("Daemon not running");
@@ -348,14 +348,14 @@ pub fn run(subcmd: &str, args: &[String]) {
             }
         }
         "daemon-status" => {
-            if let Some(resp) = ipc::try_daemon("daemon-status", "") {
+            if let Some(resp) = runtime::ipc::try_daemon("daemon-status", "") {
                 println!("{}", resp.stdout);
             } else {
                 eprintln!("Daemon not running");
             }
         }
         "daemon-stop" => {
-            if let Some(resp) = ipc::try_daemon("shutdown", "") {
+            if let Some(resp) = runtime::ipc::try_daemon("shutdown", "") {
                 if resp.exit_code == 0 { eprintln!("Daemon stopped"); }
             } else {
                 eprintln!("Daemon not running");

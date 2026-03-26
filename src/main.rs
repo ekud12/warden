@@ -20,12 +20,10 @@ mod cli;
 mod common;
 mod config;
 mod constants;
-mod daemon;
-mod dispatch;
 mod engines;
 mod handlers;
 mod install;
-mod ipc;
+mod runtime;
 mod rules;
 mod scorecard;
 
@@ -49,13 +47,13 @@ fn main() {
         let mtime: u64 = args
             .get(2)
             .and_then(|s| s.parse().ok())
-            .unwrap_or_else(ipc::get_binary_mtime);
-        daemon::run_server(mtime);
+            .unwrap_or_else(runtime::ipc::get_binary_mtime);
+        runtime::daemon::run_server(mtime);
         return;
     }
 
-    if dispatch::is_hook(subcmd) {
-        dispatch::run_hook(subcmd, &args);
+    if runtime::dispatch::is_hook(subcmd) {
+        runtime::dispatch::run_hook(subcmd, &args);
     } else {
         cli::run(subcmd, &args);
     }

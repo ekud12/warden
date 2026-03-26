@@ -365,3 +365,96 @@ fn transition_reason(
         SessionPhase::Warmup => format!("Reverted from {} — early session", from),
     }
 }
+
+// ─── Drift detection ─────────────────────────────────────────────────────────
+
+/// Compute goal-action alignment score.
+/// Returns 0.0 (perfectly aligned) to 1.0 (completely drifted).
+/// Uses keyword overlap between stated goal and recent file paths/commands.
+pub fn drift_score(goal: &str, recent_actions: &[String]) -> f64 {
+    if goal.is_empty() || recent_actions.is_empty() {
+        return 0.0;
+    }
+    let goal_tokens: std::collections::HashSet<String> = goal
+        .split_whitespace()
+        .filter(|w| w.len() > 3)
+        .map(|w| w.to_lowercase())
+        .collect();
+    if goal_tokens.is_empty() {
+        return 0.0;
+    }
+
+    let action_text = recent_actions.join(" ");
+    let action_tokens: std::collections::HashSet<String> = action_text
+        .split_whitespace()
+        .filter(|w| w.len() > 3)
+        .map(|w| w.to_lowercase())
+        .collect();
+
+    let overlap = goal_tokens.intersection(&action_tokens).count();
+    let coverage = overlap as f64 / goal_tokens.len() as f64;
+    1.0 - coverage.min(1.0)
+}
+
+/// Produce a drift advisory signal when goal-action alignment is low.
+pub fn drift_signal(goal: &str, recent_actions: &[String]) -> Option<signal::Signal> {
+    let score = drift_score(goal, recent_actions);
+    if score > 0.7 {
+        Some(signal::Signal::advisory(
+            signal::SignalCategory::Focus,
+            0.7,
+            format!(
+                "Drift detected (score: {:.2}). Current actions may not align with: {}",
+                score, goal
+            ),
+            "compass.drift",
+        ))
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drift_aligned_goal() {
+        let actions = vec!["cargo build --release".into(), "edit src/build.rs error handling".into()];
+        let score = drift_score("fix build error", &actions);
+        assert!(score < 0.5, "aligned goal should have low drift: {}", score);
+    }
+
+    #[test]
+    fn drift_unrelated_goal() {
+        let actions = vec!["read README.md".into(), "git log".into()];
+        let score = drift_score("fix the database migration", &actions);
+        assert!(
+            score > 0.5,
+            "unrelated goal should have high drift: {}",
+            score
+        );
+    }
+
+    #[test]
+    fn drift_signal_fires_on_high_drift() {
+        let actions = vec!["read docs/api.md".into(), "git status".into()];
+        let signal = drift_signal("fix critical authentication vulnerability", &actions);
+        assert!(signal.is_some(), "high drift should produce signal");
+    }
+
+    #[test]
+    fn drift_signal_silent_when_aligned() {
+        let actions = vec![
+            "edit src/auth.rs authentication fix".into(),
+            "cargo test auth module".into(),
+        ];
+        let signal = drift_signal("fix authentication issue in auth module", &actions);
+        assert!(signal.is_none(), "aligned actions should not trigger drift");
+    }
+
+    #[test]
+    fn drift_empty_goal_is_zero() {
+        assert_eq!(drift_score("", &["anything".into()]), 0.0);
+    }
+}

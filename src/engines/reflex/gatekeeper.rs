@@ -71,6 +71,7 @@ mod tests {
             message: format!("from {}", source),
             source,
             verdict,
+            score: None,
         }
     }
 

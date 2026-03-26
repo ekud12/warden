@@ -23,7 +23,7 @@ use crate::engines::anchor::compass as adaptation;
 use crate::engines::anchor::git_summary;
 use crate::engines::anchor::{budget as token_budget, debt as verification, error_prevention, focus};
 use crate::engines::dream::imprint as anomaly;
-use crate::engines::reflex::{entropy, loopbreaker as loop_patterns};
+use crate::engines::reflex::loopbreaker as loop_patterns;
 use crate::rules;
 
 pub fn run(_raw: &str) {
@@ -116,7 +116,7 @@ pub fn run(_raw: &str) {
     // Action entropy drift detection
     let entropy_advisory = if state.advisory_ready("entropy") {
         let has_recent_edits = state.last_edit_turn + 3 >= turn;
-        entropy::check_drift(&state.action_history, has_recent_edits)
+        loop_patterns::check_drift(&state.action_history, has_recent_edits)
     } else {
         None
     };

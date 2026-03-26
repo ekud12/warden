@@ -12,6 +12,5 @@
 
 pub mod sentinel;
 pub mod loopbreaker;
-pub mod entropy;
 pub mod tripwire;
 pub mod gatekeeper;

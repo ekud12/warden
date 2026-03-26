@@ -88,6 +88,22 @@ pub fn check_patterns(
     None
 }
 
+/// Signal wrapper: returns Loop signal when risky transition patterns detected
+pub fn check_markov_signal(
+    transitions: &HashMap<String, u32>,
+    current_action: &str,
+    action_history: &[String],
+) -> Option<crate::engines::signal::Signal> {
+    check_patterns(transitions, current_action, action_history).map(|msg| {
+        crate::engines::signal::Signal {
+            category: crate::engines::signal::SignalCategory::Loop,
+            utility: 0.85,
+            message: msg,
+            source: "markov",
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

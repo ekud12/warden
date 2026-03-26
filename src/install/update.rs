@@ -246,8 +246,8 @@ fn apply_npm(_info: &ReleaseInfo) {
 }
 
 fn apply_standalone(info: &ReleaseInfo) {
-    // Stop daemon first (if running)
-    let _ = stop_daemon();
+    // Stop daemon first (if running) — graceful IPC shutdown with 3s timeout
+    crate::ipc::stop_daemon_graceful(3000);
 
     let target = detect_target();
     let ext = if cfg!(windows) { ".exe" } else { "" };
@@ -302,44 +302,57 @@ fn apply_standalone(info: &ReleaseInfo) {
 
     spinner.finish_ok("downloaded");
 
-    // Swap binary
-    let backup = exe.with_extension("bak");
-    if cfg!(windows) {
-        // Windows: can't replace running exe, rename first
-        let _ = std::fs::remove_file(&backup);
-        if std::fs::rename(&exe, &backup).is_err() {
-            term::print_colored(term::ERROR, "  Could not rename current binary. Is it in use?\n");
-            let _ = std::fs::remove_file(&tmp);
-            eprintln!();
-            return;
-        }
-        if std::fs::rename(&tmp, &exe).is_err() {
-            // Rollback
-            let _ = std::fs::rename(&backup, &exe);
-            term::print_colored(term::ERROR, "  Could not place new binary. Rolled back.\n");
-            eprintln!();
-            return;
-        }
-    } else {
-        // Unix: atomic rename
-        let _ = std::fs::rename(&exe, &backup);
-        if std::fs::rename(&tmp, &exe).is_err() {
-            let _ = std::fs::rename(&backup, &exe);
-            term::print_colored(term::ERROR, "  Could not place new binary. Rolled back.\n");
-            eprintln!();
-            return;
-        }
-        // Restore execute permission
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755));
-        }
+    // Swap binary with rollback guarantee
+    if let Err(msg) = swap_binary(&exe, &tmp) {
+        term::print_colored(term::ERROR, &format!("  {}\n", msg));
+        eprintln!();
+        return;
     }
 
     term::print_colored(term::SUCCESS, &format!("  Updated to v{}\n", info.version));
     post_update_verify();
+
+    // Restart daemon with the new binary
+    crate::ipc::spawn_daemon();
+
     eprintln!();
+}
+
+/// Swap the current binary with a new one, rolling back on failure.
+/// Returns Ok(()) on success, Err(message) on failure (backup restored).
+fn swap_binary(exe: &std::path::Path, tmp: &std::path::Path) -> Result<(), String> {
+    let backup = exe.with_extension("bak");
+
+    // Remove stale backup
+    let _ = std::fs::remove_file(&backup);
+
+    // Step 1: move current exe to backup
+    if let Err(e) = std::fs::rename(exe, &backup) {
+        let _ = std::fs::remove_file(tmp);
+        return Err(format!("Could not rename current binary: {}. Is it in use?", e));
+    }
+
+    // Step 2: move new binary into place
+    if let Err(e) = std::fs::rename(tmp, exe) {
+        // ALWAYS restore backup on failure
+        if let Err(restore_err) = std::fs::rename(&backup, exe) {
+            return Err(format!(
+                "Could not place new binary ({}), AND failed to restore backup ({}). \
+                 Manual recovery needed: rename {} to {}",
+                e, restore_err, backup.display(), exe.display()
+            ));
+        }
+        return Err(format!("Could not place new binary: {}. Rolled back.", e));
+    }
+
+    // Step 3: restore execute permission on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(exe, std::fs::Permissions::from_mode(0o755));
+    }
+
+    Ok(())
 }
 
 fn detect_target() -> &'static str {
@@ -354,16 +367,6 @@ fn detect_target() -> &'static str {
     } else {
         "x86_64-unknown-linux-gnu"
     }
-}
-
-fn stop_daemon() -> bool {
-    // Try to stop daemon gracefully
-    let exe = std::env::current_exe().unwrap_or_default();
-    std::process::Command::new(&exe)
-        .args(["debug-daemon-stop"])
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
 }
 
 fn post_update_verify() {
@@ -419,7 +422,7 @@ pub fn run_doctor() {
     let mut ok_count = 0u32;
     let mut warn_count = 0u32;
 
-    // 1. Binary
+    // 1. CLI binary
     let exe = std::env::current_exe().unwrap_or_default();
     if exe.exists() {
         term::print_colored(term::SUCCESS, "  [OK] ");
@@ -437,8 +440,9 @@ pub fn run_doctor() {
     ok_count += 1;
 
     // 3. Version
+    let cli_version = env!("CARGO_PKG_VERSION");
     term::print_colored(term::SUCCESS, "  [OK] ");
-    term::print_colored(term::TEXT, &format!("Version: v{}\n", env!("CARGO_PKG_VERSION")));
+    term::print_colored(term::TEXT, &format!("Version: v{}\n", cli_version));
     ok_count += 1;
 
     // 4. Home directory
@@ -465,18 +469,75 @@ pub fn run_doctor() {
         warn_count += 1;
     }
 
-    // 6. Daemon
-    let daemon_bin = super::bin_dir().join(if cfg!(windows) { "warden-daemon.exe" } else { "warden-daemon" });
+    // 6. Installed binaries — check all 3 exist in bin_dir and hooks_dir
+    let bin_dir = super::bin_dir();
+    let hooks_dir = crate::common::hooks_dir();
+    let ext = if cfg!(windows) { ".exe" } else { "" };
+
+    let bin_binaries = [
+        (format!("warden{}", ext), "CLI"),
+        (format!("warden-relay{}", ext), "Relay"),
+    ];
+    for (name, label) in &bin_binaries {
+        let path = bin_dir.join(name);
+        if path.exists() {
+            term::print_colored(term::SUCCESS, "  [OK] ");
+            term::print_colored(term::TEXT, &format!("{} binary: present", label));
+            term::print_colored(term::DIM, &format!(" ({})\n", path.display()));
+            ok_count += 1;
+        } else {
+            term::print_colored(term::WARN, "  [!!] ");
+            term::print_colored(term::TEXT, &format!("{} binary missing: ", label));
+            term::print_colored(term::DIM, &format!("{}\n", path.display()));
+            warn_count += 1;
+        }
+    }
+
+    let daemon_name = format!("warden-daemon{}", ext);
+    let daemon_bin = hooks_dir.join(&daemon_name);
     if daemon_bin.exists() {
         term::print_colored(term::SUCCESS, "  [OK] ");
-        term::print_colored(term::TEXT, "Daemon binary: present\n");
+        term::print_colored(term::TEXT, "Daemon binary: present");
+        term::print_colored(term::DIM, &format!(" ({})\n", daemon_bin.display()));
         ok_count += 1;
+
+        // 7. Binary size consistency — compare daemon binary size with CLI binary
+        let cli_size = std::fs::metadata(&exe).map(|m| m.len()).unwrap_or(0);
+        let daemon_size = std::fs::metadata(&daemon_bin).map(|m| m.len()).unwrap_or(0);
+        if cli_size > 0 && daemon_size > 0 {
+            let ratio = if cli_size > daemon_size {
+                (cli_size - daemon_size) as f64 / cli_size as f64
+            } else {
+                (daemon_size - cli_size) as f64 / daemon_size as f64
+            };
+            if ratio > 0.10 {
+                term::print_colored(term::WARN, "  [!!] ");
+                term::print_colored(term::TEXT, &format!(
+                    "Binary size mismatch: CLI={}KB, Daemon={}KB ({:.0}% diff)\n",
+                    cli_size / 1024, daemon_size / 1024, ratio * 100.0
+                ));
+                term::print_colored(term::DIM, "       Possible version mismatch — run `warden daemon-stop` to force refresh\n");
+                warn_count += 1;
+            } else {
+                term::print_colored(term::SUCCESS, "  [OK] ");
+                term::print_colored(term::TEXT, &format!(
+                    "Binary sizes consistent: CLI={}KB, Daemon={}KB\n",
+                    cli_size / 1024, daemon_size / 1024
+                ));
+                ok_count += 1;
+            }
+        }
     } else {
-        term::print_colored(term::WARN, "  [!!] Daemon binary missing\n");
+        term::print_colored(term::WARN, "  [!!] ");
+        term::print_colored(term::TEXT, "Daemon binary missing");
+        term::print_colored(term::DIM, &format!(" (expected at {})\n", daemon_bin.display()));
         warn_count += 1;
     }
 
-    // 7. Claude Code hooks
+    // 8. Daemon process health — check if running, query version via IPC
+    doctor_daemon_health(&mut ok_count, &mut warn_count, cli_version);
+
+    // 9. Claude Code hooks
     let claude_settings = dirs_check("claude");
     if let Some(status) = claude_settings {
         if status {
@@ -498,6 +559,101 @@ pub fn run_doctor() {
         term::print_colored(term::WARN, &format!("  {} OK, {} warnings.\n", ok_count, warn_count));
     }
     eprintln!();
+}
+
+/// Check daemon process health: running status, PID, uptime, version match
+fn doctor_daemon_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &str) {
+    // Check PID file first
+    let pid = crate::ipc::read_pid();
+
+    match crate::ipc::try_daemon("daemon-status", "") {
+        Some(resp) if resp.exit_code == 0 => {
+            // Parse the status JSON
+            let status: serde_json::Value = serde_json::from_str(&resp.stdout)
+                .unwrap_or_default();
+            let daemon_pid = status.get("pid")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let daemon_version = status.get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
+            let started_at = status.get("started_at")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+
+            // Running status
+            term::print_colored(term::SUCCESS, "  [OK] ");
+            term::print_colored(term::TEXT, &format!("Daemon: running (PID {})", daemon_pid));
+
+            // Uptime
+            if started_at > 0 {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let uptime_secs = now.saturating_sub(started_at);
+                term::print_colored(term::DIM, &format!(", uptime {}\n", format_duration(uptime_secs)));
+            } else {
+                eprintln!();
+            }
+            *ok_count += 1;
+
+            // Version match
+            if daemon_version == cli_version {
+                term::print_colored(term::SUCCESS, "  [OK] ");
+                term::print_colored(term::TEXT, &format!("Daemon version: v{} (matches CLI)\n", daemon_version));
+                *ok_count += 1;
+            } else {
+                term::print_colored(term::WARN, "  [!!] ");
+                term::print_colored(term::TEXT, &format!(
+                    "Daemon version mismatch: daemon=v{}, CLI=v{}\n",
+                    daemon_version, cli_version
+                ));
+                term::print_colored(term::DIM, "       Run `warden daemon-stop` — it will auto-restart with the correct version\n");
+                *warn_count += 1;
+            }
+        }
+        _ => {
+            // Daemon not reachable via IPC
+            if let Some(pid_val) = pid {
+                if crate::ipc::pid_is_alive(pid_val) {
+                    term::print_colored(term::WARN, "  [!!] ");
+                    term::print_colored(term::TEXT, &format!(
+                        "Daemon: PID {} alive but not responding on pipe\n",
+                        pid_val
+                    ));
+                    *warn_count += 1;
+                } else {
+                    term::print_colored(term::WARN, "  [!!] ");
+                    term::print_colored(term::TEXT, &format!(
+                        "Daemon: stale PID file (PID {} not running)\n",
+                        pid_val
+                    ));
+                    term::print_colored(term::DIM, "       Will auto-restart on next hook invocation\n");
+                    *warn_count += 1;
+                }
+            } else {
+                term::print_colored(term::DIM, "  [--] Daemon: not running\n");
+            }
+        }
+    }
+}
+
+/// Format seconds into a human-readable duration string
+fn format_duration(secs: u64) -> String {
+    if secs < 60 {
+        format!("{}s", secs)
+    } else if secs < 3600 {
+        format!("{}m {}s", secs / 60, secs % 60)
+    } else if secs < 86400 {
+        let h = secs / 3600;
+        let m = (secs % 3600) / 60;
+        format!("{}h {}m", h, m)
+    } else {
+        let d = secs / 86400;
+        let h = (secs % 86400) / 3600;
+        format!("{}d {}h", d, h)
+    }
 }
 
 fn dirs_check(assistant: &str) -> Option<bool> {

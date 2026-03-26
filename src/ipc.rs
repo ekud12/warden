@@ -390,6 +390,72 @@ fn record_restart() {
     }
 }
 
+// ─── Graceful daemon shutdown ─────────────────────────────────────────────────
+
+/// Send shutdown signal to daemon and wait for it to exit.
+/// Returns true if daemon stopped (or wasn't running), false on timeout.
+pub fn stop_daemon_graceful(timeout_ms: u64) -> bool {
+    // Try IPC shutdown first
+    if let Some(_resp) = try_daemon("shutdown", "{}") {
+        // Daemon acknowledged — wait for it to actually exit
+        let start = std::time::Instant::now();
+        while start.elapsed().as_millis() < timeout_ms as u128 {
+            if !daemon_is_running() {
+                remove_pid_file();
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    // Fallback: kill by PID if still alive
+    if let Some(pid) = read_pid() {
+        if pid_is_alive(pid) {
+            kill_daemon(pid);
+            // Brief wait for process to exit after kill
+            let start = std::time::Instant::now();
+            while start.elapsed().as_millis() < 1000 {
+                if !pid_is_alive(pid) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+        remove_pid_file();
+    }
+
+    true
+}
+
+/// Forcibly terminate a daemon process by PID.
+#[cfg(windows)]
+fn kill_daemon(pid: u32) {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+
+    // SAFETY: OpenProcess returns null on failure (checked); handle closed after use.
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if !handle.is_null() {
+            TerminateProcess(handle, 1);
+            CloseHandle(handle);
+        }
+    }
+    crate::common::log("ipc", &format!("Terminated daemon pid={}", pid));
+}
+
+/// Forcibly terminate a daemon process by PID.
+#[cfg(not(windows))]
+fn kill_daemon(pid: u32) {
+    // Send SIGTERM for graceful shutdown
+    let _ = std::process::Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+    crate::common::log("ipc", &format!("Sent SIGTERM to daemon pid={}", pid));
+}
+
 // ─── Platform-specific pipe connection ───────────────────────────────────────
 
 #[cfg(windows)]

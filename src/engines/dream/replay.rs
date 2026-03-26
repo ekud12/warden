@@ -13,10 +13,15 @@ use std::collections::BTreeMap;
 pub fn build_resume_packet() {
     let state = common::read_session_state();
 
-    // Top 5 files by recency
-    let mut files: Vec<(&String, &common::FileReadEntry)> = state.files_read.iter().collect();
-    files.sort_by(|a, b| b.1.turn.cmp(&a.1.turn));
-    let high_salience: Vec<String> = files.iter().take(5).map(|(k, _)| k.to_string()).collect();
+    // Top 5 files from Focus WorkingSet (ranked by recency+edits+errors)
+    // Falls back to simple recency sort if working set is empty
+    let high_salience: Vec<String> = if !state.working_set.is_empty() {
+        state.working_set.top(5).into_iter().map(|s| s.to_string()).collect()
+    } else {
+        let mut files: Vec<(&String, &common::FileReadEntry)> = state.files_read.iter().collect();
+        files.sort_by(|a, b| b.1.turn.cmp(&a.1.turn));
+        files.iter().take(5).map(|(k, _)| k.to_string()).collect()
+    };
 
     // V2: Get top playbook
     let sequences: BTreeMap<String, SuccessfulSequence> =

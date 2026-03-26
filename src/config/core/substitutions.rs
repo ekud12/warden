@@ -48,7 +48,7 @@ pub const SUBSTITUTIONS: &[(&str, &str)] = &[
         "BLOCKED: Use ouch instead of gzip. Example: ouch compress/decompress FILE.",
     ),
     (
-        r"\bcat\s+[^\|]+$",
+        r"\bcat\s+(?!<<)[^\|]+$",
         "BLOCKED: Use bat instead of cat. Example: bat FILE (syntax highlighting).",
     ),
 ];

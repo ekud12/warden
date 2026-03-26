@@ -140,6 +140,27 @@ pub fn run_server(source_mtime: u64) {
                     continue;
                 }
 
+                // Version mismatch detection: client version differs from daemon version
+                if !request.version.is_empty()
+                    && request.version != env!("CARGO_PKG_VERSION")
+                {
+                    common::log(
+                        "daemon",
+                        &format!(
+                            "Version mismatch (daemon={}, client={}), shutting down",
+                            env!("CARGO_PKG_VERSION"),
+                            request.version
+                        ),
+                    );
+                    let response = DaemonResponse {
+                        stdout: String::new(),
+                        exit_code: ipc::EXIT_RESTART,
+                    };
+                    let _ = write_response(&mut pipe, &response);
+                    shutdown.store(true, Ordering::Relaxed);
+                    break;
+                }
+
                 // Binary rebuild detection: client mtime differs from our startup mtime
                 if request.binary_mtime != 0
                     && startup_mtime != 0

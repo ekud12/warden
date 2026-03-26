@@ -425,8 +425,20 @@ fn main() {
                         process::exit(resp.exit_code);
                     }
                 } else {
-                    // Daemon not running — direct execution
-                    dispatch_hook(subcmd, &raw);
+                    // Daemon not running — try auto-starting it
+                    if let Some(resp) = ipc::spawn_and_wait(subcmd, &raw) {
+                        if resp.exit_code == ipc::EXIT_RESTART {
+                            dispatch_hook(subcmd, &raw);
+                        } else {
+                            if !resp.stdout.is_empty() {
+                                print!("{}", resp.stdout);
+                            }
+                            process::exit(resp.exit_code);
+                        }
+                    } else {
+                        // Daemon didn't start — direct execution
+                        dispatch_hook(subcmd, &raw);
+                    }
                 }
             } else {
                 let raw = read_stdin();

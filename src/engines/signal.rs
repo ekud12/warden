@@ -28,10 +28,13 @@ pub struct Signal {
     pub message: String,
     /// Source module name for tracing.
     pub source: &'static str,
+    /// What this signal recommends the Gatekeeper do.
+    /// `None` = purely advisory (context injection only, no blocking/transform).
+    pub verdict: Option<Verdict>,
 }
 
 /// The outcome of a Reflex engine decision.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Verdict {
     /// Allow the action to proceed.
     Allow,

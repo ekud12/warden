@@ -95,12 +95,12 @@ pub fn check_markov_signal(
     action_history: &[String],
 ) -> Option<crate::engines::signal::Signal> {
     check_patterns(transitions, current_action, action_history).map(|msg| {
-        crate::engines::signal::Signal {
-            category: crate::engines::signal::SignalCategory::Loop,
-            utility: 0.85,
-            message: msg,
-            source: "markov",
-        }
+        crate::engines::signal::Signal::advisory(
+            crate::engines::signal::SignalCategory::Loop,
+            0.85,
+            msg,
+            "markov",
+        )
     })
 }
 

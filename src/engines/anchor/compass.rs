@@ -331,12 +331,7 @@ fn commit_transition(
 }
 
 pub fn adapt_signal(state: &mut crate::common::SessionState) -> Option<signal::Signal> {
-    adapt(state).map(|msg| signal::Signal {
-        category: signal::SignalCategory::Phase,
-        utility: 0.7,
-        message: msg,
-        source: "compass",
-    })
+    adapt(state).map(|msg| signal::Signal::advisory(signal::SignalCategory::Phase, 0.7, msg, "compass"))
 }
 
 /// Generate a human-readable reason for the transition.

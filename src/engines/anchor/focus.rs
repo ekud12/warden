@@ -38,10 +38,5 @@ pub fn compute_focus(state: &SessionState) -> FocusReport {
 
 pub fn compute_focus_signal(state: &SessionState) -> Option<Signal> {
     let report = compute_focus(state);
-    report.advisory.map(|msg| Signal {
-        category: SignalCategory::Focus,
-        utility: 0.5,
-        message: msg,
-        source: "focus",
-    })
+    report.advisory.map(|msg| Signal::advisory(SignalCategory::Focus, 0.5, msg, "focus"))
 }

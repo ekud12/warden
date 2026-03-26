@@ -4,7 +4,7 @@
 // Includes stdin reading, daemon fast-path, CI mode, and panic isolation.
 // ──────────────────────────────────────────────────────────────────────────────
 
-use crate::{common, constants, engines, handlers, ipc};
+use crate::{common, constants, engines, handlers, runtime};
 use std::process;
 
 const HOOK_SUBCMDS: &[&str] = &[
@@ -49,8 +49,8 @@ pub fn run_hook(subcmd: &str, args: &[String]) {
     // IPC fast-path: try daemon first unless WARDEN_NO_DAEMON is set
     if std::env::var("WARDEN_NO_DAEMON").is_err() {
         let raw = read_stdin();
-        if let Some(resp) = ipc::try_daemon(subcmd, &raw) {
-            if resp.exit_code == ipc::EXIT_RESTART {
+        if let Some(resp) = runtime::ipc::try_daemon(subcmd, &raw) {
+            if resp.exit_code == runtime::ipc::EXIT_RESTART {
                 // Daemon detected rebuild — fall through to direct execution
                 dispatch_hook(subcmd, &raw);
             } else {
@@ -61,8 +61,8 @@ pub fn run_hook(subcmd: &str, args: &[String]) {
             }
         } else {
             // Daemon not running — try auto-starting it
-            if let Some(resp) = ipc::spawn_and_wait(subcmd, &raw) {
-                if resp.exit_code == ipc::EXIT_RESTART {
+            if let Some(resp) = runtime::ipc::spawn_and_wait(subcmd, &raw) {
+                if resp.exit_code == runtime::ipc::EXIT_RESTART {
                     dispatch_hook(subcmd, &raw);
                 } else {
                     if !resp.stdout.is_empty() {

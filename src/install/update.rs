@@ -247,7 +247,7 @@ fn apply_npm(_info: &ReleaseInfo) {
 
 fn apply_standalone(info: &ReleaseInfo) {
     // Stop daemon first (if running) — graceful IPC shutdown with 3s timeout
-    crate::ipc::stop_daemon_graceful(3000);
+    crate::runtime::ipc::stop_daemon_graceful(3000);
 
     let target = detect_target();
     let ext = if cfg!(windows) { ".exe" } else { "" };
@@ -313,7 +313,7 @@ fn apply_standalone(info: &ReleaseInfo) {
     post_update_verify();
 
     // Restart daemon with the new binary
-    crate::ipc::spawn_daemon();
+    crate::runtime::ipc::spawn_daemon();
 
     eprintln!();
 }
@@ -564,9 +564,9 @@ pub fn run_doctor() {
 /// Check daemon process health: running status, PID, uptime, version match
 fn doctor_daemon_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &str) {
     // Check PID file first
-    let pid = crate::ipc::read_pid();
+    let pid = crate::runtime::ipc::read_pid();
 
-    match crate::ipc::try_daemon("daemon-status", "") {
+    match crate::runtime::ipc::try_daemon("daemon-status", "") {
         Some(resp) if resp.exit_code == 0 => {
             // Parse the status JSON
             let status: serde_json::Value = serde_json::from_str(&resp.stdout)
@@ -616,7 +616,7 @@ fn doctor_daemon_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
         _ => {
             // Daemon not reachable via IPC
             if let Some(pid_val) = pid {
-                if crate::ipc::pid_is_alive(pid_val) {
+                if crate::runtime::ipc::pid_is_alive(pid_val) {
                     term::print_colored(term::WARN, "  [!!] ");
                     term::print_colored(term::TEXT, &format!(
                         "Daemon: PID {} alive but not responding on pipe\n",

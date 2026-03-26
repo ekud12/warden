@@ -20,7 +20,7 @@ pub fn run() {
 
     // 1. Stop daemon
     let sp = term::Spinner::start("Stopping daemon...");
-    if let Some(resp) = crate::ipc::try_daemon("shutdown", "") {
+    if let Some(resp) = crate::runtime::ipc::try_daemon("shutdown", "") {
         if resp.exit_code == 0 {
             sp.finish_ok("Daemon stopped");
         } else {

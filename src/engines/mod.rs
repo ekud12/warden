@@ -7,6 +7,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 pub mod signal;
+pub mod signal_bus;
 pub mod reflex;
 pub mod anchor;
 pub mod dream;

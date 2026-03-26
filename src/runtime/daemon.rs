@@ -15,7 +15,7 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 use crate::common;
-use crate::ipc::{self, DaemonRequest, DaemonResponse};
+use crate::runtime::ipc::{self, DaemonRequest, DaemonResponse};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

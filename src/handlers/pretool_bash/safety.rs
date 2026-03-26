@@ -100,6 +100,7 @@ pub fn check_safety(cmd: &str) -> bool {
                 "safety",
                 &common::truncate(cmd, 60),
             );
+            common::add_session_note("deny", &format!("[{}] {}", &PATTERNS.safety_ids[idx], common::truncate(cmd, 60)));
             common::deny("PreToolUse", &PATTERNS.safety_messages[idx]);
             return true;
         }
@@ -223,10 +224,40 @@ pub fn check_zero_trace(cmd: &str) -> bool {
     false
 }
 
-/// Check substitution patterns — sequential (needs per-pattern tool availability check)
-pub fn check_substitutions(cmd: &str) -> bool {
+/// Result of substitution check
+pub enum SubstitutionResult {
+    /// No substitution matched
+    Pass,
+    /// Silently rewrite command (tool-name swap, compatible output)
+    Transform(String),
+    /// Block with message (incompatible output or dangerous)
+    Deny,
+}
+
+/// Check substitution patterns — transforms first, then denials.
+pub fn check_substitutions(cmd: &str) -> SubstitutionResult {
     let base_cmd = cmd.split_whitespace().next().unwrap_or("");
 
+    // Transform-eligible: silently rewrite command
+    for (re, source, target) in &PATTERNS.transforms {
+        if re.is_match(cmd) {
+            let restriction_id = format!("substitution.{}", source);
+            if is_disabled(&restriction_id) {
+                continue;
+            }
+            if !crate::install::detect::substitution_target_available(source) {
+                continue;
+            }
+            let new_cmd = cmd.replacen(source, target, 1);
+            common::log(
+                "pretool-bash",
+                &format!("TRANSFORM {} -> {}", common::truncate(cmd, 40), common::truncate(&new_cmd, 40)),
+            );
+            return SubstitutionResult::Transform(new_cmd);
+        }
+    }
+
+    // Denial substitutions: block + suggest
     for (re, msg) in &PATTERNS.substitutions {
         if re.is_match(cmd) {
             let restriction_id = format!("substitution.{}", base_cmd);
@@ -243,11 +274,12 @@ pub fn check_substitutions(cmd: &str) -> bool {
                 "substitution",
                 &common::truncate(cmd, 40),
             );
+            common::add_session_note("deny", &format!("[{}] {}", restriction_id, common::truncate(cmd, 60)));
             common::deny_with_id("PreToolUse", msg, &restriction_id);
-            return true;
+            return SubstitutionResult::Deny;
         }
     }
-    false
+    SubstitutionResult::Pass
 }
 
 /// Check advisory patterns — single RegexSet pass

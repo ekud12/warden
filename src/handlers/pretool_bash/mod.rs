@@ -57,6 +57,7 @@ pub(crate) struct CompiledPatterns {
     pub advisories_ids: Vec<String>,
     pub auto_allow_set: RegexSet,
     // Sequential (needs per-pattern runtime checks like tool availability)
+    pub transforms: Vec<(Regex, String, String)>,  // (regex, source_tool, target_tool)
     pub substitutions: Vec<(Regex, String)>,
     // Special-purpose single regexes
     pub cd_just_re: Option<Regex>,
@@ -224,6 +225,14 @@ pub(crate) static PATTERNS: LazyLock<CompiledPatterns> = LazyLock::new(|| {
     // Substitutions stay sequential (need per-pattern tool availability check)
     let substitutions = compile_merged_pairs(&substitutions_pairs);
 
+    // Transforms: compile from config::TRANSFORMS
+    let transforms: Vec<(Regex, String, String)> = crate::config::core::substitutions::TRANSFORMS
+        .iter()
+        .filter_map(|(pat, src, tgt)| {
+            Regex::new(pat).ok().map(|re| (re, src.to_string(), tgt.to_string()))
+        })
+        .collect();
+
     CompiledPatterns {
         safety_set,
         safety_messages,
@@ -244,6 +253,7 @@ pub(crate) static PATTERNS: LazyLock<CompiledPatterns> = LazyLock::new(|| {
         advisories_messages,
         advisories_ids,
         auto_allow_set,
+        transforms,
         substitutions,
         cd_just_re: Regex::new(r#"^\s*cd\s+["']?([^"'&;]+?)["']?\s*&&\s*just\s+(.+)$"#).ok(),
         zero_trace_cmd: if r.zero_trace_cmd.is_empty() {
@@ -392,9 +402,15 @@ pub fn run(raw: &str) {
         return;
     }
 
-    // 5. Substitution patterns — DENY
-    if safety::check_substitutions(cmd) {
-        return;
+    // 5. Substitution patterns — TRANSFORM or DENY
+    match safety::check_substitutions(cmd) {
+        safety::SubstitutionResult::Transform(new_cmd) => {
+            let updated = serde_json::json!({ "command": new_cmd });
+            common::allow_with_update("PreToolUse", updated);
+            return;
+        }
+        safety::SubstitutionResult::Deny => return,
+        safety::SubstitutionResult::Pass => {}
     }
 
     // 5.5. Pre-execution command dedup (after all safety checks)

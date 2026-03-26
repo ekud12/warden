@@ -5,12 +5,11 @@
 // Supports Claude Code and Gemini CLI through adapter pattern.
 // All hook handlers dispatched as subcommands.
 //
-// Architecture:
-//   - Pipeline/middleware for hook processing (composable, panic-isolated)
-//   - Multi-assistant adapter (same rules, different I/O formats)
-//   - Tiered rules (core + community + personal + project)
-//   - Runtime analytics (anomaly detection, forecasting, quality prediction)
-//   - Phase-adaptive thresholds (Warmup → Productive → Exploring → Struggling → Late)
+// Architecture (4-engine model):
+//   - Reflex  — act now (safety, blocking, substitution)
+//   - Anchor  — stay grounded (session state, drift, verification)
+//   - Dream   — learn quietly (patterns, conventions, repair knowledge)
+//   - Harbor  — connect (assistant adapters, MCP, CLI, tool integrations)
 //
 // Design: every handler exits 0 on error to never block the AI assistant.
 // ──────────────────────────────────────────────────────────────────────────────
@@ -21,7 +20,7 @@ mod common;
 mod config;
 mod constants;
 mod daemon;
-mod dream;
+mod engines;
 mod handlers;
 mod install;
 mod ipc;
@@ -188,17 +187,7 @@ fn main() {
         }
 
         "update" => {
-            let flag = args.get(2).map(|s| s.as_str()).unwrap_or("");
-            match flag {
-                "--apply" => install::update::run_apply(),
-                "--check" | "" => install::update::run_check(),
-                _ => {
-                    install::term::print_colored(
-                        install::term::WARN,
-                        &format!("  Unknown flag: {}. Use --check or --apply.\n", flag),
-                    );
-                }
-            }
+            install::update::run(&args[1..]);
         }
 
         "doctor" => {
@@ -243,16 +232,16 @@ fn main() {
         }
 
         // ── No-stdin subcommands ──
-        "describe" => handlers::describe::run(&args[1..]),
+        "describe" => engines::harbor::describe::run(&args[1..]),
         "debug-explain" => {
             let target = args.get(2).map(|s| s.as_str()).unwrap_or("");
             if target.is_empty() {
                 eprintln!("Usage: {} debug-explain <rule-id>", constants::NAME);
             } else {
-                handlers::explain::explain_rule(target);
+                engines::harbor::explain::explain_rule(target);
             }
         }
-        "debug-explain-session" => handlers::explain::explain_session(),
+        "debug-explain-session" => engines::harbor::explain::explain_session(),
         "project-dir" => println!("{}", common::project_dir().display()),
         "rules" => {
             let action = args.get(2).map(|s| s.as_str()).unwrap_or("");
@@ -316,20 +305,20 @@ fn main() {
                 _ => config::restrictions::run(&args[2..]),
             }
         }
-        "debug-export" => handlers::export_sessions::run(&args[2..]),
-        "debug-stats" => print!("{}", handlers::learning::format_stats()),
+        "debug-export" => engines::harbor::export_sessions::run(&args[2..]),
+        "debug-stats" => print!("{}", engines::dream::lore::format_stats()),
         "debug-scorecard" => scorecard::run(),
-        "debug-replay" => handlers::replay::run(&args[2..]),
+        "debug-replay" => engines::harbor::replay::run(&args[2..]),
         "debug-diff" if args.len() >= 4 => {
-            handlers::replay::run(&["diff".to_string(), args[2].clone(), args[3].clone()]);
+            engines::harbor::replay::run(&["diff".to_string(), args[2].clone(), args[3].clone()]);
         }
         "debug-tui" => {
-            if let Err(e) = handlers::tui::run() {
+            if let Err(e) = engines::harbor::tui::run() {
                 eprintln!("TUI error: {}", e);
                 process::exit(1);
             }
         }
-        "mcp" => handlers::mcp_server::run(),
+        "mcp" => engines::harbor::mcp::run(),
         "truncate-filter" => handlers::truncate_filter::run(),
 
         // ── Daemon subcommands ──
@@ -364,20 +353,20 @@ fn main() {
             if target.is_empty() {
                 eprintln!("Usage: {} explain <rule-id>", constants::NAME);
             } else {
-                handlers::explain::explain_rule(target);
+                engines::harbor::explain::explain_rule(target);
             }
         }
-        "explain-session" => handlers::explain::explain_session(),
-        "stats" => print!("{}", handlers::learning::format_stats()),
+        "explain-session" => engines::harbor::explain::explain_session(),
+        "stats" => print!("{}", engines::dream::lore::format_stats()),
         "scorecard" => scorecard::run(),
-        "replay" => handlers::replay::run(&args[2..]),
+        "replay" => engines::harbor::replay::run(&args[2..]),
         "tui" => {
-            if let Err(e) = handlers::tui::run() {
+            if let Err(e) = engines::harbor::tui::run() {
                 eprintln!("TUI error: {}", e);
                 process::exit(1);
             }
         }
-        "export" | "export-sessions" => handlers::export_sessions::run(&args[2..]),
+        "export" | "export-sessions" => engines::harbor::export_sessions::run(&args[2..]),
         "restrictions" => {
             // Forward to debug-restrictions handler
             let action = args.get(2).map(|s| s.as_str()).unwrap_or("");
@@ -658,12 +647,12 @@ fn dispatch_hook(subcmd: &str, raw: &str) {
         "pretool-write" => handlers::pretool_write::run(raw),
         "pretool-redirect" => handlers::pretool_redirect::run(raw),
         "permission-approve" => handlers::permission_approve::run(raw),
-        "posttool-session" => handlers::posttool_session::run(raw),
+        "posttool-session" => engines::anchor::ledger::run(raw),
         "posttool-mcp" => handlers::posttool_mcp::run(raw),
-        "session-start" => handlers::session_start::run(raw),
-        "session-end" => handlers::session_end::run(raw),
-        "precompact-memory" => handlers::precompact_memory::run(raw),
-        "postcompact" => handlers::postcompact::run(raw),
+        "session-start" => engines::anchor::session_start::run(raw),
+        "session-end" => engines::anchor::session_end::run(raw),
+        "precompact-memory" => engines::anchor::precompact::run(raw),
+        "postcompact" => engines::anchor::postcompact::run(raw),
         "stop-check" => handlers::stop_check::run(raw),
         "userprompt-context" => handlers::userprompt_context::run(raw),
         "subagent-context" => handlers::subagent_context::run(raw),
@@ -968,7 +957,7 @@ fn print_help() {
     term::print_colored(term::TEXT, "    install <assistant>   ");
     term::println_colored(term::DIM, "Configure hooks (claude-code, gemini-cli)");
     term::print_colored(term::TEXT, "    update                ");
-    term::println_colored(term::DIM, "Check for updates (--apply to upgrade)");
+    term::println_colored(term::DIM, "Check + apply updates (--check print-only, --yes skip prompt)");
     term::print_colored(term::TEXT, "    uninstall             ");
     term::println_colored(term::DIM, "Remove hooks, binary, and config");
     term::print_colored(term::TEXT, "    config                ");

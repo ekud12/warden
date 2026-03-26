@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ekud12/warden/releases"><img src="https://img.shields.io/badge/v1.1.1-blue?style=flat-square" alt="Version" /></a>
+  <a href="https://github.com/ekud12/warden/releases"><img src="https://img.shields.io/badge/v2.0.0-blue?style=flat-square" alt="Version" /></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust%202024-orange?style=flat-square&logo=rust" alt="Rust" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/+300_rules-brightgreen?style=flat-square" alt="Rules" />
-  <img src="https://img.shields.io/badge/182_tests-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/224+_tests-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/3.7MB_binary-lightgrey?style=flat-square" alt="Binary" />
   <img src="https://img.shields.io/badge/<2ms_latency-lightgrey?style=flat-square" alt="Latency" />
   <img src="https://img.shields.io/badge/win%20%7C%20mac%20%7C%20linux-lightgrey?style=flat-square" alt="Platform" />
@@ -39,15 +39,16 @@
 3. [Install](#3-install)
 4. [Quick Start](#4-quick-start)
 5. [What It Does](#5-what-it-does)
-6. [The Harness](#6-the-harness)
-7. [Rules](#7-rules)
-8. [Runtime Intelligence](#8-runtime-intelligence)
-9. [MCP Server](#9-mcp-server)
-10. [Configuration](#10-configuration)
-11. [Commands](#11-commands)
-12. [Performance](#12-performance)
-13. [Documentation](#13-documentation)
-14. [Built With](#14-built-with)
+6. [Architecture — 4 Engines](#6-architecture--4-engines)
+7. [The Harness](#7-the-harness)
+8. [Rules](#8-rules)
+9. [Runtime Intelligence](#9-runtime-intelligence)
+10. [MCP Server](#10-mcp-server)
+11. [Configuration](#11-configuration)
+12. [Commands](#12-commands)
+13. [Performance](#13-performance)
+14. [Documentation](#14-documentation)
+15. [Built With](#15-built-with)
 
 ---
 
@@ -327,7 +328,38 @@ max_lines = 30
 
 ---
 
-## 6. The Harness
+## 6. Architecture — 4 Engines
+
+Warden v2.0 organizes its 95 modules into 4 named engines. Every component has a clear owner and purpose.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Claude Code / Gemini CLI  ──→  Hook Call                   │
+│                                    │                        │
+│  ⚡ Reflex Engine ─── Act Now ─────┤  <50ms                 │
+│     Sentinel · Loopbreaker · Tripwire · Gatekeeper          │
+│                                    │                        │
+│  ⚓ Anchor Engine ── Stay Grounded ┤  <100ms                │
+│     Compass · Focus · Ledger · Debt · Trust                 │
+│                                    │                        │
+│  🌙 Dream Engine ── Learn Quietly ─┤  async (daemon idle)   │
+│     Imprint · Trace · Lore · Pruner · Replay                │
+│                                    │                        │
+│  🔗 Harbor Engine ─ Connect ───────┘  adapters + MCP + CLI  │
+│     Adapter · MCP · CLI · Bridge                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Engine | Purpose | SLA |
+|--------|---------|-----|
+| **Reflex** | Safety, blocking, substitution | <50ms per check |
+| **Anchor** | Session state, drift detection, verification | <100ms per hook |
+| **Dream** | Pattern learning, conventions, repair knowledge | Async (idle time) |
+| **Harbor** | Assistant adapters, MCP tools, CLI commands | N/A |
+
+Engines communicate via typed **Signals** (`{ category, utility, message }`). Every Dream task has a **Budget** (`{ max_events, max_ms, max_artifacts }`). See [full docs](https://bitmill.dev/docs/architecture/engine-overview).
+
+## 7. The Harness
 
 Every Bash command flows through a 10-stage middleware pipeline. Each stage targets a distinct class of problem. Stages short-circuit on first deny — a safe command like `cargo test` passes through all stages in <0.5ms.
 
@@ -351,7 +383,7 @@ Pattern matching uses `RegexSet` — all patterns in a category tested simultane
 
 ---
 
-## 7. Rules
+## 8. Rules
 
 ### +300 patterns across 9 categories
 
@@ -380,7 +412,7 @@ Set `replace = true` in any TOML section to discard all previous tiers for that 
 
 ---
 
-## 8. Runtime Intelligence
+## 9. Runtime Intelligence
 
 Everything in this section runs automatically during your session. No commands to type. No configuration per session.
 
@@ -419,7 +451,7 @@ Everything in this section runs automatically during your session. No commands t
 
 ---
 
-## 9. MCP Server
+## 10. MCP Server
 
 ```bash
 warden mcp   # Runs as stdio MCP server (JSON-RPC 2.0)
@@ -458,7 +490,7 @@ warden mcp   # Runs as stdio MCP server (JSON-RPC 2.0)
 
 ---
 
-## 10. Configuration
+## 11. Configuration
 
 ### personal.toml (your global overrides)
 
@@ -510,7 +542,7 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 ---
 
-## 11. Commands
+## 12. Commands
 
 | Command | What it does |
 |---------|-------------|
@@ -537,7 +569,7 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 ---
 
-## 12. Performance
+## 13. Performance
 
 | Metric | Value |
 |--------|-------|
@@ -556,7 +588,7 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 ---
 
-## 13. Documentation
+## 14. Documentation
 
 **Full documentation:** [bitmill.dev](https://bitmill.dev)
 
@@ -573,7 +605,7 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 ---
 
-## 14. Built With
+## 15. Built With
 
 | Crate | Purpose |
 |-------|---------|

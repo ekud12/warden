@@ -96,8 +96,8 @@ pub fn run_server(source_mtime: u64) {
                     continue;
                 } // Only dream when genuinely idle
 
-                if let Some(batch) = crate::dream::next_batch() {
-                    crate::dream::process_batch(batch);
+                if let Some(batch) = crate::engines::dream::next_batch() {
+                    crate::engines::dream::process_batch(batch);
                 }
             }
         });
@@ -164,9 +164,9 @@ pub fn run_server(source_mtime: u64) {
                 }
 
                 // Rules.toml change detection: restart daemon to reload merged rules
-                if request.rules_mtime != 0
-                    && startup_rules_mtime != 0
-                    && request.rules_mtime != startup_rules_mtime
+                // Also restart when a rules file appears (startup_rules_mtime was 0)
+                if request.rules_mtime != startup_rules_mtime
+                    && (request.rules_mtime != 0 || startup_rules_mtime != 0)
                 {
                     common::log(
                         "daemon",
@@ -229,12 +229,12 @@ fn dispatch_handler(subcmd: &str, payload: &str) -> DaemonResponse {
         "pretool-write" => crate::handlers::pretool_write::run(payload),
         "pretool-redirect" => crate::handlers::pretool_redirect::run(payload),
         "permission-approve" => crate::handlers::permission_approve::run(payload),
-        "posttool-session" => crate::handlers::posttool_session::run(payload),
+        "posttool-session" => crate::engines::anchor::ledger::run(payload),
         "posttool-mcp" => crate::handlers::posttool_mcp::run(payload),
-        "session-start" => crate::handlers::session_start::run(payload),
-        "session-end" => crate::handlers::session_end::run(payload),
-        "precompact-memory" => crate::handlers::precompact_memory::run(payload),
-        "postcompact" => crate::handlers::postcompact::run(payload),
+        "session-start" => crate::engines::anchor::session_start::run(payload),
+        "session-end" => crate::engines::anchor::session_end::run(payload),
+        "precompact-memory" => crate::engines::anchor::precompact::run(payload),
+        "postcompact" => crate::engines::anchor::postcompact::run(payload),
         "stop-check" => crate::handlers::stop_check::run(payload),
         "userprompt-context" => crate::handlers::userprompt_context::run(payload),
         "subagent-context" => crate::handlers::subagent_context::run(payload),

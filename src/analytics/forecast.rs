@@ -88,6 +88,29 @@ pub fn format_forecast(forecast: &TokenForecast) -> String {
     }
 }
 
+/// Signal wrapper: returns Pressure signal when compaction is imminent
+pub fn predict_compaction_signal(
+    snapshots: &[crate::common::TurnSnapshot],
+    current_turn: u32,
+    cumulative_tokens: u64,
+    budget: u64,
+) -> Option<crate::engines::signal::Signal> {
+    let forecast = predict_compaction(snapshots, current_turn, cumulative_tokens, budget)?;
+    if forecast.turns_remaining > 5 {
+        return None;
+    }
+    let msg = format_forecast(&forecast);
+    if msg.is_empty() {
+        return None;
+    }
+    Some(crate::engines::signal::Signal {
+        category: crate::engines::signal::SignalCategory::Pressure,
+        utility: 0.4,
+        message: msg,
+        source: "forecast",
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

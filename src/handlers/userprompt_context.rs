@@ -19,9 +19,11 @@
 
 use crate::analytics;
 use crate::common;
-use crate::handlers::adaptation;
-use crate::handlers::git_summary;
-use crate::handlers::token_budget;
+use crate::engines::anchor::compass as adaptation;
+use crate::engines::anchor::git_summary;
+use crate::engines::anchor::{budget as token_budget, debt as verification, error_prevention, focus};
+use crate::engines::dream::imprint as anomaly;
+use crate::engines::reflex::{entropy, loopbreaker as loop_patterns};
 use crate::rules;
 
 pub fn run(_raw: &str) {
@@ -114,7 +116,7 @@ pub fn run(_raw: &str) {
     // Action entropy drift detection
     let entropy_advisory = if state.advisory_ready("entropy") {
         let has_recent_edits = state.last_edit_turn + 3 >= turn;
-        analytics::entropy::check_drift(&state.action_history, has_recent_edits)
+        entropy::check_drift(&state.action_history, has_recent_edits)
     } else {
         None
     };
@@ -178,12 +180,12 @@ pub fn run(_raw: &str) {
     // Anomaly detection: check current turn against project baselines
     let anomaly_alerts = if tel.anomaly_detection {
         let project_dir = common::project_dir();
-        let stats = analytics::anomaly::load_stats(&project_dir);
+        let stats = anomaly::load_stats(&project_dir);
         let last_snap = state.turn_snapshots.last();
         let tokens_this_turn = last_snap
             .map(|s| s.tokens_in_delta + s.tokens_out_delta)
             .unwrap_or(0);
-        analytics::anomaly::check_anomalies(&stats, tokens_this_turn, 2.0)
+        anomaly::check_anomalies(&stats, tokens_this_turn, 2.0)
     } else {
         Vec::new()
     };
@@ -213,7 +215,7 @@ pub fn run(_raw: &str) {
         )
         .map(|q| {
             let project_dir = common::project_dir();
-            let stats = analytics::anomaly::load_stats(&project_dir);
+            let stats = anomaly::load_stats(&project_dir);
             let avg = if stats.quality_score.n >= 3 {
                 Some(stats.quality_score.mean as u32)
             } else {
@@ -229,7 +231,7 @@ pub fn run(_raw: &str) {
     // Error prevention: check current edit patterns against Bayesian priors
     let error_prevention_msg = if tel.error_prevention {
         let project_dir = common::project_dir();
-        let priors = analytics::error_prevention::load_priors(&project_dir);
+        let priors = error_prevention::load_priors(&project_dir);
         let edits_since_build = state.turn.saturating_sub(state.last_build_turn);
         let edited_dirs = state
             .files_edited
@@ -238,7 +240,7 @@ pub fn run(_raw: &str) {
             .collect::<std::collections::HashSet<_>>()
             .len() as u32;
         let turns_since_test = state.turn.saturating_sub(state.last_build_turn);
-        analytics::error_prevention::check_patterns(
+        error_prevention::check_patterns(
             &priors,
             edits_since_build,
             edited_dirs,
@@ -255,14 +257,14 @@ pub fn run(_raw: &str) {
     // ── New intelligence modules ──
 
     // Verification debt: edits since last build/test
-    let verification_msg = analytics::verification::check_debt(&state);
-    let read_drift_msg = analytics::verification::check_read_drift(&state);
+    let verification_msg = verification::check_debt(&state);
+    let read_drift_msg = verification::check_read_drift(&state);
 
     // Focus score: composite metric
-    let focus_report = analytics::focus::compute_focus(&state);
+    let focus_report = focus::compute_focus(&state);
 
     // Loop pattern detection: 2-gram, 3-gram, read spirals
-    let loop_msg = analytics::loop_patterns::check_loop_patterns(&state.action_history);
+    let loop_msg = loop_patterns::check_loop_patterns(&state.action_history);
 
     // Checkpoint enforcement: turns since last milestone/verification
     state.turns_since_checkpoint += 1;
@@ -287,7 +289,7 @@ pub fn run(_raw: &str) {
     // injected into the agent's context. Signals below the budget cutoff are
     // logged silently to redb — nothing is lost, just quieted.
 
-    let trust = crate::analytics::trust::compute_trust(&state);
+    let trust = crate::engines::anchor::trust::compute_trust(&state);
 
     // Budget: how many advisories to inject based on trust level
     let advisory_budget = if trust > crate::config::TRUST_BUDGET_HIGH {
@@ -457,7 +459,7 @@ pub fn run(_raw: &str) {
 
     // Phase 5.2: Dream-informed utility adjustment
     {
-        let dream_scores = crate::dream::get_intervention_scores();
+        let dream_scores = crate::engines::dream::get_intervention_scores();
         for (utility, cat, _) in &mut candidates {
             let effectiveness = dream_scores.scores.get(*cat).copied().unwrap_or(0.5);
             *utility *= effectiveness as f32;

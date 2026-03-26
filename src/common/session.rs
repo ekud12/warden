@@ -214,6 +214,11 @@ pub struct SessionState {
     /// Auto-detected project type (rust/node/python/go/java/unknown)
     #[serde(default)]
     pub project_type: String,
+
+    // ─── Focus: Working Set ──
+    /// Top files ranked by recency/edits/errors (from Focus engine)
+    #[serde(default)]
+    pub working_set: crate::engines::anchor::focus::WorkingSet,
 }
 
 /// Bounds for session state collections

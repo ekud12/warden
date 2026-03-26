@@ -64,6 +64,11 @@ pub struct MergedRules {
     pub disabled_restrictions: std::collections::HashSet<String>,
     /// User-defined command filter rules (from TOML, merged with compiled defaults)
     pub command_filters: Vec<crate::rules::schema::CommandFilter>,
+    // Engine-specific config (from TOML, falls back to defaults)
+    pub loopbreaker: crate::rules::schema::LoopbreakerConfig,
+    pub compass: crate::rules::schema::CompassConfig,
+    pub focus: crate::rules::schema::FocusConfig,
+    pub dream: crate::rules::schema::DreamConfig,
 }
 
 pub static RULES: LazyLock<MergedRules> = LazyLock::new(|| {
@@ -336,6 +341,26 @@ fn merge(global: RulesFile, project: RulesFile) -> MergedRules {
             filters.extend(global.command_filters.iter().cloned());
             filters.extend(project.command_filters.iter().cloned());
             filters
+        },
+        // Engine configs: project overrides global (field-level merge via Option)
+        loopbreaker: schema::LoopbreakerConfig {
+            max_retries: project.loopbreaker.max_retries.or(global.loopbreaker.max_retries),
+            semantic_threshold: project.loopbreaker.semantic_threshold.or(global.loopbreaker.semantic_threshold),
+            read_spiral_min: project.loopbreaker.read_spiral_min.or(global.loopbreaker.read_spiral_min),
+        },
+        compass: schema::CompassConfig {
+            drift_threshold: project.compass.drift_threshold.or(global.compass.drift_threshold),
+            drift_sustain_turns: project.compass.drift_sustain_turns.or(global.compass.drift_sustain_turns),
+        },
+        focus: schema::FocusConfig {
+            max_working_set: project.focus.max_working_set.or(global.focus.max_working_set),
+            advisory_threshold: project.focus.advisory_threshold.or(global.focus.advisory_threshold),
+        },
+        dream: schema::DreamConfig {
+            enabled: project.dream.enabled.or(global.dream.enabled),
+            max_sequences: project.dream.max_sequences.or(global.dream.max_sequences),
+            max_repair_patterns: project.dream.max_repair_patterns.or(global.dream.max_repair_patterns),
+            max_conventions: project.dream.max_conventions.or(global.dream.max_conventions),
         },
     }
 }

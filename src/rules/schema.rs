@@ -40,6 +40,15 @@ pub struct RulesFile {
     /// Custom command filters for output compression (extends compiled defaults)
     #[serde(default)]
     pub command_filters: Vec<CommandFilter>,
+    // ─── Engine-specific config ──────────────────────────────────────────────
+    #[serde(default)]
+    pub loopbreaker: LoopbreakerConfig,
+    #[serde(default)]
+    pub compass: CompassConfig,
+    #[serde(default)]
+    pub focus: FocusConfig,
+    #[serde(default)]
+    pub dream: DreamConfig,
 }
 
 /// A section of pattern+message pairs with optional replace mode
@@ -150,6 +159,50 @@ fn default_max_lines() -> usize {
 pub struct RestrictionsConfig {
     #[serde(default)]
     pub disable: Vec<String>,
+}
+
+// ─── Engine-specific config sections ─────────────────────────────────────────
+
+/// Loopbreaker engine config
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct LoopbreakerConfig {
+    /// Max consecutive failures before advisory (default: 3)
+    pub max_retries: Option<u32>,
+    /// Jaccard similarity threshold for semantic repetition (default: 0.5)
+    pub semantic_threshold: Option<f64>,
+    /// Minimum read spiral length (default: 5)
+    pub read_spiral_min: Option<usize>,
+}
+
+/// Compass engine config
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct CompassConfig {
+    /// Drift score threshold to trigger advisory (default: 0.7)
+    pub drift_threshold: Option<f64>,
+    /// Turns of sustained drift before signal fires (default: 3)
+    pub drift_sustain_turns: Option<u32>,
+}
+
+/// Focus engine config
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct FocusConfig {
+    /// Max files in working set (default: 10)
+    pub max_working_set: Option<usize>,
+    /// Focus score threshold for advisory (default: 40)
+    pub advisory_threshold: Option<u32>,
+}
+
+/// Dream engine config
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct DreamConfig {
+    /// Enable/disable dream background processing (default: true)
+    pub enabled: Option<bool>,
+    /// Max sequences to retain (default: 50)
+    pub max_sequences: Option<usize>,
+    /// Max repair patterns (default: 30)
+    pub max_repair_patterns: Option<usize>,
+    /// Max conventions (default: 20)
+    pub max_conventions: Option<usize>,
 }
 
 /// Threshold overrides (all optional — falls back to compiled defaults)

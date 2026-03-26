@@ -18,7 +18,7 @@ pub use core::auto_allow::AUTO_ALLOW;
 pub use core::error_hints::ERROR_HINTS;
 pub use core::hallucination::{HALLUCINATION, HALLUCINATION_ADVISORY};
 pub use core::injection::INJECTION_PATTERNS;
-pub use core::safety::{DESTRUCTIVE, GIT_SAFETY, SAFETY};
+pub use core::safety::{DESTRUCTIVE, GIT_SAFETY, SAFETY, ZERO_TRACE};
 pub use core::sensitive_paths::{SENSITIVE_PATHS_DENY, SENSITIVE_PATHS_WARN};
 pub use core::substitutions::SUBSTITUTIONS;
 pub use core::thresholds::*;

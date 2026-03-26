@@ -127,6 +127,15 @@ fn merge(global: RulesFile, project: RulesFile) -> MergedRules {
     MergedRules {
         safety_pairs: {
             let mut pairs = merge_pairs("safety", config::SAFETY, &global.safety, &project.safety);
+            // Zero Trace rules: always ON — block AI attribution in commits
+            for (i, (pat, msg)) in config::ZERO_TRACE.iter().enumerate() {
+                pairs.push((
+                    format!("zero_trace.{}", i),
+                    pat.to_string(),
+                    msg.to_string(),
+                    false,
+                ));
+            }
             // Git readonly rules: only included when explicitly enabled
             let git_readonly = project
                 .git_readonly

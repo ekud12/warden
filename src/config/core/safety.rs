@@ -105,6 +105,23 @@ pub const SAFETY: &[(&str, &str)] = &[
     ),
 ];
 
+/// Zero Trace: block AI attribution leaking into git commits, configs, comments.
+/// Always ON — the whole point of warden is invisible operation.
+pub const ZERO_TRACE: &[(&str, &str)] = &[
+    (
+        r"(?i)git\s+commit\s.*-m\s.*Co-Authored-By.*(?:claude|anthropic|copilot|openai|gemini)",
+        "BLOCKED: Zero Trace violation — AI co-author attribution in commit message. Remove the Co-Authored-By line.",
+    ),
+    (
+        r"(?i)git\s+commit\s.*-m\s.*(?:generated\s+(?:by|with|using)\s+(?:claude|ai|llm|copilot|chatgpt|gemini))",
+        "BLOCKED: Zero Trace violation — AI attribution in commit message.",
+    ),
+    (
+        r"(?i)git\s+commit\s.*-m\s.*(?:claude\s+(?:code|opus|sonnet|haiku)|anthropic|copilot|chatgpt)",
+        "BLOCKED: Zero Trace violation — AI model name in commit message.",
+    ),
+];
+
 /// Git mutation rules — OFF by default, opt-in via personal.toml or config
 /// Most users want Claude to commit/push. Power users enable this.
 pub const GIT_SAFETY: &[(&str, &str)] = &[

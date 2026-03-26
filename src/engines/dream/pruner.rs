@@ -126,6 +126,74 @@ pub fn save(project_dir: &std::path::Path, data: &RuleEffectiveness) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Part 1b: Artifact caps and decay constants
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Maximum artifacts per type. Enforced on session-start.
+pub const MAX_SEQUENCES: usize = 50;
+pub const MAX_REPAIR_PATTERNS: usize = 30;
+pub const MAX_CONVENTIONS: usize = 20;
+pub const MAX_ERROR_CLUSTERS: usize = 50;
+pub const MAX_RANKED_ITEMS: usize = 30;
+
+/// Artifacts older than this many turns are candidates for pruning.
+pub const STALE_TURN_THRESHOLD: u32 = 200;
+
+/// Prune all dream artifacts to their caps. Called on session-start.
+pub fn prune_on_session_start() {
+    use crate::common;
+    use std::collections::BTreeMap;
+    use super::{SuccessfulSequence, RepairPattern, ProjectConvention, ErrorCluster, RankedItem};
+
+    // Sequences: cap at MAX_SEQUENCES, keep highest occurrence
+    let mut sequences: BTreeMap<String, SuccessfulSequence> =
+        common::storage::read_json("dream", "sequences").unwrap_or_default();
+    if sequences.len() > MAX_SEQUENCES {
+        let mut sorted: Vec<(String, SuccessfulSequence)> = sequences.into_iter().collect();
+        sorted.sort_by(|a, b| b.1.occurrences.cmp(&a.1.occurrences));
+        sorted.truncate(MAX_SEQUENCES);
+        sequences = sorted.into_iter().collect();
+        let _ = common::storage::write_json("dream", "sequences", &sequences);
+    }
+
+    // Repair patterns: cap at MAX_REPAIR_PATTERNS, keep highest success_count
+    let mut patterns: Vec<RepairPattern> =
+        common::storage::read_json("dream", "repair_patterns").unwrap_or_default();
+    if patterns.len() > MAX_REPAIR_PATTERNS {
+        patterns.sort_by(|a, b| b.success_count.cmp(&a.success_count));
+        patterns.truncate(MAX_REPAIR_PATTERNS);
+        let _ = common::storage::write_json("dream", "repair_patterns", &patterns);
+    }
+
+    // Conventions: cap at MAX_CONVENTIONS, keep highest confidence
+    let mut conventions: Vec<ProjectConvention> =
+        common::storage::read_json("dream", "conventions").unwrap_or_default();
+    if conventions.len() > MAX_CONVENTIONS {
+        conventions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        conventions.truncate(MAX_CONVENTIONS);
+        let _ = common::storage::write_json("dream", "conventions", &conventions);
+    }
+
+    // Error clusters: cap at MAX_ERROR_CLUSTERS, keep most recent
+    let mut clusters: Vec<ErrorCluster> =
+        common::storage::read_json("dream", "error_clusters").unwrap_or_default();
+    if clusters.len() > MAX_ERROR_CLUSTERS {
+        clusters.sort_by(|a, b| b.last_turn.cmp(&a.last_turn));
+        clusters.truncate(MAX_ERROR_CLUSTERS);
+        let _ = common::storage::write_json("dream", "error_clusters", &clusters);
+    }
+
+    // Ranked items: cap at MAX_RANKED_ITEMS
+    let mut ranked: Vec<RankedItem> =
+        common::storage::read_json("dream", "ranked_items").unwrap_or_default();
+    if ranked.len() > MAX_RANKED_ITEMS {
+        ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.truncate(MAX_RANKED_ITEMS);
+        let _ = common::storage::write_json("dream", "ranked_items", &ranked);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Part 2: Dream tasks — E5 LearnEffectiveness, E10 ScoreArtifacts
 // ═══════════════════════════════════════════════════════════════════════════════
 

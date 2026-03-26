@@ -62,6 +62,8 @@ pub fn run(raw: &str) {
         // True fresh session — reset state
         common::write_session_state(&common::SessionState::default());
         cleanup_stale_tmp();
+        // Prune dream artifacts to caps on fresh session start
+        crate::engines::dream::pruner::prune_on_session_start();
     }
 
     // A.9: Auto-detect project type + store in session state

@@ -16,6 +16,8 @@ pub enum SignalCategory {
     Recovery,
     Focus,
     Pressure,
+    Repetition,
+    Drift,
 }
 
 /// A signal produced by any engine module, competing for injection into context.
@@ -32,17 +34,25 @@ pub struct Signal {
     /// `None` = purely advisory (context injection only, no blocking/transform).
     #[cfg_attr(test, allow(dead_code))]
     pub verdict: Option<Verdict>,
+    /// Optional numeric score (e.g., drift_score, repetition_count).
+    #[cfg_attr(test, allow(dead_code))]
+    pub score: Option<f64>,
 }
 
 impl Signal {
     /// Create an advisory signal (no blocking verdict).
     pub fn advisory(category: SignalCategory, utility: f64, message: String, source: &'static str) -> Self {
-        Self { category, utility, message, source, verdict: None }
+        Self { category, utility, message, source, verdict: None, score: None }
     }
 
     /// Create a signal with a specific verdict recommendation.
     pub fn with_verdict(category: SignalCategory, utility: f64, message: String, source: &'static str, verdict: Verdict) -> Self {
-        Self { category, utility, message, source, verdict: Some(verdict) }
+        Self { category, utility, message, source, verdict: Some(verdict), score: None }
+    }
+
+    /// Create a signal with a numeric score.
+    pub fn with_score(category: SignalCategory, utility: f64, message: String, source: &'static str, score: f64) -> Self {
+        Self { category, utility, message, source, verdict: None, score: Some(score) }
     }
 }
 

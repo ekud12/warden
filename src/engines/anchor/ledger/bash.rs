@@ -65,6 +65,10 @@ pub fn process(cmd: &str, output: &str, exit_code: Option<i64>) {
             detect_errors(cmd, output, &mut state, re);
         } else {
             detect_milestones(cmd, output, &mut state, re);
+            // Gradual error decay: successful command reduces unresolved count
+            if state.errors_unresolved > 0 {
+                state.errors_unresolved = state.errors_unresolved.saturating_sub(1);
+            }
         }
     }
 

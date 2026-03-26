@@ -1,16 +1,21 @@
-// ─── core::substitutions — CLI tool substitution patterns (DENY) ─────────────
+// ─── core::substitutions — CLI tool substitution patterns ────────────────────
+//
+// Two types:
+//   TRANSFORMS: silently rewrite command (tool-name swap, compatible output)
+//   DENIALS: block + suggest (incompatible output or dangerous)
 
-/// Substitutions: (regex, deny_message) — redirect to modern CLI tools
-/// Each substitution only fires if the target tool is installed (checked at runtime).
+/// Transform-eligible substitutions: (regex, source_tool, target_tool)
+/// These silently rewrite the command — zero friction, same output.
+pub const TRANSFORMS: &[(&str, &str, &str)] = &[
+    (r"\bgrep\s", "grep", "rg"),
+    (r"\bfind\s", "find", "fd"),
+    (r"\bdu\s", "du", "dust"),
+    (r"\bsort\b[^|]*\|\s*uniq\b|\bsort\s+-u\b", "sort", "huniq"),
+];
+
+/// Denial substitutions: (regex, deny_message) — block, don't transform.
+/// These have incompatible output or are dangerous.
 pub const SUBSTITUTIONS: &[(&str, &str)] = &[
-    (
-        r"\bgrep\s",
-        "BLOCKED: Use rg (ripgrep) instead of grep. Same flags: rg PATTERN [PATH].",
-    ),
-    (
-        r"\bfind\s",
-        "BLOCKED: Use fd instead of find. Example: fd PATTERN [PATH]. Regex by default.",
-    ),
     (
         r"\bcurl\s",
         "BLOCKED: Use xh instead of curl. Example: xh GET url.",
@@ -18,14 +23,6 @@ pub const SUBSTITUTIONS: &[(&str, &str)] = &[
     (
         r"\bts-node\b",
         "BLOCKED: Use tsx instead of ts-node. Example: tsx script.ts",
-    ),
-    (
-        r"\bdu\s",
-        "BLOCKED: Use dust instead of du. Example: dust . or dust -d 2.",
-    ),
-    (
-        r"\bsort\b[^|]*\|\s*uniq\b|\bsort\s+-u\b",
-        "BLOCKED: Use huniq instead of sort|uniq. Faster, preserves order.",
     ),
     (
         r"\bsd\s",
@@ -46,9 +43,5 @@ pub const SUBSTITUTIONS: &[(&str, &str)] = &[
     (
         r"\bgzip\s",
         "BLOCKED: Use ouch instead of gzip. Example: ouch compress/decompress FILE.",
-    ),
-    (
-        r"\bcat\s+(?!<<)[^\|]+$",
-        "BLOCKED: Use bat instead of cat. Example: bat FILE (syntax highlighting).",
     ),
 ];

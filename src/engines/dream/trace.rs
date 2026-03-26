@@ -81,8 +81,8 @@ pub fn learn_repair_patterns() {
                 last_error = Some((sig, vec![file], turn));
             }
             "milestone" | "build_success" => {
-                if let Some((sig, files, error_turn)) = last_error.take() {
-                    if turn.saturating_sub(error_turn) <= 10 {
+                if let Some((sig, files, error_turn)) = last_error.take()
+                    && turn.saturating_sub(error_turn) <= 10 {
                         // Find or create repair pattern
                         if let Some(existing) = patterns.iter_mut().find(|p| text_similarity(&p.error_signature, &sig) > 0.6) {
                             existing.success_count += 1;
@@ -98,7 +98,6 @@ pub fn learn_repair_patterns() {
                             });
                         }
                     }
-                }
             }
             _ => {}
         }

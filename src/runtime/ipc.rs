@@ -81,8 +81,8 @@ pub fn try_daemon(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
     let pipe_result = connect_pipe(&pipe_path, Duration::from_millis(25));
     if pipe_result.is_none() {
         // Pipe connection failed — check for stale daemon
-        if let Some(pid) = read_pid() {
-            if !pid_is_alive(pid) {
+        if let Some(pid) = read_pid()
+            && !pid_is_alive(pid) {
                 crate::common::log("ipc", &format!("Stale pidfile (pid={}) — cleaning up", pid));
                 remove_pid_file();
                 // Check restart storm before auto-restarting
@@ -93,7 +93,6 @@ pub fn try_daemon(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
                     crate::common::log("ipc", "Restart storm detected (3+ in 5min) — skipping auto-restart");
                 }
             }
-        }
         return None;
     }
     let mut pipe = pipe_result.unwrap();

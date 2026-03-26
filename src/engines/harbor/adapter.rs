@@ -11,4 +11,3 @@
 // This module will re-export and extend it as Harbor grows.
 // ──────────────────────────────────────────────────────────────────────────────
 
-pub use crate::assistant::*;

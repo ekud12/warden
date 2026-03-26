@@ -20,6 +20,7 @@ session-state*.json
 session-notes.jsonl
 *.tmp
 *.lock
+!Cargo.lock
 
 # OS
 .DS_Store

@@ -19,7 +19,7 @@ use crate::ipc::{self, DaemonRequest, DaemonResponse};
 use std::io::{Read, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::HANDLE;
@@ -46,6 +46,10 @@ pub fn run_server(source_mtime: u64) {
 
     let startup_mtime = source_mtime;
     let startup_rules_mtime = crate::rules::rules_mtime();
+    let startup_time = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     // Enable in-memory caching for session state and log buffering
     common::enable_daemon_mode();
@@ -133,7 +137,10 @@ pub fn run_server(source_mtime: u64) {
                 // Handle status query
                 if request.subcmd == "daemon-status" {
                     let response = DaemonResponse {
-                        stdout: format!("{{\"pid\":{},\"mtime\":{}}}", pid, startup_mtime),
+                        stdout: format!(
+                            "{{\"pid\":{},\"mtime\":{},\"version\":\"{}\",\"started_at\":{}}}",
+                            pid, startup_mtime, env!("CARGO_PKG_VERSION"), startup_time
+                        ),
                         exit_code: 0,
                     };
                     let _ = write_response(&mut pipe, &response);

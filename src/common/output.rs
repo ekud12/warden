@@ -88,6 +88,20 @@ pub fn allow_with_update(event: &str, input: Value) {
     write_json(&out);
 }
 
+/// Write PreToolUse allow-with-updatedInput + advisory (Transform + Teach).
+/// Rewrites the command AND injects a learning message so the agent adapts.
+pub fn allow_with_transform(event: &str, input: Value, advisory: &str) {
+    let out = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": event,
+            "permissionDecision": "allow",
+            "updatedInput": input
+        },
+        "systemMessage": advisory
+    });
+    write_json(&out);
+}
+
 /// Write PreToolUse allow (bypasses permission prompt, no payload)
 pub fn allow(event: &str) {
     let out = serde_json::json!({

@@ -353,60 +353,80 @@ pub fn run(raw: &str) {
     // Cache Justfile presence for just-first transforms
     let has_justfile = just::justfile_exists();
 
-    // 2a. Variable expansion / indirect execution risk — DENY
-    if safety::check_expansion_risk(cmd) {
-        return;
+    // ─── Gatekeeper: collect all safety signals, decide once ──────────────────
+    {
+        use crate::engines::signal::{Signal, SignalCategory, Verdict};
+        use crate::engines::signal_bus::SignalBus;
+        use crate::engines::reflex::{sentinel, tripwire, gatekeeper};
+
+        let mut bus = SignalBus::new();
+
+        // Sentinel: safety + hallucination + destructive patterns
+        for sig in sentinel::check_command(cmd) {
+            bus.push(sig);
+        }
+
+        // Tripwire: expansion risks
+        for sig in tripwire::check_expansion_risk(cmd) {
+            bus.push(sig);
+        }
+
+        // Control character detection
+        if let Some(desc) = common::detect_suspicious_chars(cmd) {
+            bus.push(Signal::with_verdict(
+                SignalCategory::Safety,
+                1.0,
+                format!("Suspicious characters: {}", desc),
+                "control-chars",
+                Verdict::Deny(format!(
+                    "BLOCKED: Command contains suspicious characters ({}). Remove them and retry.",
+                    desc
+                )),
+            ));
+        }
+
+        // Zero-trace check (AI attribution in commands)
+        // Still uses legacy check since zero-trace patterns are in safety_pairs
+        // and sentinel already picks them up
+
+        if !bus.is_empty() {
+            let verdict = gatekeeper::evaluate(bus.signals());
+            match verdict {
+                Verdict::Deny(msg) => {
+                    safety::record_deny_savings();
+                    common::log_structured(
+                        "pretool-bash",
+                        common::LogLevel::Deny,
+                        "gatekeeper",
+                        &common::truncate(cmd, 60),
+                    );
+                    common::add_session_note("deny", &format!("[gatekeeper] {}", common::truncate(cmd, 60)));
+                    common::deny("PreToolUse", &msg);
+                    return;
+                }
+                Verdict::Advisory(msg) => {
+                    common::log("gatekeeper", &format!("ADVISORY: {}", common::truncate(&msg, 80)));
+                    common::allow_with_advisory("PreToolUse", &msg);
+                    return;
+                }
+                Verdict::Transform(val) => {
+                    common::allow_with_update("PreToolUse", val);
+                    return;
+                }
+                Verdict::Allow => {} // fall through to substitutions + rest of pipeline
+            }
+        }
     }
 
-    // 2b. Safety patterns — DENY
-    if safety::check_safety(cmd) {
-        return;
-    }
-
-    // 2.5. Hallucination hardening — DENY
-    if safety::check_hallucination(cmd) {
-        return;
-    }
-
-    // 2.75. Hallucination advisories — suspicious but possibly legitimate
-    if safety::check_hallucination_advisory(cmd) {
-        return;
-    }
-
-    // 2.8. Control character detection — DENY commands with embedded control chars
-    if let Some(desc) = common::detect_suspicious_chars(cmd) {
-        safety::record_deny_savings();
-        common::log_structured(
-            "pretool-bash",
-            common::LogLevel::Deny,
-            "control-chars",
-            &desc,
-        );
-        common::deny(
-            "PreToolUse",
-            &format!(
-                "BLOCKED: Command contains suspicious characters ({}). Remove them and retry.",
-                desc
-            ),
-        );
-        return;
-    }
-
-    // 3. Destructive patterns — DENY
-    if safety::check_destructive(cmd) {
-        return;
-    }
-
-    // 4. Zero-trace patterns (AI attribution in echo/printf/tee)
-    if safety::check_zero_trace(cmd) {
-        return;
-    }
-
-    // 5. Substitution patterns — TRANSFORM or DENY
+    // 5. Substitution patterns — TRANSFORM+TEACH or DENY
     match safety::check_substitutions(cmd) {
-        safety::SubstitutionResult::Transform(new_cmd) => {
+        safety::SubstitutionResult::Transform { new_cmd, source, target } => {
             let updated = serde_json::json!({ "command": new_cmd });
-            common::allow_with_update("PreToolUse", updated);
+            let advisory = format!(
+                "Warden transformed `{}` → `{}` for this call. Use `{}` directly next time.",
+                source, target, target
+            );
+            common::allow_with_transform("PreToolUse", updated, &advisory);
             return;
         }
         safety::SubstitutionResult::Deny => return,
@@ -462,40 +482,7 @@ pub fn run(raw: &str) {
         return;
     }
 
-    // 7. Gatekeeper signal collection (observability — parallel path)
-    // Collects signals from all Reflex modules. Currently logs only;
-    // future: replace stages 2-6 above with Gatekeeper as sole decision point.
-    {
-        use crate::engines::signal_bus::SignalBus;
-        use crate::engines::reflex::{sentinel, tripwire, gatekeeper};
-
-        let mut bus = SignalBus::new();
-
-        // Sentinel checks (safety + hallucination + destructive patterns)
-        for sig in sentinel::check_command(cmd) {
-            bus.push(sig);
-        }
-
-        // Tripwire checks (expansion risks)
-        for sig in tripwire::check_expansion_risk(cmd) {
-            bus.push(sig);
-        }
-
-        if !bus.is_empty() {
-            let verdict = gatekeeper::evaluate(bus.signals());
-            common::log(
-                "gatekeeper",
-                &format!(
-                    "signals={} verdict={:?} cmd={}",
-                    bus.signals().len(),
-                    verdict,
-                    common::truncate(cmd, 60)
-                ),
-            );
-        }
-    }
-
-    // 8. Truncation check
+    // 7. Truncation check
     truncation::handle_truncation(cmd);
 }
 

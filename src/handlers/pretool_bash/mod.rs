@@ -446,7 +446,40 @@ pub fn run(raw: &str) {
         return;
     }
 
-    // 7. Truncation check
+    // 7. Gatekeeper signal collection (observability — parallel path)
+    // Collects signals from all Reflex modules. Currently logs only;
+    // future: replace stages 2-6 above with Gatekeeper as sole decision point.
+    {
+        use crate::engines::signal_bus::SignalBus;
+        use crate::engines::reflex::{sentinel, tripwire, gatekeeper};
+
+        let mut bus = SignalBus::new();
+
+        // Sentinel checks (safety + hallucination + destructive patterns)
+        for sig in sentinel::check_command(cmd) {
+            bus.push(sig);
+        }
+
+        // Tripwire checks (expansion risks)
+        for sig in tripwire::check_expansion_risk(cmd) {
+            bus.push(sig);
+        }
+
+        if !bus.is_empty() {
+            let verdict = gatekeeper::evaluate(bus.signals());
+            common::log(
+                "gatekeeper",
+                &format!(
+                    "signals={} verdict={:?} cmd={}",
+                    bus.signals().len(),
+                    verdict,
+                    common::truncate(cmd, 60)
+                ),
+            );
+        }
+    }
+
+    // 8. Truncation check
     truncation::handle_truncation(cmd);
 }
 

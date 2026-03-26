@@ -103,12 +103,12 @@ pub fn predict_compaction_signal(
     if msg.is_empty() {
         return None;
     }
-    Some(crate::engines::signal::Signal {
-        category: crate::engines::signal::SignalCategory::Pressure,
-        utility: 0.4,
-        message: msg,
-        source: "forecast",
-    })
+    Some(crate::engines::signal::Signal::advisory(
+        crate::engines::signal::SignalCategory::Pressure,
+        0.4,
+        msg,
+        "forecast",
+    ))
 }
 
 #[cfg(test)]

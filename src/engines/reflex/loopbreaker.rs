@@ -4,6 +4,11 @@
 //   - 2-grams: A→B→A→B (ping-pong between two actions)
 //   - 3-grams: A→B→C→A→B→C (three-step cycles)
 //   - Read spirals: 5+ consecutive reads without edit
+//
+// TODO: Consider absorbing entropy detection (reflex/entropy.rs) — both modules
+// detect repetition patterns. Loopbreaker checks structural motifs while entropy
+// tracks Shannon entropy of action distributions. A unified "repetition detector"
+// could combine n-gram detection with entropy scoring for stronger signals.
 
 use crate::engines::signal::{Signal, SignalCategory};
 
@@ -71,12 +76,7 @@ pub fn action_novelty(history: &[String]) -> f64 {
 }
 
 pub fn check_loop_signal(history: &[String]) -> Option<Signal> {
-    check_loop_patterns(history).map(|msg| Signal {
-        category: SignalCategory::Loop,
-        utility: 0.9,
-        message: msg,
-        source: "loopbreaker",
-    })
+    check_loop_patterns(history).map(|msg| Signal::advisory(SignalCategory::Loop, 0.9, msg, "loopbreaker"))
 }
 
 #[cfg(test)]

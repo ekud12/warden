@@ -27,12 +27,8 @@ fn run_warden(subcmd: &str, input: &str) -> String {
         .spawn()
         .and_then(|mut child| {
             use std::io::Write;
-            child
-                .stdin
-                .take()
-                .unwrap()
-                .write_all(input.as_bytes())
-                .unwrap();
+            // Ignore broken pipe — process may exit before consuming all stdin
+            let _ = child.stdin.take().unwrap().write_all(input.as_bytes());
             child.wait_with_output()
         })
         .expect("failed to run warden");

@@ -12,3 +12,4 @@
 pub mod daemon;
 pub mod dispatch;
 pub mod ipc;
+pub mod server;

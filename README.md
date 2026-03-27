@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/ekud12/warden/releases"><img src="https://img.shields.io/badge/v2.0.0-blue?style=flat-square" alt="Version" /></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust%202024-orange?style=flat-square&logo=rust" alt="Rust" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/+300_rules-brightgreen?style=flat-square" alt="Rules" />
   <img src="https://img.shields.io/badge/224+_tests-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/3.7MB_binary-lightgrey?style=flat-square" alt="Binary" />
@@ -618,7 +618,7 @@ warden explain substitution.grep              # Show rule details + disable comm
 | `compact_str` | Memory-efficient inline strings |
 | `smallvec` | Stack-allocated bounded vectors |
 
-Rust 2024 edition. MIT license. Built by [Liel Kaysari](https://github.com/ekud12).
+Rust 2024 edition. AGPL-3.0 license. Built by [Liel Kaysari](https://github.com/ekud12).
 
 ---
 

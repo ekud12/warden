@@ -43,13 +43,10 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let subcmd = args.get(1).map(|s| s.as_str()).unwrap_or("");
 
-    // Daemon server mode — handle before dispatch routing
-    if subcmd == "daemon" {
-        let mtime: u64 = args
-            .get(2)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or_else(runtime::ipc::get_binary_mtime);
-        runtime::daemon::run_server(mtime);
+    // Persistent server mode (v2.4 unified architecture)
+    // Spawned by relay on first hook call. Stays alive, handles all hooks via IPC.
+    if subcmd == "__server" || subcmd == "daemon" {
+        runtime::server::run();
         return;
     }
 

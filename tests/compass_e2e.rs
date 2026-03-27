@@ -37,67 +37,22 @@ fn fire_hook(subcmd: &str, input: &str, cwd: &str) -> (String, String) {
     )
 }
 
+/// Read session state by asking warden itself (avoids hash mismatch across platforms).
+/// Uses `warden state` which calls read_session_state() internally — same code path as handlers.
 fn read_state(cwd: &str) -> serde_json::Value {
-    let hash8 = cwd_hash8(cwd);
-    let path = warden_projects_dir()
-        .join(&hash8)
-        .join("session-state.json");
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    let output = Command::new(warden_exe())
+        .args(["state"])
+        .env("WARDEN_NO_DAEMON", "1")
+        .env("WARDEN_TEST", "1")
+        .current_dir(cwd)
+        .output()
+        .expect("failed to run warden state");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim()).unwrap_or_default()
 }
 
-fn cleanup(cwd: &str) {
-    let hash8 = cwd_hash8(cwd);
-    let dir = warden_projects_dir().join(&hash8);
-    let _ = std::fs::remove_dir_all(&dir);
-}
-
-fn warden_projects_dir() -> std::path::PathBuf {
-    let home = std::env::var("USERPROFILE")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-    std::path::PathBuf::from(home)
-        .join(".warden")
-        .join("projects")
-}
-
-fn normalize_cwd(cwd: &str) -> String {
-    let mut s = cwd.replace('\\', "/");
-    if s.len() >= 3 && s.starts_with('/') && s.as_bytes()[2] == b'/' {
-        let drive = s.as_bytes()[1].to_ascii_lowercase() as char;
-        s = format!("{}:/{}", drive, &s[3..]);
-    }
-    if s.len() >= 2 && s.as_bytes()[1] == b':' {
-        let mut bytes = s.into_bytes();
-        bytes[0] = bytes[0].to_ascii_lowercase();
-        s = String::from_utf8(bytes).unwrap_or_default();
-    }
-    s.trim_end_matches('/').to_string()
-}
-
-fn find_git_root(cwd: &str) -> String {
-    let normalized = normalize_cwd(cwd);
-    let mut dir = std::path::PathBuf::from(&normalized);
-    loop {
-        if dir.join(".git").exists() {
-            return normalize_cwd(&dir.to_string_lossy());
-        }
-        if !dir.pop() {
-            break;
-        }
-    }
-    normalized
-}
-
-fn cwd_hash8(cwd: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let root = find_git_root(cwd);
-    let normalized = normalize_cwd(&root);
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    normalized.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())[..8].to_string()
+fn cleanup(_cwd: &str) {
+    // No-op: temp dir cleanup handles this via TempDir drop
 }
 
 fn test_dir(name: &str) -> tempfile::TempDir {

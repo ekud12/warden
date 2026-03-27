@@ -1,9 +1,9 @@
 [package]
 name = "warden-ai"
-version = "2.3.0"
+version = "2.4.0"
 edition = "2024"
 description = "Runtime control layer for AI coding agents: policy enforcement, drift reduction, and context efficiency"
-license = "MIT"
+license = "AGPL-3.0-only"
 repository = "https://github.com/ekud12/warden"
 homepage = "https://github.com/ekud12/warden"
 documentation = "https://github.com/ekud12/warden/tree/main/docs"

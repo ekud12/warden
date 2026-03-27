@@ -101,6 +101,28 @@ pub fn run(raw: &str) {
         context_parts.push(rules.trim().to_string());
     }
 
+    // ── Internalized diagnostics (logged silently to redb, never injected) ──
+    {
+        let rules = &crate::rules::RULES;
+        let rule_count = rules.safety_pairs.len()
+            + rules.hallucination_pairs.len()
+            + rules.destructive_pairs.len()
+            + rules.substitutions_pairs.len()
+            + rules.advisories_pairs.len();
+        common::storage::append_diagnostic(
+            "session_start",
+            &format!(
+                "rules={}, daemon={}",
+                rule_count,
+                if crate::runtime::ipc::daemon_is_running() {
+                    "up"
+                } else {
+                    "down"
+                }
+            ),
+        );
+    }
+
     // On re-init, skip heavy context — rules re-injection is enough
     if is_reinit {
         context_parts.push(format!(

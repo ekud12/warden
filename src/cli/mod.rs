@@ -34,6 +34,7 @@ pub const USER_COMMANDS: &[&str] = &[
     "daemon-restart",
     "rules",
     "session",
+    "redb",
 ];
 
 pub fn run(subcmd: &str, args: &[String]) {
@@ -448,6 +449,78 @@ pub fn run(subcmd: &str, args: &[String]) {
                 eprintln!("Daemon restarted.");
             } else {
                 eprintln!("Daemon stopped but failed to restart.");
+            }
+        }
+
+        "redb" => {
+            let subcmd2 = args.get(2).map(|s| s.as_str()).unwrap_or("stats");
+            // Open redb for current project
+            let project_dir = common::project_dir();
+            common::storage::open_db(&project_dir);
+            match subcmd2 {
+                "stats" => {
+                    let events = common::storage::read_last_events(10000);
+                    let diags = common::storage::read_last_diagnostics(10000);
+                    eprintln!("  Database: {}/warden.db", project_dir.display());
+                    eprintln!("  Events:      {}", events.len());
+                    eprintln!("  Diagnostics: {}", diags.len());
+                    // Show table keys for dream/resume/stats
+                    if let Some(state) =
+                        common::storage::read_json::<serde_json::Value>("session_state", "current")
+                    {
+                        let turn = state.get("turn").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let phase = state
+                            .get("adaptive")
+                            .and_then(|a| a.get("phase"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("?");
+                        eprintln!("  Session:     turn {}, phase {}", turn, phase);
+                    }
+                }
+                "diagnostics" | "diag" => {
+                    let limit: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(20);
+                    let diags = common::storage::read_last_diagnostics(limit);
+                    if diags.is_empty() {
+                        eprintln!("  No diagnostic entries.");
+                    } else {
+                        for d in &diags {
+                            let cat = d.get("cat").and_then(|v| v.as_str()).unwrap_or("?");
+                            let detail = d.get("detail").and_then(|v| v.as_str()).unwrap_or("?");
+                            let ts = d.get("ts").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let secs = ts / 1_000_000_000;
+                            eprintln!("  [{}] {}: {}", secs, cat, common::truncate(detail, 100));
+                        }
+                    }
+                }
+                "events" => {
+                    let limit: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(20);
+                    let events = common::storage::read_last_events(limit);
+                    for raw in &events {
+                        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(raw) {
+                            let t = v.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+                            let detail = v.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+                            eprintln!("  [{}] {}", t, common::truncate(detail, 100));
+                        }
+                    }
+                    if events.is_empty() {
+                        eprintln!("  No events.");
+                    }
+                }
+                "dump" => {
+                    let table = args.get(3).map(|s| s.as_str()).unwrap_or("session_state");
+                    let key = args.get(4).map(|s| s.as_str()).unwrap_or("current");
+                    if let Some(val) = common::storage::read_json::<serde_json::Value>(table, key) {
+                        if let Ok(pretty) = serde_json::to_string_pretty(&val) {
+                            println!("{}", pretty);
+                        }
+                    } else {
+                        eprintln!("  No data for table='{}' key='{}'", table, key);
+                    }
+                }
+                _ => eprintln!(
+                    "Usage: {} redb [stats|diagnostics|events|dump <table> <key>]",
+                    constants::NAME
+                ),
             }
         }
 

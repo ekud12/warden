@@ -419,10 +419,8 @@ fn post_update_verify() {
 
     // Sync: if the updated binary IS in ~/.warden/bin/, copy back to origin
     // so `warden` on PATH is also up to date
-    if exe != canonical && canonical.exists() {
-        if std::fs::copy(&canonical, &exe).is_ok() {
-            term::print_colored(term::DIM, "  Synced back to install location\n");
-        }
+    if exe != canonical && canonical.exists() && std::fs::copy(&canonical, &exe).is_ok() {
+        term::print_colored(term::DIM, "  Synced back to install location\n");
     }
 
     // Check version

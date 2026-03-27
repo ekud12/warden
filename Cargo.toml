@@ -1,6 +1,6 @@
 [package]
 name = "warden-ai"
-version = "2.2.1"
+version = "2.3.0"
 edition = "2024"
 description = "Runtime control layer for AI coding agents: policy enforcement, drift reduction, and context efficiency"
 license = "MIT"

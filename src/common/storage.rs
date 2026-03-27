@@ -24,6 +24,9 @@ const EFFECTIVENESS_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("
 const FILTERS_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("filters");
 const DREAM_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("dream");
 const RESUME_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("resume_packets");
+/// Flight recorder: structured diagnostic events (errors, timings, unexpected states).
+/// Key: timestamp nanos. Value: JSON blob. Bounded to last 500 entries.
+const DIAGNOSTICS_TABLE: TableDefinition<u64, &[u8]> = TableDefinition::new("diagnostics");
 
 /// Global DB path (set once on open, used for lazy re-open)
 static DB_PATH: LazyLock<Mutex<Option<PathBuf>>> = LazyLock::new(|| Mutex::new(None));
@@ -43,6 +46,7 @@ pub fn open_db(project_dir: &Path) -> Option<()> {
         let _ = write_txn.open_table(FILTERS_TABLE);
         let _ = write_txn.open_table(DREAM_TABLE);
         let _ = write_txn.open_table(RESUME_TABLE);
+        let _ = write_txn.open_table(DIAGNOSTICS_TABLE);
     }
     write_txn.commit().ok()?;
 
@@ -95,6 +99,77 @@ pub fn append_event(value: &[u8]) -> Option<()> {
     }
     write_txn.commit().ok()?;
     Some(())
+}
+
+/// Append a diagnostic entry to the flight recorder.
+/// Used for internal errors, unexpected states, handler timings, and mishaps.
+/// Bounded to 500 entries (old entries pruned on write).
+pub fn append_diagnostic(category: &str, detail: &str) -> Option<()> {
+    let db = get_db()?;
+    let write_txn = db.begin_write().ok()?;
+    {
+        let mut table = write_txn.open_table(DIAGNOSTICS_TABLE).ok()?;
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        let entry = serde_json::json!({
+            "ts": ts,
+            "cat": category,
+            "detail": detail,
+        });
+        if let Ok(bytes) = serde_json::to_vec(&entry) {
+            table.insert(ts, bytes.as_slice()).ok()?;
+        }
+
+        // Prune: keep only last 500 entries (count via iter)
+        let count = table.iter().ok().map(|i| i.count()).unwrap_or(0);
+        if count > 500 {
+            let to_remove: Vec<u64> = table
+                .iter()
+                .ok()
+                .map(|iter| {
+                    iter.filter_map(|e| e.ok().map(|(k, _)| k.value()))
+                        .take(count - 500)
+                        .collect()
+                })
+                .unwrap_or_default();
+            for key in to_remove {
+                let _ = table.remove(key);
+            }
+        }
+    }
+    write_txn.commit().ok()?;
+    Some(())
+}
+
+/// Read the last N diagnostic entries
+pub fn read_last_diagnostics(count: usize) -> Vec<serde_json::Value> {
+    let db = match get_db() {
+        Some(d) => d,
+        None => return Vec::new(),
+    };
+    let read_txn = match db.begin_read() {
+        Ok(t) => t,
+        Err(_) => return Vec::new(),
+    };
+    let table = match read_txn.open_table(DIAGNOSTICS_TABLE) {
+        Ok(t) => t,
+        Err(_) => return Vec::new(),
+    };
+    let mut results = Vec::with_capacity(count);
+    if let Ok(iter) = table.iter() {
+        let all: Vec<serde_json::Value> = iter
+            .filter_map(|entry| {
+                entry
+                    .ok()
+                    .and_then(|(_, v)| serde_json::from_slice(v.value()).ok())
+            })
+            .collect();
+        let start = all.len().saturating_sub(count);
+        results.extend_from_slice(&all[start..]);
+    }
+    results
 }
 
 /// Read the last N events (most recent)

@@ -22,6 +22,8 @@ fn fire_hook(subcmd: &str, input: &str, cwd: &str) -> (String, String, i32) {
         .arg(subcmd)
         .env("WARDEN_NO_DAEMON", "1")
         .env("WARDEN_TEST", "1")
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
         .current_dir(cwd)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -51,6 +53,8 @@ fn read_session_state(cwd: &str) -> Value {
         .args(["state"])
         .env("WARDEN_NO_DAEMON", "1")
         .env("WARDEN_TEST", "1")
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
         .current_dir(cwd)
         .output()
         .expect("failed to run warden state");

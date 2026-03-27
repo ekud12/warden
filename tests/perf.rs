@@ -17,6 +17,8 @@ fn fire_hook(subcmd: &str, input: &str, cwd: &str) -> std::time::Duration {
         .arg(subcmd)
         .env("WARDEN_NO_DAEMON", "1")
         .env("WARDEN_TEST", "1")
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
         .current_dir(cwd)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())

@@ -224,6 +224,14 @@ pub struct SessionState {
     /// Rule IDs allowed via `warden allow <id>` (cleared on session end)
     #[serde(default)]
     pub allowed_overrides: Vec<String>,
+
+    // ─── Timeout/Failure Prediction ──
+    /// Commands that failed (exit_code != 0) with their normalized prefix → count
+    #[serde(default)]
+    pub cmd_failure_counts: HashMap<String, u32>,
+    /// Commands that produced no output (likely timed out) → count
+    #[serde(default)]
+    pub cmd_timeout_counts: HashMap<String, u32>,
 }
 
 /// Bounds for session state collections

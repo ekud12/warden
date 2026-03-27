@@ -400,26 +400,60 @@ fn post_update_verify() {
     eprintln!();
     term::print_colored(term::DIM, "  Verifying installation...\n");
 
-    // Check version
-    let exe = std::env::current_exe().unwrap_or_default();
-    if let Ok(output) = std::process::Command::new(&exe).args(["version"]).output() {
-        let version = String::from_utf8_lossy(&output.stdout);
-        term::print_colored(term::DIM, &format!("  Version: {}", version.trim()));
-        eprintln!();
-    }
-
-    // Check binary exists
     let bin_dir = super::bin_dir();
     let bin_name = if cfg!(windows) {
         "warden.exe"
     } else {
         "warden"
     };
-    let binary = bin_dir.join(bin_name);
-    if binary.exists() {
+    let canonical = bin_dir.join(bin_name);
+    let exe = std::env::current_exe().unwrap_or_default();
+
+    // Sync: if the updated binary is NOT in ~/.warden/bin/, copy it there
+    if exe != canonical && exe.exists() {
+        let _ = std::fs::create_dir_all(&bin_dir);
+        if std::fs::copy(&exe, &canonical).is_ok() {
+            term::print_colored(term::DIM, "  Synced to ~/.warden/bin/\n");
+        }
+    }
+
+    // Sync: if the updated binary IS in ~/.warden/bin/, copy back to origin
+    // so `warden` on PATH is also up to date
+    if exe != canonical && canonical.exists() {
+        if std::fs::copy(&canonical, &exe).is_ok() {
+            term::print_colored(term::DIM, "  Synced back to install location\n");
+        }
+    }
+
+    // Check version
+    if let Ok(output) = std::process::Command::new(&canonical)
+        .args(["version"])
+        .output()
+    {
+        let version = String::from_utf8_lossy(&output.stdout);
+        term::print_colored(term::DIM, &format!("  Version: {}", version.trim()));
+        eprintln!();
+    }
+
+    if canonical.exists() {
         term::print_colored(term::SUCCESS, "  Binary: OK\n");
     } else {
         term::print_colored(term::WARN, "  Binary: not found in ~/.warden/bin/\n");
+    }
+
+    // Also sync relay binary
+    let relay_name = if cfg!(windows) {
+        "warden-relay.exe"
+    } else {
+        "warden-relay"
+    };
+    let relay_src = exe
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join(relay_name);
+    let relay_dest = bin_dir.join(relay_name);
+    if relay_src.exists() && relay_src != relay_dest {
+        let _ = std::fs::copy(&relay_src, &relay_dest);
     }
 }
 

@@ -77,6 +77,11 @@ pub fn install_binary() -> Result<(), String> {
         let _ = fs::set_permissions(&dest, fs::Permissions::from_mode(0o755));
     }
 
+    // Unify: replace the source binary (e.g., ~/.cargo/bin/warden) with a
+    // hardlink/copy pointing to ~/.warden/bin/warden. This ensures `warden`
+    // on PATH always resolves to the same binary that hooks use.
+    unify_binary_location(&source, &dest);
+
     // Also copy the relay binary if it exists next to the source
     let relay_name = if cfg!(windows) {
         "warden-relay.exe"
@@ -98,6 +103,60 @@ pub fn install_binary() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Unify binary locations: replace the original install location (cargo/npm/standalone)
+/// with a copy of the canonical binary from ~/.warden/bin/. This ensures that `warden`
+/// on PATH always matches what hooks use, regardless of install method.
+fn unify_binary_location(original: &std::path::Path, canonical: &std::path::Path) {
+    // Skip if source IS the canonical location
+    if original == canonical {
+        return;
+    }
+
+    // Skip if source doesn't exist or isn't in a known install directory
+    if !original.exists() {
+        return;
+    }
+
+    // Check if source is in a package manager bin dir (cargo, npm, standalone)
+    let source_str = original.to_string_lossy().replace('\\', "/").to_lowercase();
+    let is_managed = source_str.contains(".cargo/bin")
+        || source_str.contains("node_modules")
+        || source_str.contains("npm")
+        || source_str.contains("appdata");
+
+    if !is_managed {
+        return;
+    }
+
+    // Replace the original with a copy of the canonical binary.
+    // We use copy (not symlink) because:
+    //   - Windows symlinks require admin/developer mode
+    //   - Hardlinks don't work across volumes
+    //   - A copy is universally portable
+    match fs::copy(canonical, original) {
+        Ok(_) => {
+            crate::common::log(
+                "install",
+                &format!(
+                    "Unified: {} → copy of {}",
+                    original.display(),
+                    canonical.display()
+                ),
+            );
+        }
+        Err(e) => {
+            crate::common::log(
+                "install",
+                &format!(
+                    "Cannot unify {}: {} (binary may be locked)",
+                    original.display(),
+                    e
+                ),
+            );
+        }
+    }
 }
 
 /// Write default config.toml if it doesn't exist

@@ -276,13 +276,13 @@ pub fn run() {
         Err(e) => sp.finish_fail(&format!("Config: {}", e)),
     }
 
-    // Start daemon
-    let sp = term::Spinner::start("Starting daemon...");
+    // Start background server
+    let sp = term::Spinner::start("Starting server...");
     if !crate::runtime::ipc::daemon_is_running() {
-        crate::runtime::ipc::spawn_daemon();
-        sp.finish_ok("Daemon started");
+        crate::runtime::server::spawn();
+        sp.finish_ok("Server started");
     } else {
-        sp.finish_ok("Daemon already running");
+        sp.finish_ok("Server already running");
     }
 
     // ── Done ─────────────────────────────────────────────────────────────────

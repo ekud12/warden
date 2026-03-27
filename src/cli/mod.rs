@@ -26,12 +26,12 @@ pub const USER_COMMANDS: &[&str] = &[
     "tui",
     "export",
     "restrictions",
-    "daemon-status",
-    "daemon-stop",
+    "server-status",
+    "server-stop",
     "allow",
     "status",
-    "daemon-start",
-    "daemon-restart",
+    "server-start",
+    "server-restart",
     "rules",
     "session",
     "redb",
@@ -85,11 +85,11 @@ pub fn run(subcmd: &str, args: &[String]) {
                     }
 
                     if !runtime::ipc::daemon_is_running() {
-                        let sp = term::Spinner::start("Starting daemon...");
+                        let sp = term::Spinner::start("Starting server...");
                         runtime::ipc::spawn_daemon();
-                        sp.finish_ok("Daemon started");
+                        sp.finish_ok("Server started");
                     } else {
-                        term::status_ok("Daemon already running");
+                        term::status_ok("Server already running");
                     }
 
                     eprintln!();
@@ -137,11 +137,11 @@ pub fn run(subcmd: &str, args: &[String]) {
                     }
 
                     if !runtime::ipc::daemon_is_running() {
-                        let sp = term::Spinner::start("Starting daemon...");
+                        let sp = term::Spinner::start("Starting server...");
                         runtime::ipc::spawn_daemon();
-                        sp.finish_ok("Daemon started");
+                        sp.finish_ok("Server started");
                     } else {
-                        term::status_ok("Daemon already running");
+                        term::status_ok("Server already running");
                     }
 
                     eprintln!();
@@ -306,20 +306,20 @@ pub fn run(subcmd: &str, args: &[String]) {
                 .unwrap_or_else(runtime::ipc::get_binary_mtime);
             crate::runtime::daemon::run_server(mtime);
         }
-        "debug-daemon-stop" => {
+        "debug-server-stop" => {
             if let Some(resp) = runtime::ipc::try_daemon("shutdown", "") {
                 if resp.exit_code == 0 {
-                    eprintln!("Daemon stopped");
+                    eprintln!("Server stopped");
                 }
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
             }
         }
-        "debug-daemon-status" => {
-            if let Some(resp) = runtime::ipc::try_daemon("daemon-status", "") {
+        "debug-server-status" => {
+            if let Some(resp) = runtime::ipc::try_daemon("server-status", "") {
                 println!("{}", resp.stdout);
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
                 process::exit(1);
             }
         }
@@ -364,20 +364,20 @@ pub fn run(subcmd: &str, args: &[String]) {
                 _ => config::restrictions::run(&args[2..]),
             }
         }
-        "daemon-status" => {
-            if let Some(resp) = runtime::ipc::try_daemon("daemon-status", "") {
+        "server-status" => {
+            if let Some(resp) = runtime::ipc::try_daemon("server-status", "") {
                 println!("{}", resp.stdout);
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
             }
         }
-        "daemon-stop" => {
+        "server-stop" => {
             if let Some(resp) = runtime::ipc::try_daemon("shutdown", "") {
                 if resp.exit_code == 0 {
-                    eprintln!("Daemon stopped");
+                    eprintln!("Server stopped");
                 }
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
             }
         }
 
@@ -436,31 +436,31 @@ pub fn run(subcmd: &str, args: &[String]) {
             }
         }
 
-        "daemon-start" => {
+        "server-start" => {
             if runtime::ipc::daemon_is_running() {
-                eprintln!("Daemon already running.");
+                eprintln!("Server already running.");
             } else {
                 // v2.4: spawn warden.exe __server directly (no binary copy needed)
                 runtime::server::spawn();
                 std::thread::sleep(std::time::Duration::from_millis(300));
                 if runtime::ipc::daemon_is_running() {
-                    eprintln!("Daemon started.");
+                    eprintln!("Server started.");
                 } else {
-                    eprintln!("Failed to start daemon.");
+                    eprintln!("Failed to start server.");
                 }
             }
         }
 
-        "daemon-restart" => {
-            eprintln!("Stopping daemon...");
+        "server-restart" => {
+            eprintln!("Stopping server...");
             runtime::ipc::stop_daemon_graceful(2000);
             std::thread::sleep(std::time::Duration::from_millis(200));
             runtime::ipc::spawn_daemon();
             std::thread::sleep(std::time::Duration::from_millis(300));
             if runtime::ipc::daemon_is_running() {
-                eprintln!("Daemon restarted.");
+                eprintln!("Server restarted.");
             } else {
-                eprintln!("Daemon stopped but failed to restart.");
+                eprintln!("Server stopped but failed to restart.");
             }
         }
 
@@ -1062,10 +1062,10 @@ fn print_help() {
     term::println_colored(term::DIM, "Interactive terminal dashboard");
     term::print_colored(term::TEXT, "    export                ");
     term::println_colored(term::DIM, "Export session data");
-    term::print_colored(term::TEXT, "    daemon-status         ");
-    term::println_colored(term::DIM, "Check daemon health");
-    term::print_colored(term::TEXT, "    daemon-stop           ");
-    term::println_colored(term::DIM, "Stop background daemon");
+    term::print_colored(term::TEXT, "    server-status         ");
+    term::println_colored(term::DIM, "Check background server health");
+    term::print_colored(term::TEXT, "    server-stop           ");
+    term::println_colored(term::DIM, "Stop background server");
     eprintln!();
     term::print_bold(term::TEXT, "  GETTING STARTED\n");
     term::print_colored(

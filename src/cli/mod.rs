@@ -324,6 +324,7 @@ pub fn run(subcmd: &str, args: &[String]) {
         "explain-session" => engines::harbor::explain::explain_session(),
         "stats" => print!("{}", engines::dream::lore::format_stats()),
         "scorecard" => scorecard::run(),
+        "benchmark" => crate::benchmark::run(&args[2..]),
         "replay" => engines::harbor::replay::run(&args[2..]),
         "tui" => {
             if let Err(e) = engines::harbor::tui::run() {

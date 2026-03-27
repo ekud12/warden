@@ -25,6 +25,7 @@ mod handlers;
 mod install;
 mod runtime;
 mod rules;
+mod benchmark;
 mod scorecard;
 
 fn main() {

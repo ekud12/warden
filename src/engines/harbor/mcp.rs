@@ -314,7 +314,8 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
 
     // Check if already edited this session
     if state.files_edited.contains(&path.to_string()) {
-        info.push(format!("Already edited this session: {}", path));
+        let edit_turn = state.last_edit_turn;
+        info.push(format!("Edited this session (last edit: turn {})", edit_turn));
     }
 
     // Check if already read
@@ -325,12 +326,57 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
         ));
     }
 
-    // Check sensitive paths
+    // Working set membership
+    let dir = std::path::Path::new(path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if state.initial_working_set.contains(&dir) {
+        info.push("In initial working set (core focus area)".to_string());
+    } else if state.rolling_working_set.contains(&dir) {
+        info.push("In rolling working set (recently active)".to_string());
+    }
+
+    // Syntax validation coverage
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    match ext {
+        "json" => info.push("Syntax: JSON — full parse validation on edit".to_string()),
+        "toml" => info.push("Syntax: TOML — full parse validation on edit".to_string()),
+        "yaml" | "yml" => {
+            info.push("Syntax: YAML — lightweight structural checks on edit".to_string())
+        }
+        _ => {}
+    }
+
+    // Likely generated file heuristic
     let short = path
         .rsplit('/')
         .next()
         .or_else(|| path.rsplit('\\').next())
         .unwrap_or(path);
+    let generated = [
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "Cargo.lock",
+        "Gemfile.lock",
+        "poetry.lock",
+        "composer.lock",
+    ];
+    let generated_ext = [".min.js", ".min.css", ".map", ".d.ts"];
+    if generated.contains(&short)
+        || generated_ext.iter().any(|e| short.ends_with(e))
+    {
+        info.push(format!(
+            "GENERATED: {} is likely a generated/lock file. Edits may be overwritten.",
+            short
+        ));
+    }
+
+    // Check sensitive paths
     let sensitive = [
         ".env",
         "credentials",
@@ -345,6 +391,26 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
             "SENSITIVE: {} matches a sensitive file pattern. Edit with caution.",
             short
         ));
+    }
+
+    // Recent errors mentioning this file
+    let project_dir = common::project_dir();
+    let session_path = project_dir.join("session-notes.jsonl");
+    if let Ok(content) = std::fs::read_to_string(&session_path) {
+        let error_count = content
+            .lines()
+            .rev()
+            .take(100) // last 100 events
+            .filter(|line| {
+                line.contains("\"error\"") && line.contains(short)
+            })
+            .count();
+        if error_count > 0 {
+            info.push(format!(
+                "Recent errors: {} error(s) in session notes mention this file",
+                error_count
+            ));
+        }
     }
 
     // Check if file exists

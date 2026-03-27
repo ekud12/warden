@@ -26,12 +26,12 @@ pub const USER_COMMANDS: &[&str] = &[
     "tui",
     "export",
     "restrictions",
-    "daemon-status",
-    "daemon-stop",
+    "server-status",
+    "server-stop",
     "allow",
     "status",
-    "daemon-start",
-    "daemon-restart",
+    "server-start",
+    "server-restart",
     "rules",
     "session",
     "redb",
@@ -85,11 +85,11 @@ pub fn run(subcmd: &str, args: &[String]) {
                     }
 
                     if !runtime::ipc::daemon_is_running() {
-                        let sp = term::Spinner::start("Starting daemon...");
+                        let sp = term::Spinner::start("Starting server...");
                         runtime::ipc::spawn_daemon();
-                        sp.finish_ok("Daemon started");
+                        sp.finish_ok("Server started");
                     } else {
-                        term::status_ok("Daemon already running");
+                        term::status_ok("Server already running");
                     }
 
                     eprintln!();
@@ -137,11 +137,11 @@ pub fn run(subcmd: &str, args: &[String]) {
                     }
 
                     if !runtime::ipc::daemon_is_running() {
-                        let sp = term::Spinner::start("Starting daemon...");
+                        let sp = term::Spinner::start("Starting server...");
                         runtime::ipc::spawn_daemon();
-                        sp.finish_ok("Daemon started");
+                        sp.finish_ok("Server started");
                     } else {
-                        term::status_ok("Daemon already running");
+                        term::status_ok("Server already running");
                     }
 
                     eprintln!();
@@ -164,7 +164,12 @@ pub fn run(subcmd: &str, args: &[String]) {
         }
 
         "doctor" => {
-            install::update::run_doctor();
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if sub == "intelligence" {
+                run_doctor_intelligence();
+            } else {
+                install::update::run_doctor();
+            }
         }
 
         // ── Config commands ──
@@ -306,20 +311,20 @@ pub fn run(subcmd: &str, args: &[String]) {
                 .unwrap_or_else(runtime::ipc::get_binary_mtime);
             crate::runtime::daemon::run_server(mtime);
         }
-        "debug-daemon-stop" => {
+        "debug-server-stop" => {
             if let Some(resp) = runtime::ipc::try_daemon("shutdown", "") {
                 if resp.exit_code == 0 {
-                    eprintln!("Daemon stopped");
+                    eprintln!("Server stopped");
                 }
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
             }
         }
-        "debug-daemon-status" => {
-            if let Some(resp) = runtime::ipc::try_daemon("daemon-status", "") {
+        "debug-server-status" => {
+            if let Some(resp) = runtime::ipc::try_daemon("server-status", "") {
                 println!("{}", resp.stdout);
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
                 process::exit(1);
             }
         }
@@ -364,20 +369,20 @@ pub fn run(subcmd: &str, args: &[String]) {
                 _ => config::restrictions::run(&args[2..]),
             }
         }
-        "daemon-status" => {
-            if let Some(resp) = runtime::ipc::try_daemon("daemon-status", "") {
+        "server-status" => {
+            if let Some(resp) = runtime::ipc::try_daemon("server-status", "") {
                 println!("{}", resp.stdout);
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
             }
         }
-        "daemon-stop" => {
+        "server-stop" => {
             if let Some(resp) = runtime::ipc::try_daemon("shutdown", "") {
                 if resp.exit_code == 0 {
-                    eprintln!("Daemon stopped");
+                    eprintln!("Server stopped");
                 }
             } else {
-                eprintln!("Daemon not running");
+                eprintln!("Server not running");
             }
         }
 
@@ -436,31 +441,31 @@ pub fn run(subcmd: &str, args: &[String]) {
             }
         }
 
-        "daemon-start" => {
+        "server-start" => {
             if runtime::ipc::daemon_is_running() {
-                eprintln!("Daemon already running.");
+                eprintln!("Server already running.");
             } else {
                 // v2.4: spawn warden.exe __server directly (no binary copy needed)
                 runtime::server::spawn();
                 std::thread::sleep(std::time::Duration::from_millis(300));
                 if runtime::ipc::daemon_is_running() {
-                    eprintln!("Daemon started.");
+                    eprintln!("Server started.");
                 } else {
-                    eprintln!("Failed to start daemon.");
+                    eprintln!("Failed to start server.");
                 }
             }
         }
 
-        "daemon-restart" => {
-            eprintln!("Stopping daemon...");
+        "server-restart" => {
+            eprintln!("Stopping server...");
             runtime::ipc::stop_daemon_graceful(2000);
             std::thread::sleep(std::time::Duration::from_millis(200));
             runtime::ipc::spawn_daemon();
             std::thread::sleep(std::time::Duration::from_millis(300));
             if runtime::ipc::daemon_is_running() {
-                eprintln!("Daemon restarted.");
+                eprintln!("Server restarted.");
             } else {
-                eprintln!("Daemon stopped but failed to restart.");
+                eprintln!("Server stopped but failed to restart.");
             }
         }
 
@@ -1062,10 +1067,10 @@ fn print_help() {
     term::println_colored(term::DIM, "Interactive terminal dashboard");
     term::print_colored(term::TEXT, "    export                ");
     term::println_colored(term::DIM, "Export session data");
-    term::print_colored(term::TEXT, "    daemon-status         ");
-    term::println_colored(term::DIM, "Check daemon health");
-    term::print_colored(term::TEXT, "    daemon-stop           ");
-    term::println_colored(term::DIM, "Stop background daemon");
+    term::print_colored(term::TEXT, "    server-status         ");
+    term::println_colored(term::DIM, "Check background server health");
+    term::print_colored(term::TEXT, "    server-stop           ");
+    term::println_colored(term::DIM, "Stop background server");
     eprintln!();
     term::print_bold(term::TEXT, "  GETTING STARTED\n");
     term::print_colored(
@@ -1078,5 +1083,132 @@ fn print_help() {
     );
     eprintln!();
     term::print_colored(term::DIM, "  https://github.com/ekud12/warden\n");
+    eprintln!();
+}
+
+fn run_doctor_intelligence() {
+    use install::term;
+    let tel = &config::CONFIG.telemetry;
+    let state = common::read_session_state();
+    let project_dir = common::project_dir();
+    let session_path = project_dir.join("session-notes.jsonl");
+
+    // Count events by type from session notes
+    let mut event_counts: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
+    if let Ok(content) = std::fs::read_to_string(&session_path) {
+        for line in content.lines() {
+            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line)
+                && let Some(t) = entry.get("type").and_then(|v| v.as_str())
+            {
+                *event_counts.entry(t.to_string()).or_default() += 1;
+            }
+        }
+    }
+
+    term::print_bold(term::TEXT, "\nIntelligence diagnostics\n\n");
+
+    // Table header
+    let header = format!(
+        "  {:<24} {:<10} {:<24} {}",
+        "Feature", "Status", "Recent Activity", "Observable via"
+    );
+    eprintln!("{header}");
+    eprintln!("  {}", "─".repeat(78));
+
+    // Each feature row
+    let features: Vec<(&str, bool, &str, &str)> = vec![
+        (
+            "phase_detection",
+            true, // always active (compass)
+            "adaptation",
+            "status, tui, MCP",
+        ),
+        (
+            "drift_detection",
+            tel.drift_velocity,
+            "drift",
+            "session notes",
+        ),
+        (
+            "loop_detection",
+            true, // always active (loopbreaker)
+            "loop",
+            "session notes",
+        ),
+        (
+            "compaction_forecast",
+            tel.token_forecast,
+            "forecast",
+            "session notes",
+        ),
+        (
+            "quality_score",
+            tel.quality_predictor,
+            "quality",
+            "MCP session_status",
+        ),
+        (
+            "anomaly_detection",
+            tel.anomaly_detection,
+            "anomaly",
+            "MCP session_status",
+        ),
+        (
+            "goal_extraction",
+            true, // always active
+            "goal",
+            "session notes",
+        ),
+        (
+            "markov_transitions",
+            true, // always active
+            "markov",
+            "session notes",
+        ),
+        (
+            "error_hints",
+            tel.command_recovery,
+            "error_hint",
+            "session notes",
+        ),
+        (
+            "output_compression",
+            tel.smart_truncation,
+            "truncation",
+            "session notes",
+        ),
+    ];
+
+    for (name, enabled, event_key, observable) in &features {
+        let status = if *enabled { "active" } else { "off" };
+        let count = event_counts.get(*event_key).copied().unwrap_or(0);
+        let activity = if count > 0 {
+            format!("{} events", count)
+        } else {
+            "—".to_string()
+        };
+
+        let status_color = if *enabled { term::SUCCESS } else { term::DIM };
+        eprint!("  {:<24} ", name);
+        term::print_colored(status_color, &format!("{:<10} ", status));
+        eprintln!("{:<24} {}", activity, observable);
+    }
+
+    // Session context
+    eprintln!();
+    let phase = state.adaptive.phase;
+    eprintln!(
+        "  Session: turn {}, phase {}, {} files edited, {} errors",
+        state.turn,
+        phase,
+        state.files_edited.len(),
+        state.errors_unresolved
+    );
+
+    if !state.session_goal.is_empty() {
+        eprintln!("  Goal: {}", state.session_goal);
+    }
+
     eprintln!();
 }

@@ -10,13 +10,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ekud12/warden/releases"><img src="https://img.shields.io/badge/v2.0.0-blue?style=flat-square" alt="Version" /></a>
+  <a href="https://github.com/ekud12/warden/releases"><img src="https://img.shields.io/badge/v2.4.0-blue?style=flat-square" alt="Version" /></a>
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/rust%202024-orange?style=flat-square&logo=rust" alt="Rust" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square" alt="License" /></a>
   <img src="https://img.shields.io/badge/+300_rules-brightgreen?style=flat-square" alt="Rules" />
   <img src="https://img.shields.io/badge/224+_tests-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/3.7MB_binary-lightgrey?style=flat-square" alt="Binary" />
-  <img src="https://img.shields.io/badge/<2ms_latency-lightgrey?style=flat-square" alt="Latency" />
+  <img src="https://img.shields.io/badge/~10ms_latency-lightgrey?style=flat-square" alt="Latency" />
   <img src="https://img.shields.io/badge/win%20%7C%20mac%20%7C%20linux-lightgrey?style=flat-square" alt="Platform" />
 </p>
 
@@ -28,7 +28,7 @@
   <img src="https://img.shields.io/badge/redb-ACID_storage-333?style=flat-square" alt="Storage" />
 </p>
 
-> Warden is the runtime control layer for AI coding agents. It intercepts tool use, enforces policy, reduces drift, compresses noisy output, and keeps long sessions focused on the actual task. Unlike prompt instructions that can be ignored or lost in context, Warden operates at runtime — every tool call passes through deterministic policy enforcement in under 2ms. Full documentation at [bitmill.dev](https://bitmill.dev).
+> Warden is the runtime control layer for AI coding agents. It intercepts tool use, enforces policy, reduces drift, compresses noisy output, and keeps long sessions focused on the actual task. Unlike prompt instructions that can be ignored or lost in context, Warden operates at runtime — every tool call passes through deterministic policy enforcement via IPC. Full documentation at [bitmill.dev](https://bitmill.dev).
 
 ---
 
@@ -118,15 +118,15 @@ Every approach to controlling AI coding agents has a structural weakness:
 |-----------|-----------|-------------|-------------|-----|-----------|
 | Rule count | ~5-10 | ~10-20 | ~50 | 0 | **+300** |
 | Enforcement | Advisory | Per-command | Visual | None | **Deterministic** |
-| Hook latency | 0ms | ~50ms | ~100ms | ~10ms | **~2ms** |
+| Hook latency | 0ms | ~50ms | ~100ms | ~10ms | **~10ms** |
 | Session phases | No | No | No | No | **5 phases, 8 params** |
-| Cross-session learning | No | No | No | No | **Project DNA** |
-| Predictive intelligence | No | No | No | No | **6 algorithms** |
+| Cross-session learning | No | No | No | No | **Per-project stats** |
+| Predictive intelligence | No | No | No | No | **5 algorithms** |
 | Output compression | No | No | No | 60-90% | **60-99%** |
 | Prompt injection detection | No | No | No | No | **38 patterns** |
 | MCP bidirectional | No | No | No | No | **6 tools** |
 | Multi-assistant | 1 | 1 | Claude only | Any | **Claude + Gemini** |
-| Config levels | 1 | 1 | 1 | 1 | **4 tiers** |
+| Config levels | 1 | 1 | 1 | 1 | **3 tiers** |
 | Uninstall | Manual | Manual | Extension | cargo | **`warden uninstall`** |
 | Windows support | Yes | Partial | Yes | Yes | **Yes** |
 | macOS support | Yes | Yes | Yes | Yes | **Yes** |
@@ -145,7 +145,7 @@ All of these activate the moment you run `warden init`. No TOML to edit, no flag
 **Tool governance:**
 - Redirects `grep`→`rg`, `find`→`fd`, `curl`→`xh`, `cat`→`bat`, `du`→`dust`, `tar`/`zip`→`ouch`, `sort|uniq`→`huniq` — only when target is installed (12 substitutions)
 - Auto-approves 67 safe command patterns: `rg`, `fd`, `bat`, `cargo test`, `git status`, `npm run build`, `just`, Go/Maven/Gradle/Deno/Ruby/PHP/Swift toolchains — no permission prompts
-- Validates JSON, TOML, and YAML syntax after every file edit — catches broken configs before the AI moves on
+- Validates JSON and TOML syntax after every file edit (YAML gets lightweight structural checks) — catches broken configs before the AI moves on
 - Warns on protected branches (`main`, `master`), tracks uncommitted changes, suggests co-changes from git history
 
 **Output compression** (data-driven, per-command):
@@ -174,7 +174,7 @@ All of these activate the moment you run `warden init`. No TOML to edit, no flag
 - `warden update` — checks for new versions and self-updates
 - `warden describe` — shows active user overrides (`--all` for full dump)
 - Already-installed detection with update offer during init
-- Progressive onboarding: safety-only for first 3 sessions, full features unlock gradually
+- Turn-based parameter tuning: late sessions (turn 50+) get progressively tighter read governance
 - Every denial includes the exact command to disable it: `warden restrictions disable <rule-id>`
 - Generates session changelog at end — files edited, errors, milestones, phase transitions
 - Drop scripts in `~/.warden/providers/` for custom context injection at session start
@@ -238,7 +238,7 @@ warden init                        # Interactive TUI wizard with arrow-key navig
 warden install claude-code         # Or: warden install gemini-cli
 ```
 
-Releases are published to 5 platforms: GitHub Releases, crates.io, npm, Homebrew, and Scoop.
+Releases are published to GitHub Releases, crates.io, and npm. Homebrew and Scoop packages are planned.
 
 ---
 
@@ -281,7 +281,7 @@ Warden operates on three levels: **protection** (block harmful actions), **gover
 
 **Guards git branches.** Warns on protected branches. Tracks uncommitted changes. Suggests checkpoint commits after 5+ edits. Analyzes git log to suggest co-changes — files that historically change together.
 
-**Validates config syntax.** Parses JSON, TOML, and YAML after every edit. Reports syntax errors before the AI moves on.
+**Validates config syntax.** Parses JSON and TOML after every edit; lightweight structural checks for YAML. Reports syntax errors before the AI moves on.
 
 **Enforces zero-trace.** When enabled, blocks AI attribution text in echo/printf/tee and file writes.
 
@@ -342,7 +342,7 @@ Warden v2.0 organizes its 95 modules into 4 named engines. Every component has a
 │  ⚓ Anchor Engine ── Stay Grounded ┤  <100ms                │
 │     Compass · Focus · Ledger · Debt · Trust                 │
 │                                    │                        │
-│  🌙 Dream Engine ── Learn Quietly ─┤  async (daemon idle)   │
+│  🌙 Dream Engine ── Learn Quietly ─┤  async (server idle)   │
 │     Imprint · Trace · Lore · Pruner · Replay                │
 │                                    │                        │
 │  🔗 Harbor Engine ─ Connect ───────┘  adapters + MCP + CLI  │
@@ -354,30 +354,34 @@ Warden v2.0 organizes its 95 modules into 4 named engines. Every component has a
 |--------|---------|-----|
 | **Reflex** | Safety, blocking, substitution | <50ms per check |
 | **Anchor** | Session state, drift detection, verification | <100ms per hook |
-| **Dream** | Pattern learning, conventions, repair knowledge | Async (idle time) |
+| **Dream** | Resume packets, working set ranking (2 active + 8 planned learning tasks) | Async (idle time) |
 | **Harbor** | Assistant adapters, MCP tools, CLI commands | N/A |
 
 Engines communicate via typed **Signals** (`{ category, utility, message }`). Every Dream task has a **Budget** (`{ max_events, max_ms, max_artifacts }`). See [full docs](https://bitmill.dev/docs/architecture/engine-overview).
 
 ## 7. The Harness
 
-Every Bash command flows through a 10-stage middleware pipeline. Each stage targets a distinct class of problem. Stages short-circuit on first deny — a safe command like `cargo test` passes through all stages in <0.5ms.
+Every Bash command flows through a staged evaluation pipeline. Early stages can short-circuit — a deny at the safety check skips the rest.
 
 ```
 PreToolUse:Bash Pipeline
-  1. SafetyCheck        — rm -rf, sudo, chmod 777 (47 patterns)
-  2. HallucinationCheck — reverse shells, credential theft (48 patterns)
-  3. DestructiveCheck   — knip --fix, sg rewrite (11 patterns)
-  4. ZeroTraceCheck     — AI attribution in echo/printf/tee
-  5. SubstitutionCheck  — grep→rg, find→fd (12 patterns, availability-gated)
-  6. DedupCheck         — identical command suppression
-  7. BuildCheck         — build command detection for state tracking
-  8. JustTransform      — just-first recipe transforms
-  9. AdvisoryCheck      — non-blocking hints (18 patterns)
- 10. TruncationSetup    — smart output compression (data-driven rules)
+  Health gate       — server health + CI detection
+  Just transform    — cd+just recipe substitution (early exit if just-passthrough)
+  Gatekeeper        — unified signal evaluation:
+    Safety          — rm -rf, sudo, chmod 777 (50 patterns)
+    Hallucination   — reverse shells, credential theft (48 patterns)
+    Destructive     — knip --fix, sg rewrite (11 patterns)
+    ZeroTrace       — AI attribution in echo/printf/tee
+  Substitution      — grep→rg, find→fd (11 patterns, availability-gated)
+  Dedup             — identical command suppression
+  Build detection   — build command tracking for state
+  Advisory          — non-blocking hints (18 patterns)
+  Truncation setup  — smart output compression (data-driven rules)
 ```
 
-"Panic-isolated" means each stage is wrapped in `catch_unwind`. If stage 3 panics due to a bug, stages 4-10 still run, and the command is allowed. A bad rule never blocks the AI.
+The Gatekeeper evaluates safety/hallucination/destructive/zero-trace as a single signal bus. All patterns are tested simultaneously via `RegexSet` DFA — one pass, not sequential.
+
+Hook dispatch is panic-isolated. If a handler panics, the command is allowed and the panic is logged. A bad rule never blocks the AI.
 
 Pattern matching uses `RegexSet` — all patterns in a category tested simultaneously in a single DFA pass instead of sequential iteration.
 
@@ -389,26 +393,25 @@ Pattern matching uses `RegexSet` — all patterns in a category tested simultane
 
 | Category | Count | Example pattern | Action |
 |----------|------:|----------------|--------|
-| Safety | 47 | `\brm\s+-rf?\s+[~*/.]` | Hard deny |
-| Hallucination | 50 | `/dev/tcp/` (reverse shell) | Hard deny |
+| Safety | 50 | `\brm\s+-rf?\s+[~*/.]` | Hard deny |
+| Hallucination | 48 | `/dev/tcp/` (reverse shell) | Hard deny |
 | Hallucination advisory | 20 | `\bnc\b.*\s-e\s` (netcat) | Advisory |
-| Substitution | 12 | `\bgrep\s` → use rg | Deny (if rg installed) |
+| Substitution | 11 | `\bgrep\s` → use rg | Deny (if rg installed) |
 | Advisory | 18 | `\bnpm\s+install\s+-g\b` | Advisory |
 | Auto-allow | 67 | `^\s*cargo\s+(build\|test)` | Auto-approve |
 | Sensitive paths | 27 | `[\\/]\.ssh[\\/]` | Deny writes |
 | Injection | 38 | `ignore\s+previous\s+instructions` | Flag to user |
 | Error hints | 28 | `command not found` | Recovery suggestion |
 
-Every deny message includes the rule's disable command. Rules merge from 4 tiers:
+Every deny message includes the rule's disable command. Rules merge from 3 tiers:
 
 ```
-Compiled defaults (Rust constants, always present)
-  → ~/.warden/rules/core.toml
-    → ~/.warden/rules/personal.toml (your overrides)
-      → .warden/rules.toml (project-level)
+Compiled defaults (Rust constants, always present — immutable safety floor)
+  → ~/.warden/rules.toml (global overrides)
+    → .warden/rules.toml (project-level)
 ```
 
-Set `replace = true` in any TOML section to discard all previous tiers for that category.
+Set `replace = true` in any TOML section to discard user-added patterns from previous tiers. Compiled defaults are never cleared — a malicious project `rules.toml` cannot disable built-in safety patterns.
 
 ---
 
@@ -433,8 +436,7 @@ Everything in this section runs automatically during your session. No commands t
 | Goal extraction | Session intent from first user message (22 action verbs) |
 | Shannon entropy | Exploration spirals (low entropy = stuck in read loops) |
 | Markov prediction | Read chains >70%, edit→error cycles >50% |
-| Topic coherence | Drift from initial working set (Jaccard similarity) |
-| Salience decay | Stale file references dropped from context |
+| Keyword drift | Drift from stated goal (Jaccard word overlap on goal vs recent actions) |
 | Context switch | Task pivots auto-detected, goals reset |
 
 ### Analytics
@@ -444,10 +446,9 @@ Everything in this section runs automatically during your session. No commands t
 | Quality predictor | Weighted heuristic ensemble (0-100) |
 | Anomaly detection | Welford's online mean/variance, z-score flagging |
 | Compaction forecast | Linear regression on token usage |
-| Error prevention | Bayesian priors on risky patterns |
-| Project DNA | Per-project statistical fingerprint |
-| Rule effectiveness | Quality delta per rule across sessions |
-| Drift detection | Denial density monitoring |
+| Error hints | Pattern-matched recovery suggestions (28 patterns) |
+| Per-project stats | Session statistics per project (tokens, errors, edits, denials) |
+| Drift detection | Keyword overlap between stated goal and recent actions |
 
 ---
 
@@ -464,7 +465,7 @@ warden mcp   # Runs as stdio MCP server (JSON-RPC 2.0)
 | `session_status` | Phase, quality score, anomalies, token usage, turn count |
 | `explain_denial` | Last denial: rule ID, pattern, message, disable command |
 | `suggest_action` | Context-aware next step based on session state |
-| `check_file` | Edit safety, known issues, co-change suggestions from git |
+| `check_file` | File edit history, sensitivity check, working set membership |
 | `session_history` | Last 20 events (edits, errors, milestones, denials) |
 | `reset_context` | Signal a task pivot — clears goal, resets working set |
 
@@ -492,7 +493,7 @@ warden mcp   # Runs as stdio MCP server (JSON-RPC 2.0)
 
 ## 11. Configuration
 
-### personal.toml (your global overrides)
+### Global rules.toml (~/.warden/rules.toml)
 
 ```toml
 git_readonly = true
@@ -506,7 +507,7 @@ patterns = [
 ]
 ```
 
-### Project rules.toml (per-project overrides)
+### Project rules.toml (.warden/rules.toml)
 
 ```toml
 # .warden/rules.toml
@@ -523,13 +524,12 @@ keep_patterns = ["Plan:", "to add", "Error:"]
 max_lines = 30
 ```
 
-### 4-level inheritance
+### 3-level inheritance
 
 ```
-Compiled defaults (+300 rules, always present)
-  → ~/.warden/rules/core.toml (extend or replace categories)
-    → ~/.warden/rules/personal.toml (your preferences)
-      → .warden/rules.toml (project team agreements)
+Compiled defaults (+300 rules, always present — immutable safety floor)
+  → ~/.warden/rules.toml (global overrides)
+    → .warden/rules.toml (project team agreements)
 ```
 
 ### CLI config
@@ -551,20 +551,28 @@ warden explain substitution.grep              # Show rule details + disable comm
 | `warden update` | Check for new versions and self-update |
 | `warden describe` | Show active user overrides (`--all` for full config dump) |
 | `warden uninstall` | Remove hooks, binary, PATH, config (with confirmation) |
+| `warden doctor` | Health check — binary, server, hooks, config, database |
 | `warden mcp` | Run as MCP server (stdio JSON-RPC 2.0, 6 tools) |
 | `warden explain <rule-id>` | Show rule pattern, category, action, and disable command |
 | `warden explain-session` | Timeline of every intervention this session with turn numbers |
 | `warden tui` | Live terminal dashboard showing phase, quality, token usage |
 | `warden stats` | Cross-project learning statistics and session history |
+| `warden status` | One-line session summary: turn, phase, trust, focus, errors |
 | `warden replay` | Narrative timeline of a past session |
-| `warden diff <a> <b>` | Side-by-side comparison of two session replays |
-| `warden export-sessions` | Export session analytics as JSON or CSV |
+| `warden export` | Export session analytics as JSON or CSV |
+| `warden scorecard` | Quality scorecard for the last session |
+| `warden allow <rule-id>` | One-time rule override for the current session |
+| `warden rules` | List all rules with schema information |
 | `warden restrictions list` | Table of all +300 rules with ID, category, severity |
 | `warden restrictions disable <id>` | Disable a specific rule (persisted in config.toml) |
 | `warden config list` | Print current config.toml contents |
 | `warden config set <key> <val>` | Set a dotted config value (e.g., `tools.justfile false`) |
-| `warden daemon-status` | Check if background daemon is running |
-| `warden daemon-stop` | Stop the background daemon |
+| `warden server-status` | Check if background server is running |
+| `warden server-stop` | Stop the background server |
+| `warden server-start` | Start the background server |
+| `warden server-restart` | Restart the background server |
+| `warden session list` | List all projects with active session state |
+| `warden session end` | Reset session state for current project |
 | `warden version` | Print version string |
 
 ---
@@ -573,17 +581,17 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 | Metric | Value |
 |--------|-------|
-| Hook latency (daemon) | ~2ms per hook invocation |
-| Hook latency (cold) | ~12ms (direct execution, no daemon) |
+| Hook latency (server) | ~10ms per hook invocation via IPC |
+| Hook latency (cold) | ~50ms (server auto-start + retry) |
 | Pattern matching | Single RegexSet DFA pass (+300 patterns simultaneous) |
-| Pipeline short-circuit | Deny at stage 1 skips stages 2-10 |
-| Binary size | 3.7MB (single file, zero runtime dependencies) |
-| Daemon memory | ~5MB resident |
-| Daemon startup | <50ms (binary copy + spawn) |
+| Pipeline short-circuit | Deny at first match skips remaining stages |
+| Binary size | ~3.7MB (single file, zero runtime dependencies) |
+| Server memory | ~15MB resident |
+| Server startup | <50ms (auto-spawned on first hook call) |
 | Regex compilation | Once at startup via LazyLock (reused across all hook calls) |
 | Output compression | 60-99% on supported commands (cargo test 262 pass: 99%) |
 | Storage | redb embedded B-tree database (ACID, single file, crash-safe) |
-| Crash safety | catch_unwind per handler — panics fail open, never block AI |
+| Crash safety | Panic-isolated hook dispatch — panics fail open, never block AI |
 | Concurrent sessions | DashMap lock-free cache + session-isolated state files |
 
 ---
@@ -595,10 +603,10 @@ warden explain substitution.grep              # Show rule details + disable comm
 | Document | Description |
 |----------|-------------|
 | [Quick Start](docs/examples/quick-start.md) | Install, configure, verify in 5 minutes |
-| [Configuration](docs/configuration.md) | All TOML keys, env vars, 4-level merge |
+| [Configuration](docs/configuration.md) | All TOML keys, env vars, 3-level merge |
 | [Rules Guide](docs/rules-guide.md) | All +300 rules by category, custom rules |
 | [Commands Reference](docs/commands.md) | Every command with flags and examples |
-| [Architecture](docs/architecture.md) | Pipeline, adapters, IPC daemon, analytics |
+| [Architecture](docs/architecture.md) | Pipeline, adapters, IPC server, analytics |
 | [Pipeline Stages](docs/pipeline-stages.md) | Each of the 10 stages explained |
 | [Assistant Adapters](docs/assistant-adapters.md) | Claude Code and Gemini CLI integration |
 | [Contributing](docs/contributing.md) | Add rules, stages, or adapters |
@@ -611,9 +619,9 @@ warden explain substitution.grep              # Show rule details + disable comm
 |-------|---------|
 | `regex` | Pattern compilation + RegexSet for single-pass matching |
 | `serde` + `serde_json` | Serialization for hook JSON, session state, config |
-| `toml` | 4-level TOML configuration parsing |
+| `toml` | 3-level TOML configuration parsing |
 | `redb` | Embedded ACID database (session state, events, analytics) |
-| `dashmap` | Lock-free concurrent HashMap for daemon session cache |
+| `dashmap` | Lock-free concurrent HashMap for server session cache |
 | `ratatui` + `crossterm` | Terminal UI dashboard + interactive init wizard |
 | `compact_str` | Memory-efficient inline strings |
 | `smallvec` | Stack-allocated bounded vectors |

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.5.0] - 2026-03-27
+
+### Trust & Sync Repair
+- Audited 31 public claims against codebase, created claims registry (docs/claims.yaml)
+- Fixed version badge, latency claims (~2ms → ~10ms), config tiers (4 → 3)
+- Removed unimplemented progressive onboarding claim
+- Reframed intelligence features as heuristics, removed unverified algorithms
+- Enriched check_file MCP: working set, syntax coverage, generated files, error history
+- Added `doctor intelligence` subcommand
+- Added docs/code parity CI script
+- Added intelligence fixture tests
+- Fixed CI test failures: strip CI env vars so session tracking works on GitHub Actions
+
 ## [2.4.0] - 2026-03-27
 
 ### Unified Binary Architecture

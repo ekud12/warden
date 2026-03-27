@@ -235,9 +235,10 @@ mod tests {
     #[test]
     fn welford_anomaly_detection() {
         let mut acc = WelfordAccumulator::default();
-        // Build baseline: ~100 tokens/turn
+        // Build baseline: ~100 tokens/turn with deterministic noise
+        let mut rng = DeterministicRng::new(42);
         for _ in 0..20 {
-            acc.update(100.0 + (rand_simple() * 20.0 - 10.0));
+            acc.update(100.0 + (rng.next_f64() * 20.0 - 10.0));
         }
         // Normal value: not anomalous
         assert!(!acc.is_anomaly(105.0, 2.0));
@@ -253,13 +254,20 @@ mod tests {
         assert_eq!(acc.z_score(200.0), 0.0);
     }
 
-    // Simple deterministic pseudo-random for testing (no rand crate needed)
-    fn rand_simple() -> f64 {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        use std::time::SystemTime;
-        let mut h = DefaultHasher::new();
-        SystemTime::now().hash(&mut h);
-        (h.finish() % 1000) as f64 / 1000.0
+    /// Deterministic PRNG for tests (xorshift32, fixed seed)
+    struct DeterministicRng(u32);
+    impl DeterministicRng {
+        fn new(seed: u32) -> Self {
+            Self(seed)
+        }
+        fn next_u32(&mut self) -> u32 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 17;
+            self.0 ^= self.0 << 5;
+            self.0
+        }
+        fn next_f64(&mut self) -> f64 {
+            (self.next_u32() % 1000) as f64 / 1000.0
+        }
     }
 }

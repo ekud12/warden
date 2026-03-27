@@ -24,7 +24,12 @@ pub fn compute_focus(state: &SessionState) -> FocusReport {
 
     let score = 100u32.saturating_sub(dir_penalty + switch_penalty + explore_penalty);
 
-    let advisory = if score < 40 && state.turn >= 8 {
+    let advisory = if score < 20 && state.turn >= 8 {
+        Some(format!(
+            "CRITICAL: Focus score {}/100. {} dirs, {} switches. Stop and narrow scope immediately.",
+            score, dir_count, switches
+        ))
+    } else if score < 40 && state.turn >= 8 {
         Some(format!(
             "Focus score {}/100. {} dirs touched, {} subsystem switches without milestone. Narrow scope.",
             score, dir_count, switches
@@ -38,7 +43,10 @@ pub fn compute_focus(state: &SessionState) -> FocusReport {
 
 pub fn compute_focus_signal(state: &SessionState) -> Option<Signal> {
     let report = compute_focus(state);
-    report.advisory.map(|msg| Signal::advisory(SignalCategory::Focus, 0.5, msg, "focus"))
+    let utility = if report.score < 20 { 0.9 } else { 0.5 };
+    report
+        .advisory
+        .map(|msg| Signal::advisory(SignalCategory::Focus, utility, msg, "focus"))
 }
 
 // ─── Working set tracking ────────────────────────────────────────────────────
@@ -104,7 +112,11 @@ impl WorkingSet {
 
     /// Return the top N file paths by score.
     pub fn top(&self, n: usize) -> Vec<&str> {
-        self.entries.iter().take(n).map(|e| e.path.as_str()).collect()
+        self.entries
+            .iter()
+            .take(n)
+            .map(|e| e.path.as_str())
+            .collect()
     }
 
     pub fn len(&self) -> usize {

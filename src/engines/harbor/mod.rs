@@ -11,11 +11,11 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 pub mod adapter;
-pub mod mcp;
+pub mod bridge;
 pub mod describe;
 pub mod explain;
 pub mod export_sessions;
+pub mod mcp;
+pub mod proc_mgmt;
 pub mod replay;
 pub mod tui;
-pub mod proc_mgmt;
-pub mod bridge;

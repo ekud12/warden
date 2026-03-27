@@ -16,6 +16,7 @@
 
 mod analytics;
 mod assistant;
+mod benchmark;
 mod cli;
 mod common;
 mod config;
@@ -23,9 +24,8 @@ mod constants;
 mod engines;
 mod handlers;
 mod install;
-mod runtime;
 mod rules;
-mod benchmark;
+mod runtime;
 mod scorecard;
 
 fn main() {

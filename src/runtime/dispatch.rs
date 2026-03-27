@@ -60,20 +60,11 @@ pub fn run_hook(subcmd: &str, args: &[String]) {
                 process::exit(resp.exit_code);
             }
         } else {
-            // Daemon not running — try auto-starting it
-            if let Some(resp) = runtime::ipc::spawn_and_wait(subcmd, &raw) {
-                if resp.exit_code == runtime::ipc::EXIT_RESTART {
-                    dispatch_hook(subcmd, &raw);
-                } else {
-                    if !resp.stdout.is_empty() {
-                        print!("{}", resp.stdout);
-                    }
-                    process::exit(resp.exit_code);
-                }
-            } else {
-                // Daemon didn't start — direct execution
-                dispatch_hook(subcmd, &raw);
-            }
+            // Daemon not available — direct execution (fast path).
+            // Spawn daemon in background for *next* call (fire-and-forget).
+            // This avoids the old 3x150ms retry loop that added 450ms latency.
+            std::thread::spawn(runtime::ipc::spawn_daemon);
+            dispatch_hook(subcmd, &raw);
         }
     } else {
         let raw = read_stdin();

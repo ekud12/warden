@@ -6,8 +6,8 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 use crate::common;
-use crate::engines::dream::{dna, imprint as anomaly, pruner as effectiveness};
 use crate::engines::dream::lore as learning;
+use crate::engines::dream::{dna, imprint as anomaly, pruner as effectiveness};
 use crate::engines::harbor::proc_mgmt;
 use crate::handlers::userprompt_context;
 

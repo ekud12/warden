@@ -10,7 +10,9 @@
 //   Gatekeeper  — central decision trait (all signals → single Verdict)
 // ──────────────────────────────────────────────────────────────────────────────
 
-pub mod sentinel;
-pub mod loopbreaker;
-pub mod tripwire;
+pub mod compiled;
 pub mod gatekeeper;
+pub mod loopbreaker;
+pub mod normalize;
+pub mod sentinel;
+pub mod tripwire;

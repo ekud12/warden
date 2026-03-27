@@ -219,6 +219,11 @@ pub struct SessionState {
     /// Top files ranked by recency/edits/errors (from Focus engine)
     #[serde(default)]
     pub working_set: crate::engines::anchor::focus::WorkingSet,
+
+    // ─── Appeal: One-time rule overrides ──
+    /// Rule IDs allowed via `warden allow <id>` (cleared on session end)
+    #[serde(default)]
+    pub allowed_overrides: Vec<String>,
 }
 
 /// Bounds for session state collections

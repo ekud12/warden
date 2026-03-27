@@ -16,8 +16,8 @@
 
 use crate::analytics;
 use crate::common;
-use crate::engines::dream::imprint as anomaly;
 use crate::constants;
+use crate::engines::dream::imprint as anomaly;
 use std::io::{self, BufRead, Write};
 
 /// MCP server entry point — reads JSON-RPC from stdin, writes to stdout

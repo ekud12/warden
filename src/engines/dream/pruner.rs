@@ -141,9 +141,9 @@ pub const STALE_TURN_THRESHOLD: u32 = 200;
 
 /// Prune all dream artifacts to their caps. Called on session-start.
 pub fn prune_on_session_start() {
+    use super::{ErrorCluster, ProjectConvention, RankedItem, RepairPattern, SuccessfulSequence};
     use crate::common;
     use std::collections::BTreeMap;
-    use super::{SuccessfulSequence, RepairPattern, ProjectConvention, ErrorCluster, RankedItem};
 
     // Sequences: cap at MAX_SEQUENCES, keep highest occurrence
     let mut sequences: BTreeMap<String, SuccessfulSequence> =
@@ -169,7 +169,11 @@ pub fn prune_on_session_start() {
     let mut conventions: Vec<ProjectConvention> =
         common::storage::read_json("dream", "conventions").unwrap_or_default();
     if conventions.len() > MAX_CONVENTIONS {
-        conventions.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        conventions.sort_by(|a, b| {
+            b.confidence
+                .partial_cmp(&a.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         conventions.truncate(MAX_CONVENTIONS);
         let _ = common::storage::write_json("dream", "conventions", &conventions);
     }
@@ -187,7 +191,11 @@ pub fn prune_on_session_start() {
     let mut ranked: Vec<RankedItem> =
         common::storage::read_json("dream", "ranked_items").unwrap_or_default();
     if ranked.len() > MAX_RANKED_ITEMS {
-        ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        ranked.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         ranked.truncate(MAX_RANKED_ITEMS);
         let _ = common::storage::write_json("dream", "ranked_items", &ranked);
     }
@@ -197,7 +205,7 @@ pub fn prune_on_session_start() {
 // Part 2: Dream tasks — E5 LearnEffectiveness, E10 ScoreArtifacts
 // ═══════════════════════════════════════════════════════════════════════════════
 
-use super::{InterventionScores, SuccessfulSequence, RepairPattern, ProjectConvention};
+use super::{InterventionScores, ProjectConvention, RepairPattern, SuccessfulSequence};
 
 /// E5: Learn which interventions preceded progress
 pub fn learn_effectiveness() {

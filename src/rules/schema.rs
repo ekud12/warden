@@ -49,6 +49,8 @@ pub struct RulesFile {
     pub focus: FocusConfig,
     #[serde(default)]
     pub dream: DreamConfig,
+    #[serde(default)]
+    pub bridge: crate::engines::harbor::bridge::BridgeConfig,
 }
 
 /// A section of pattern+message pairs with optional replace mode

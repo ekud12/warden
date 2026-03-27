@@ -72,27 +72,58 @@ pub fn get_binary_mtime() -> u64 {
         .unwrap_or(0)
 }
 
+/// Total round-trip timeout for IPC exchange (connect + write + read).
+/// Prevents hangs even if daemon accepts connection but never responds.
+const IPC_TIMEOUT: Duration = Duration::from_millis(2000);
+
 /// Try to send a request to the daemon and get a response.
 /// Returns None if daemon isn't running or communication fails.
 /// If daemon appears dead (stale pidfile), attempts auto-restart with storm protection.
+///
+/// The entire exchange is wrapped in a 2-second timeout via channel — if the daemon
+/// accepts our connection but hangs during processing, the caller is never blocked.
 pub fn try_daemon(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
+    let subcmd_owned = subcmd.to_string();
+    let payload_owned = payload.to_string();
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(try_daemon_inner(&subcmd_owned, &payload_owned));
+    });
+
+    match rx.recv_timeout(IPC_TIMEOUT) {
+        Ok(result) => result,
+        Err(_) => {
+            crate::common::log("ipc", "IPC round-trip timeout (2s) — falling through");
+            None
+        }
+    }
+}
+
+/// Inner implementation of try_daemon — runs on a spawned thread so the caller
+/// can enforce a total timeout via channel recv_timeout.
+fn try_daemon_inner(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
     let pipe_path = pipe_name();
 
-    let pipe_result = connect_pipe(&pipe_path, Duration::from_millis(25));
+    let pipe_result = connect_pipe(&pipe_path, Duration::from_millis(50));
     if pipe_result.is_none() {
         // Pipe connection failed — check for stale daemon
         if let Some(pid) = read_pid()
-            && !pid_is_alive(pid) {
-                crate::common::log("ipc", &format!("Stale pidfile (pid={}) — cleaning up", pid));
-                remove_pid_file();
-                // Check restart storm before auto-restarting
-                if !restart_storm_active() {
-                    record_restart();
-                    return spawn_and_wait(subcmd, payload);
-                } else {
-                    crate::common::log("ipc", "Restart storm detected (3+ in 5min) — skipping auto-restart");
-                }
+            && !pid_is_alive(pid)
+        {
+            crate::common::log("ipc", &format!("Stale pidfile (pid={}) — cleaning up", pid));
+            remove_pid_file();
+            // Check restart storm before auto-restarting
+            if !restart_storm_active() {
+                record_restart();
+                return spawn_and_wait(subcmd, payload);
+            } else {
+                crate::common::log(
+                    "ipc",
+                    "Restart storm detected (3+ in 5min) — skipping auto-restart",
+                );
             }
+        }
         return None;
     }
     let mut pipe = pipe_result.unwrap();
@@ -118,7 +149,12 @@ pub fn try_daemon(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
     pipe.write_all(&request_bytes).ok()?;
     pipe.flush().ok()?;
 
-    // Read length-prefixed response
+    // Read length-prefixed response with timeout protection.
+    // On Windows, set PIPE_WAIT mode with timeout on the handle so ReadFile
+    // doesn't block forever if the daemon is unresponsive.
+    #[cfg(windows)]
+    pipe.set_read_timeout(Duration::from_millis(2000));
+
     let mut len_buf = [0u8; 4];
     pipe.read_exact(&mut len_buf).ok()?;
     let resp_len = u32::from_le_bytes(len_buf) as usize;
@@ -246,31 +282,23 @@ pub fn spawn_daemon() {
     };
 
     let source_mtime = get_binary_mtime();
+
+    // Lock-free deployment: include mtime in daemon exe name so a new binary
+    // can be deployed without conflicting with the running daemon's open file handle.
     let daemon_exe_name = if cfg!(windows) {
-        format!("{}.exe", crate::constants::DAEMON_NAME)
+        format!("{}-{}.exe", crate::constants::DAEMON_NAME, source_mtime)
     } else {
-        crate::constants::DAEMON_NAME.to_string()
+        format!("{}-{}", crate::constants::DAEMON_NAME, source_mtime)
     };
     let daemon_exe = crate::common::hooks_dir().join(&daemon_exe_name);
 
-    // Copy current binary to daemon location (retry with backoff if locked)
-    let mut copied = false;
-    for delay_ms in [0, 100, 500] {
-        if delay_ms > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-        }
-        if std::fs::copy(&source, &daemon_exe).is_ok() {
-            copied = true;
-            break;
-        }
-    }
-    if !copied {
-        if daemon_exe.exists() {
-            crate::common::log("ipc", "Daemon binary locked, reusing existing copy");
-        } else {
-            crate::common::log("ipc", "Cannot copy daemon binary and no existing copy");
-            return;
-        }
+    // Clean up old daemon copies (different mtime) before spawning
+    cleanup_old_daemon_copies(source_mtime);
+
+    // Copy current binary to mtime-stamped daemon location
+    if !daemon_exe.exists() && std::fs::copy(&source, &daemon_exe).is_err() {
+        crate::common::log("ipc", "Cannot copy daemon binary");
+        return;
     }
 
     let mtime_arg = source_mtime.to_string();
@@ -307,13 +335,21 @@ pub fn spawn_daemon() {
 
     #[cfg(not(windows))]
     {
-        match std::process::Command::new(&daemon_exe)
-            .args(["daemon", &mtime_arg])
+        use std::os::unix::process::CommandExt;
+        // SAFETY: setsid() is async-signal-safe and creates a new session,
+        // ensuring the daemon is fully detached from the caller's process group.
+        let mut cmd = std::process::Command::new(&daemon_exe);
+        cmd.args(["daemon", &mtime_arg])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
+            .stderr(std::process::Stdio::null());
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+        match cmd.spawn() {
             Ok(child) => {
                 crate::common::log(
                     "ipc",
@@ -342,6 +378,28 @@ pub fn spawn_and_wait(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
         }
     }
     None
+}
+
+/// Remove old daemon binary copies that don't match the current mtime.
+/// Best-effort: locked files (running daemon) will fail silently and get cleaned next time.
+fn cleanup_old_daemon_copies(current_mtime: u64) {
+    let dir = crate::common::hooks_dir();
+    let prefix = crate::constants::DAEMON_NAME;
+    let current_suffix = current_mtime.to_string();
+
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+            // Match pattern: warden-daemon-{mtime}[.exe]
+            if name_str.starts_with(prefix)
+                && name_str != format!("{}.pid", prefix)
+                && !name_str.contains(&current_suffix)
+            {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
 }
 
 /// Path to the restart tracking file
@@ -430,7 +488,7 @@ pub fn stop_daemon_graceful(timeout_ms: u64) -> bool {
 #[cfg(windows)]
 fn kill_daemon(pid: u32) {
     use windows_sys::Win32::Foundation::CloseHandle;
-    use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_TERMINATE, TerminateProcess};
 
     // SAFETY: OpenProcess returns null on failure (checked); handle closed after use.
     unsafe {
@@ -510,6 +568,27 @@ fn connect_pipe(pipe_path: &str, timeout: Duration) -> Option<PipeStream> {
 #[cfg(windows)]
 struct PipeStream {
     handle: HANDLE,
+}
+
+#[cfg(windows)]
+impl PipeStream {
+    /// Set a read timeout on the pipe handle using SetNamedPipeHandleState.
+    /// Falls back silently if it fails (pipe will block as before).
+    fn set_read_timeout(&mut self, timeout: Duration) {
+        use windows_sys::Win32::System::Pipes::SetNamedPipeHandleState;
+        let mode: u32 = 0x00000000; // PIPE_READMODE_BYTE | PIPE_WAIT
+        let timeout_ms = timeout.as_millis() as u32;
+        // SAFETY: self.handle is a valid pipe handle from CreateFileW.
+        // SetNamedPipeHandleState modifies the pipe mode; null pointers skip unchanged params.
+        unsafe {
+            SetNamedPipeHandleState(
+                self.handle,
+                &mode,
+                std::ptr::null_mut(),
+                &timeout_ms as *const u32 as *mut u32,
+            );
+        }
+    }
 }
 
 #[cfg(windows)]

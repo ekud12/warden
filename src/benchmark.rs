@@ -61,27 +61,71 @@ pub fn run(args: &[String]) {
             if let Ok(content) = fs::read_to_string(&state_path)
                 && let Ok(state) = serde_json::from_str::<serde_json::Value>(&content)
             {
-                    let s = SessionSummary {
-                        project: project_name.clone(),
-                        turns: state.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                        quality: 50, // will compute below
-                        denials: state.get("savings_deny").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                        tokens_saved: state.get("estimated_tokens_saved").and_then(|v| v.as_u64()).unwrap_or(0),
-                        tokens_out: state.get("estimated_tokens_out").and_then(|v| v.as_u64()).unwrap_or(0),
-                        errors: state.get("errors_unresolved").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
-                        milestones: if state.get("last_milestone").and_then(|v| v.as_str()).unwrap_or("").is_empty() { 0 } else { 1 },
-                        edits: state.get("files_edited").and_then(|v| v.as_array()).map(|a| a.len() as u32).unwrap_or(0),
-                        files_read: state.get("files_read").and_then(|v| v.as_object()).map(|o| o.len() as u32).unwrap_or(0),
-                        phase: state.get("adaptive").and_then(|a| a.get("phase")).and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
-                        savings_pct: {
-                            let out = state.get("estimated_tokens_out").and_then(|v| v.as_u64()).unwrap_or(1);
-                            let saved = state.get("estimated_tokens_saved").and_then(|v| v.as_u64()).unwrap_or(0);
-                            if out > 0 { saved as f64 / out as f64 * 100.0 } else { 0.0 }
-                        },
-                    };
-                    if s.turns > 0 {
-                        sessions.push(s);
-                    }
+                let s = SessionSummary {
+                    project: project_name.clone(),
+                    turns: state.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                    quality: 50, // will compute below
+                    denials: state
+                        .get("savings_deny")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32,
+                    tokens_saved: state
+                        .get("estimated_tokens_saved")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
+                    tokens_out: state
+                        .get("estimated_tokens_out")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
+                    errors: state
+                        .get("errors_unresolved")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0) as u32,
+                    milestones: if state
+                        .get("last_milestone")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .is_empty()
+                    {
+                        0
+                    } else {
+                        1
+                    },
+                    edits: state
+                        .get("files_edited")
+                        .and_then(|v| v.as_array())
+                        .map(|a| a.len() as u32)
+                        .unwrap_or(0),
+                    files_read: state
+                        .get("files_read")
+                        .and_then(|v| v.as_object())
+                        .map(|o| o.len() as u32)
+                        .unwrap_or(0),
+                    phase: state
+                        .get("adaptive")
+                        .and_then(|a| a.get("phase"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown")
+                        .to_string(),
+                    savings_pct: {
+                        let out = state
+                            .get("estimated_tokens_out")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(1);
+                        let saved = state
+                            .get("estimated_tokens_saved")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0);
+                        if out > 0 {
+                            saved as f64 / out as f64 * 100.0
+                        } else {
+                            0.0
+                        }
+                    },
+                };
+                if s.turns > 0 {
+                    sessions.push(s);
+                }
             }
         }
     }
@@ -108,8 +152,16 @@ pub fn run(args: &[String]) {
 
     let avg_turns = total_turns as f64 / total_sessions as f64;
     let avg_denials = total_denials as f64 / total_sessions as f64;
-    let denial_rate = if total_turns > 0 { total_denials as f64 / total_turns as f64 * 100.0 } else { 0.0 };
-    let savings_pct = if total_tokens_out > 0 { total_tokens_saved as f64 / total_tokens_out as f64 * 100.0 } else { 0.0 };
+    let denial_rate = if total_turns > 0 {
+        total_denials as f64 / total_turns as f64 * 100.0
+    } else {
+        0.0
+    };
+    let savings_pct = if total_tokens_out > 0 {
+        total_tokens_saved as f64 / total_tokens_out as f64 * 100.0
+    } else {
+        0.0
+    };
 
     // Phase distribution
     let mut phase_counts: std::collections::HashMap<&str, u32> = std::collections::HashMap::new();
@@ -119,14 +171,19 @@ pub fn run(args: &[String]) {
 
     // Project breakdown
     let mut project_turns: std::collections::HashMap<&str, u32> = std::collections::HashMap::new();
-    let mut project_denials: std::collections::HashMap<&str, u32> = std::collections::HashMap::new();
+    let mut project_denials: std::collections::HashMap<&str, u32> =
+        std::collections::HashMap::new();
     for s in &sessions {
         *project_turns.entry(s.project.as_str()).or_insert(0) += s.turns;
         *project_denials.entry(s.project.as_str()).or_insert(0) += s.denials;
     }
 
     // Efficiency: edits per turn
-    let edits_per_turn = if total_turns > 0 { total_edits as f64 / total_turns as f64 } else { 0.0 };
+    let edits_per_turn = if total_turns > 0 {
+        total_edits as f64 / total_turns as f64
+    } else {
+        0.0
+    };
 
     // ─── Output ──────────────────────────────────────────────────────────────
 
@@ -171,8 +228,15 @@ pub fn run(args: &[String]) {
     projects.sort_by(|a, b| b.1.cmp(a.1));
     for (proj, turns) in &projects {
         let denials = project_denials.get(*proj).unwrap_or(&0);
-        let rate = if **turns > 0 { *denials as f64 / **turns as f64 * 100.0 } else { 0.0 };
-        eprintln!("  {:<25} {} turns, {} denials ({:.1}%)", proj, turns, denials, rate);
+        let rate = if **turns > 0 {
+            *denials as f64 / **turns as f64 * 100.0
+        } else {
+            0.0
+        };
+        eprintln!(
+            "  {:<25} {} turns, {} denials ({:.1}%)",
+            proj, turns, denials, rate
+        );
     }
     eprintln!();
 
@@ -180,20 +244,33 @@ pub fn run(args: &[String]) {
 
     eprintln!("  \x1b[1mFindings\x1b[0m");
     if denial_rate > 5.0 {
-        eprintln!("  \x1b[33m[!]\x1b[0m High denial rate ({:.1}%). Substitution transforms may not be deployed yet.", denial_rate);
+        eprintln!(
+            "  \x1b[33m[!]\x1b[0m High denial rate ({:.1}%). Substitution transforms may not be deployed yet.",
+            denial_rate
+        );
     }
     if total_milestones == 0 {
-        eprintln!("  \x1b[33m[!]\x1b[0m Zero milestones detected. Milestone regex patterns may need fixing.");
+        eprintln!(
+            "  \x1b[33m[!]\x1b[0m Zero milestones detected. Milestone regex patterns may need fixing."
+        );
     }
     if savings_pct < 0.5 {
-        eprintln!("  \x1b[33m[!]\x1b[0m Token savings below 0.5%. Context compaction may not be active.");
+        eprintln!(
+            "  \x1b[33m[!]\x1b[0m Token savings below 0.5%. Context compaction may not be active."
+        );
     }
     let struggling = phase_counts.get("Struggling").copied().unwrap_or(0);
     if struggling > total_sessions as u32 / 3 {
-        eprintln!("  \x1b[33m[!]\x1b[0m {}% of sessions ended in Struggling phase.", struggling * 100 / total_sessions as u32);
+        eprintln!(
+            "  \x1b[33m[!]\x1b[0m {}% of sessions ended in Struggling phase.",
+            struggling * 100 / total_sessions as u32
+        );
     }
     if edits_per_turn < 0.3 {
-        eprintln!("  \x1b[33m[!]\x1b[0m Low edit rate ({:.2}/turn). Agent may be spending too much time reading.", edits_per_turn);
+        eprintln!(
+            "  \x1b[33m[!]\x1b[0m Low edit rate ({:.2}/turn). Agent may be spending too much time reading.",
+            edits_per_turn
+        );
     }
     eprintln!();
 }

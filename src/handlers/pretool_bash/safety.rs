@@ -7,8 +7,8 @@
 use regex::RegexSet;
 use std::sync::LazyLock;
 
-use super::PATTERNS;
 use crate::common;
+use crate::engines::reflex::compiled::PATTERNS;
 use crate::rules;
 
 // ── Variable Expansion / Indirect Execution Detection ──────────────────────
@@ -100,7 +100,14 @@ pub fn check_safety(cmd: &str) -> bool {
                 "safety",
                 &common::truncate(cmd, 60),
             );
-            common::add_session_note("deny", &format!("[{}] {}", &PATTERNS.safety_ids[idx], common::truncate(cmd, 60)));
+            common::add_session_note(
+                "deny",
+                &format!(
+                    "[{}] {}",
+                    &PATTERNS.safety_ids[idx],
+                    common::truncate(cmd, 60)
+                ),
+            );
             common::deny("PreToolUse", &PATTERNS.safety_messages[idx]);
             return true;
         }
@@ -229,7 +236,11 @@ pub enum SubstitutionResult {
     /// No substitution matched
     Pass,
     /// Rewrite command + teach the agent what happened
-    Transform { new_cmd: String, source: String, target: String },
+    Transform {
+        new_cmd: String,
+        source: String,
+        target: String,
+    },
     /// Block with message (incompatible output or dangerous)
     Deny,
 }
@@ -251,7 +262,11 @@ pub fn check_substitutions(cmd: &str) -> SubstitutionResult {
             let new_cmd = cmd.replacen(source, target, 1);
             common::log(
                 "pretool-bash",
-                &format!("TRANSFORM {} -> {}", common::truncate(cmd, 40), common::truncate(&new_cmd, 40)),
+                &format!(
+                    "TRANSFORM {} -> {}",
+                    common::truncate(cmd, 40),
+                    common::truncate(&new_cmd, 40)
+                ),
             );
             return SubstitutionResult::Transform {
                 new_cmd,
@@ -278,7 +293,10 @@ pub fn check_substitutions(cmd: &str) -> SubstitutionResult {
                 "substitution",
                 &common::truncate(cmd, 40),
             );
-            common::add_session_note("deny", &format!("[{}] {}", restriction_id, common::truncate(cmd, 60)));
+            common::add_session_note(
+                "deny",
+                &format!("[{}] {}", restriction_id, common::truncate(cmd, 60)),
+            );
             common::deny_with_id("PreToolUse", msg, &restriction_id);
             return SubstitutionResult::Deny;
         }

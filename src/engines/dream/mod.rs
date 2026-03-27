@@ -11,12 +11,12 @@
 //   Replay  — resume packet generation + working set ranking (E2, E3)
 // ──────────────────────────────────────────────────────────────────────────────
 
-pub mod imprint;
 pub mod dna;
-pub mod trace;
+pub mod imprint;
 pub mod lore;
 pub mod pruner;
 pub mod replay;
+pub mod trace;
 
 use crate::common;
 use crate::engines::signal::Budget;
@@ -58,16 +58,66 @@ pub enum DreamTask {
 impl DreamTask {
     pub fn budget(&self) -> Budget {
         match self {
-            Self::ConsolidateEvents => Budget { max_events: 500, max_artifacts: 50, max_output_chars: 10_000, max_ms: 200 },
-            Self::BuildResumePacket => Budget { max_events: 200, max_artifacts: 20, max_output_chars: 5_000, max_ms: 100 },
-            Self::ClusterErrors => Budget { max_events: 500, max_artifacts: 100, max_output_chars: 15_000, max_ms: 300 },
-            Self::UpdateWorkingSetRanking => Budget { max_events: 200, max_artifacts: 20, max_output_chars: 5_000, max_ms: 100 },
-            Self::LearnEffectiveness => Budget { max_events: 500, max_artifacts: 50, max_output_chars: 10_000, max_ms: 200 },
-            Self::BuildDeadEndMemory => Budget { max_events: 200, max_artifacts: 20, max_output_chars: 5_000, max_ms: 100 },
-            Self::LearnSequences => Budget { max_events: 1000, max_artifacts: 100, max_output_chars: 20_000, max_ms: 500 },
-            Self::LearnRepairPatterns => Budget { max_events: 1000, max_artifacts: 50, max_output_chars: 15_000, max_ms: 500 },
-            Self::LearnConventions => Budget { max_events: 500, max_artifacts: 50, max_output_chars: 10_000, max_ms: 300 },
-            Self::ScoreArtifacts => Budget { max_events: 200, max_artifacts: 200, max_output_chars: 10_000, max_ms: 200 },
+            Self::ConsolidateEvents => Budget {
+                max_events: 500,
+                max_artifacts: 50,
+                max_output_chars: 10_000,
+                max_ms: 200,
+            },
+            Self::BuildResumePacket => Budget {
+                max_events: 200,
+                max_artifacts: 20,
+                max_output_chars: 5_000,
+                max_ms: 100,
+            },
+            Self::ClusterErrors => Budget {
+                max_events: 500,
+                max_artifacts: 100,
+                max_output_chars: 15_000,
+                max_ms: 300,
+            },
+            Self::UpdateWorkingSetRanking => Budget {
+                max_events: 200,
+                max_artifacts: 20,
+                max_output_chars: 5_000,
+                max_ms: 100,
+            },
+            Self::LearnEffectiveness => Budget {
+                max_events: 500,
+                max_artifacts: 50,
+                max_output_chars: 10_000,
+                max_ms: 200,
+            },
+            Self::BuildDeadEndMemory => Budget {
+                max_events: 200,
+                max_artifacts: 20,
+                max_output_chars: 5_000,
+                max_ms: 100,
+            },
+            Self::LearnSequences => Budget {
+                max_events: 1000,
+                max_artifacts: 100,
+                max_output_chars: 20_000,
+                max_ms: 500,
+            },
+            Self::LearnRepairPatterns => Budget {
+                max_events: 1000,
+                max_artifacts: 50,
+                max_output_chars: 15_000,
+                max_ms: 500,
+            },
+            Self::LearnConventions => Budget {
+                max_events: 500,
+                max_artifacts: 50,
+                max_output_chars: 10_000,
+                max_ms: 300,
+            },
+            Self::ScoreArtifacts => Budget {
+                max_events: 200,
+                max_artifacts: 200,
+                max_output_chars: 10_000,
+                max_ms: 200,
+            },
         }
     }
 }
@@ -177,8 +227,8 @@ const TASK_ORDER: &[DreamTask] = &[
     DreamTask::LearnConventions,   // project conventions
     DreamTask::UpdateWorkingSetRanking,
     DreamTask::BuildDeadEndMemory,
-    DreamTask::ScoreArtifacts,     // prune weak artifacts
-    DreamTask::ConsolidateEvents,  // lowest priority — housekeeping
+    DreamTask::ScoreArtifacts,    // prune weak artifacts
+    DreamTask::ConsolidateEvents, // lowest priority — housekeeping
 ];
 
 /// Cycle counter for round-robin task selection
@@ -220,10 +270,13 @@ pub fn process_batch(batch: DreamBatch) {
 
     let elapsed = start.elapsed().as_millis() as u64;
     if elapsed > budget.max_ms {
-        common::log("dream", &format!(
-            "{:?} exceeded budget: {}ms > {}ms limit",
-            batch.kind, elapsed, budget.max_ms
-        ));
+        common::log(
+            "dream",
+            &format!(
+                "{:?} exceeded budget: {}ms > {}ms limit",
+                batch.kind, elapsed, budget.max_ms
+            ),
+        );
     }
 }
 

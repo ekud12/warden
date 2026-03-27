@@ -78,8 +78,8 @@ fn test_precompact_output_structure() {
     if !out.is_empty() {
         // If there is output, it should be session-related, not rules
         // The output format uses additionalContext which is JSON
-        let no_rule_keywords = !out.contains("NEVER") && !out.contains("ALWAYS")
-            && !out.contains("BLOCKED");
+        let no_rule_keywords =
+            !out.contains("NEVER") && !out.contains("ALWAYS") && !out.contains("BLOCKED");
         assert!(
             no_rule_keywords,
             "Precompact output should contain session data, not enforcement rules.\nGot: {}",

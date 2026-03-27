@@ -5,8 +5,8 @@
 // Source: dream.rs (E2 BuildResumePacket, E3 UpdateWorkingSetRanking)
 // ──────────────────────────────────────────────────────────────────────────────
 
+use super::{ProjectConvention, RankedItem, ResumePacket, SuccessfulSequence};
 use crate::common;
-use super::{ResumePacket, RankedItem, SuccessfulSequence, ProjectConvention};
 use std::collections::BTreeMap;
 
 /// E2: Build compact resume packet from current session state
@@ -16,7 +16,12 @@ pub fn build_resume_packet() {
     // Top 5 files from Focus WorkingSet (ranked by recency+edits+errors)
     // Falls back to simple recency sort if working set is empty
     let high_salience: Vec<String> = if !state.working_set.is_empty() {
-        state.working_set.top(5).into_iter().map(|s| s.to_string()).collect()
+        state
+            .working_set
+            .top(5)
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
     } else {
         let mut files: Vec<(&String, &common::FileReadEntry)> = state.files_read.iter().collect();
         files.sort_by(|a, b| b.1.turn.cmp(&a.1.turn));
@@ -26,7 +31,8 @@ pub fn build_resume_packet() {
     // V2: Get top playbook
     let sequences: BTreeMap<String, SuccessfulSequence> =
         common::storage::read_json("dream", "sequences").unwrap_or_default();
-    let top_playbook = sequences.values()
+    let top_playbook = sequences
+        .values()
         .max_by_key(|s| s.occurrences)
         .map(|s| s.actions.join(" → "))
         .unwrap_or_default();
@@ -34,7 +40,8 @@ pub fn build_resume_packet() {
     // V2: Get high-confidence conventions
     let conventions: Vec<ProjectConvention> =
         common::storage::read_json("dream", "conventions").unwrap_or_default();
-    let convention_hints: Vec<String> = conventions.iter()
+    let convention_hints: Vec<String> = conventions
+        .iter()
         .filter(|c| c.confidence > 0.6)
         .take(3)
         .map(|c| c.observation.clone())
@@ -55,7 +62,19 @@ pub fn build_resume_packet() {
         verification_debt: state.edits_since_verification,
     };
 
-    let _ = common::storage::write_json("resume_packets", "current", &packet);
+    // Cap: resume packet should stay under ~500 tokens (~2000 chars)
+    if let Ok(json) = serde_json::to_string(&packet) {
+        if json.len() > 2000 {
+            // Trim to fit: reduce dead ends and conventions
+            let mut trimmed = packet;
+            trimmed.dead_ends.truncate(1);
+            trimmed.convention_hints.truncate(1);
+            trimmed.high_salience_files.truncate(3);
+            let _ = common::storage::write_json("resume_packets", "current", &trimmed);
+        } else {
+            let _ = common::storage::write_json("resume_packets", "current", &packet);
+        }
+    }
 }
 
 /// E3: Update working set rankings by recency-frequency-outcome

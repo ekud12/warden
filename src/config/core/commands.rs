@@ -3,6 +3,8 @@
 /// Build commands (milestone detection)
 pub const BUILD_CMDS: &[&str] = &[
     "build",
+    "clippy",
+    "check",
     "just build",
     "just dotnet-build",
     "dotnet build",

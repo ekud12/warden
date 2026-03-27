@@ -69,6 +69,8 @@ pub struct MergedRules {
     pub compass: crate::rules::schema::CompassConfig,
     pub focus: crate::rules::schema::FocusConfig,
     pub dream: crate::rules::schema::DreamConfig,
+    // Bridge config (webhook, planned integrations)
+    pub bridge: crate::engines::harbor::bridge::BridgeConfig,
 }
 
 pub static RULES: LazyLock<MergedRules> = LazyLock::new(|| {
@@ -344,23 +346,56 @@ fn merge(global: RulesFile, project: RulesFile) -> MergedRules {
         },
         // Engine configs: project overrides global (field-level merge via Option)
         loopbreaker: schema::LoopbreakerConfig {
-            max_retries: project.loopbreaker.max_retries.or(global.loopbreaker.max_retries),
-            semantic_threshold: project.loopbreaker.semantic_threshold.or(global.loopbreaker.semantic_threshold),
-            read_spiral_min: project.loopbreaker.read_spiral_min.or(global.loopbreaker.read_spiral_min),
+            max_retries: project
+                .loopbreaker
+                .max_retries
+                .or(global.loopbreaker.max_retries),
+            semantic_threshold: project
+                .loopbreaker
+                .semantic_threshold
+                .or(global.loopbreaker.semantic_threshold),
+            read_spiral_min: project
+                .loopbreaker
+                .read_spiral_min
+                .or(global.loopbreaker.read_spiral_min),
         },
         compass: schema::CompassConfig {
-            drift_threshold: project.compass.drift_threshold.or(global.compass.drift_threshold),
-            drift_sustain_turns: project.compass.drift_sustain_turns.or(global.compass.drift_sustain_turns),
+            drift_threshold: project
+                .compass
+                .drift_threshold
+                .or(global.compass.drift_threshold),
+            drift_sustain_turns: project
+                .compass
+                .drift_sustain_turns
+                .or(global.compass.drift_sustain_turns),
         },
         focus: schema::FocusConfig {
-            max_working_set: project.focus.max_working_set.or(global.focus.max_working_set),
-            advisory_threshold: project.focus.advisory_threshold.or(global.focus.advisory_threshold),
+            max_working_set: project
+                .focus
+                .max_working_set
+                .or(global.focus.max_working_set),
+            advisory_threshold: project
+                .focus
+                .advisory_threshold
+                .or(global.focus.advisory_threshold),
         },
         dream: schema::DreamConfig {
             enabled: project.dream.enabled.or(global.dream.enabled),
             max_sequences: project.dream.max_sequences.or(global.dream.max_sequences),
-            max_repair_patterns: project.dream.max_repair_patterns.or(global.dream.max_repair_patterns),
-            max_conventions: project.dream.max_conventions.or(global.dream.max_conventions),
+            max_repair_patterns: project
+                .dream
+                .max_repair_patterns
+                .or(global.dream.max_repair_patterns),
+            max_conventions: project
+                .dream
+                .max_conventions
+                .or(global.dream.max_conventions),
+        },
+        // Bridge: project overrides global
+        bridge: if !project.bridge.webhook.url.is_empty() {
+            project.bridge
+        } else {
+            global.bridge
         },
     }
 }

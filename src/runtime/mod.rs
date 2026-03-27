@@ -9,6 +9,6 @@
 // daemon.rs    — background server, idle timeout, dream worker
 // ──────────────────────────────────────────────────────────────────────────────
 
+pub mod daemon;
 pub mod dispatch;
 pub mod ipc;
-pub mod daemon;

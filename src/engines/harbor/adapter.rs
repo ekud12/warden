@@ -10,4 +10,3 @@
 // The existing assistant/ module is the canonical implementation.
 // This module will re-export and extend it as Harbor grows.
 // ──────────────────────────────────────────────────────────────────────────────
-

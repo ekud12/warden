@@ -38,5 +38,6 @@ pub fn check_debt_signal(state: &SessionState) -> Option<Signal> {
 }
 
 pub fn check_read_drift_signal(state: &SessionState) -> Option<Signal> {
-    check_read_drift(state).map(|msg| Signal::advisory(SignalCategory::Verify, 0.75, msg, "debt.read_drift"))
+    check_read_drift(state)
+        .map(|msg| Signal::advisory(SignalCategory::Verify, 0.75, msg, "debt.read_drift"))
 }

@@ -74,13 +74,18 @@ pub fn run_hook(subcmd: &str, args: &[String]) {
 
 fn read_stdin() -> String {
     use std::io::Read;
-    // Use read() not read_to_string() — read() returns on first data without
-    // waiting for EOF. read_to_string() blocks until the write end closes,
-    // which deadlocks when called through the relay (Claude Code may not
-    // close stdin before reading stdout).
-    let mut buf = vec![0u8; 1_048_576];
-    let n = std::io::stdin().read(&mut buf).unwrap_or(0);
-    String::from_utf8_lossy(&buf[..n]).to_string()
+    use std::time::Duration;
+    // Timeout-protected stdin read. Spawns a reader thread and waits up to 5s.
+    // Prevents cold-start hang: on first hook call after install/update, Claude Code
+    // may not have written stdin yet (mutual wait on the stdin channel).
+    // After 5s with no data, returns empty → hook exits 0 (fail-open).
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = vec![0u8; 1_048_576];
+        let n = std::io::stdin().read(&mut buf).unwrap_or(0);
+        let _ = tx.send(String::from_utf8_lossy(&buf[..n]).to_string());
+    });
+    rx.recv_timeout(Duration::from_secs(5)).unwrap_or_default()
 }
 
 /// CI mode dispatch: safety-critical handlers only, no analytics or session tracking.
@@ -123,5 +128,7 @@ fn dispatch_hook(subcmd: &str, raw: &str) {
             constants::NAME,
             subcmd
         );
+        // Flight recorder: log panics for post-mortem analysis
+        common::storage::append_diagnostic("panic", &format!("handler '{}' panicked", subcmd));
     }
 }

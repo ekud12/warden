@@ -95,6 +95,10 @@ pub fn try_daemon(subcmd: &str, payload: &str) -> Option<DaemonResponse> {
         Ok(result) => result,
         Err(_) => {
             crate::common::log("ipc", "IPC round-trip timeout (2s) — falling through");
+            crate::common::storage::append_diagnostic(
+                "ipc_timeout",
+                &format!("daemon IPC timeout for '{}'", subcmd),
+            );
             None
         }
     }

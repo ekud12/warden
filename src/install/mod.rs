@@ -49,7 +49,12 @@ pub fn ensure_dirs() -> std::io::Result<()> {
 
 /// Install the current binary to ~/.warden/bin/
 /// Copies the running executable to the standard location.
+/// Stops the old daemon first to prevent file locks and stale processes.
 pub fn install_binary() -> Result<(), String> {
+    // Stop old daemon before overwriting binary — prevents file locks on Windows
+    // and ensures the next session starts fresh with the new version.
+    crate::runtime::ipc::stop_daemon_graceful(2000);
+
     let source =
         std::env::current_exe().map_err(|e| format!("Cannot determine current exe: {}", e))?;
 

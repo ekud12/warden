@@ -217,6 +217,24 @@ pub fn run(raw: &str) {
     }
     common::storage::write_json("stats", "prev_scorecard", &sc);
 
+    // Log session-end diagnostics (flight recorder)
+    {
+        let state = common::read_session_state();
+        let trust = crate::engines::anchor::trust::compute_trust(&state);
+        let focus = crate::engines::anchor::focus::compute_focus(&state);
+        common::storage::append_diagnostic(
+            "session_end",
+            &format!(
+                "turns={} errors={} trust={} focus={} milestone='{}'",
+                state.turn,
+                state.errors_unresolved,
+                trust,
+                focus.score,
+                common::truncate(&state.last_milestone, 40)
+            ),
+        );
+    }
+
     // Kill all managed processes
     proc_mgmt::kill_all();
 

@@ -66,7 +66,10 @@ fn version_output() {
     assert!(out.contains("warden"), "version should contain 'warden'");
     // Check version format (X.Y.Z), not a specific version
     let version = env!("CARGO_PKG_VERSION");
-    assert!(out.contains(version), "version should contain current pkg version");
+    assert!(
+        out.contains(version),
+        "version should contain current pkg version"
+    );
 }
 
 #[test]
@@ -128,9 +131,11 @@ fn substitution_grep_to_rg() {
         return;
     } // skip if rg not installed
     let out = run_warden("pretool-bash", &bash_input("grep -r pattern ."));
+    // Transform+Teach: may transform (allow with rg) or deny with suggestion
     assert!(
-        out.contains("deny") && out.contains("rg"),
-        "grep should be denied with rg suggestion"
+        out.contains("rg"),
+        "grep should reference rg (transform or deny), got: {}",
+        out
     );
 }
 
@@ -140,9 +145,11 @@ fn substitution_find_to_fd() {
         return;
     } // skip if fd not installed
     let out = run_warden("pretool-bash", &bash_input("find . -name '*.rs'"));
+    // Transform+Teach: may transform (allow with fd) or deny with suggestion
     assert!(
-        out.contains("deny") && out.contains("fd"),
-        "find should be denied with fd suggestion"
+        out.contains("fd"),
+        "find should reference fd (transform or deny), got: {}",
+        out
     );
 }
 
@@ -505,8 +512,9 @@ fn substitution_du_to_dust() {
     }
     let out = run_warden("pretool-bash", &bash_input("du -sh ."));
     assert!(
-        out.contains("deny") && out.contains("dust"),
-        "du should suggest dust"
+        out.contains("dust"),
+        "du should reference dust (transform or deny), got: {}",
+        out
     );
 }
 
@@ -517,8 +525,9 @@ fn substitution_sort_uniq_to_huniq() {
     }
     let out = run_warden("pretool-bash", &bash_input("sort file.txt | uniq"));
     assert!(
-        out.contains("deny") && out.contains("huniq"),
-        "sort|uniq should suggest huniq"
+        out.contains("huniq"),
+        "sort|uniq should reference huniq (transform or deny), got: {}",
+        out
     );
 }
 
@@ -529,8 +538,9 @@ fn substitution_sort_u_to_huniq() {
     }
     let out = run_warden("pretool-bash", &bash_input("sort -u file.txt"));
     assert!(
-        out.contains("deny") && out.contains("huniq"),
-        "sort -u should suggest huniq"
+        out.contains("huniq"),
+        "sort -u should reference huniq (transform or deny), got: {}",
+        out
     );
 }
 
@@ -1220,10 +1230,11 @@ fn golden_substitution_grep() {
         return;
     }
     let out = run_warden("pretool-bash", &bash_input("grep -r TODO src/"));
-    assert!(out.contains("deny"), "grep should be denied");
+    // Transform+Teach: may transform (allow with rg) or deny with suggestion
     assert!(
         out.contains("rg"),
-        "denial should mention rg as alternative"
+        "grep should reference rg (transform or deny), got: {}",
+        out
     );
 }
 
@@ -1265,20 +1276,32 @@ fn golden_sudo_denied() {
 fn zero_trace_blocks_co_authored_by_anthropic() {
     let cmd = r"git commit -m 'feat: add feature' -m 'Co-Authored-By: Claude Opus <noreply@anthropic.com>'";
     let out = run_warden("pretool-bash", &bash_input(cmd));
-    assert!(out.contains("deny"), "Co-Authored-By anthropic should be denied: {out}");
-    assert!(out.contains("Zero Trace"), "should mention Zero Trace: {out}");
+    assert!(
+        out.contains("deny"),
+        "Co-Authored-By anthropic should be denied: {out}"
+    );
+    assert!(
+        out.contains("Zero Trace"),
+        "should mention Zero Trace: {out}"
+    );
 }
 
 #[test]
 fn zero_trace_blocks_claude_code_mention() {
     let cmd = "git commit -m 'feat: generated with Claude Code'";
     let out = run_warden("pretool-bash", &bash_input(cmd));
-    assert!(out.contains("deny"), "Claude Code in commit msg should be denied: {out}");
+    assert!(
+        out.contains("deny"),
+        "Claude Code in commit msg should be denied: {out}"
+    );
 }
 
 #[test]
 fn zero_trace_allows_normal_commit() {
     let cmd = "git commit -m 'feat: add new feature'";
     let out = run_warden("pretool-bash", &bash_input(cmd));
-    assert!(!out.contains("Zero Trace"), "normal commit should not trigger zero trace: {out}");
+    assert!(
+        !out.contains("Zero Trace"),
+        "normal commit should not trigger zero trace: {out}"
+    );
 }

@@ -81,7 +81,11 @@ pub fn run(raw: &str) {
                 let exit_code = input
                     .tool_output
                     .as_ref()
-                    .and_then(|v| v.get("exit_code").or_else(|| v.get("returncode")))
+                    .and_then(|v| {
+                        v.get("exitCode")
+                            .or_else(|| v.get("exit_code"))
+                            .or_else(|| v.get("returncode"))
+                    })
                     .and_then(|v| v.as_i64());
                 if exit_code == Some(0) {
                     "bash_ok"
@@ -157,7 +161,11 @@ pub fn run(raw: &str) {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         let exit_code = to
-            .and_then(|v| v.get("exit_code").or_else(|| v.get("returncode")))
+            .and_then(|v| {
+                v.get("exitCode")
+                    .or_else(|| v.get("exit_code"))
+                    .or_else(|| v.get("returncode"))
+            })
             .and_then(|v| v.as_i64());
 
         let output = format!("{}\n{}", stdout, stderr);

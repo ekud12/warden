@@ -40,7 +40,11 @@ fn run_default() {
             &OVERRIDES.substitutions,
             config::SUBSTITUTIONS.len(),
         ),
-        ("advisories", &OVERRIDES.advisories, config::ADVISORIES.len()),
+        (
+            "advisories",
+            &OVERRIDES.advisories,
+            config::ADVISORIES.len(),
+        ),
         (
             "hallucination",
             &OVERRIDES.hallucination,
@@ -86,7 +90,10 @@ fn run_default() {
     }
 
     if !any_override {
-        term::print_colored(term::DIM, "  No user overrides. Using all compiled defaults.\n");
+        term::print_colored(
+            term::DIM,
+            "  No user overrides. Using all compiled defaults.\n",
+        );
     }
 
     eprintln!();

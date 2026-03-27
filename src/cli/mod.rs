@@ -4,7 +4,9 @@
 // as well as help text, unknown command suggestions, and debug aliases.
 // ──────────────────────────────────────────────────────────────────────────────
 
-use crate::{assistant, config, constants, engines, handlers, install, runtime, rules, scorecard};
+use crate::{
+    assistant, common, config, constants, engines, handlers, install, rules, runtime, scorecard,
+};
 use std::process;
 
 pub const USER_COMMANDS: &[&str] = &[
@@ -26,6 +28,12 @@ pub const USER_COMMANDS: &[&str] = &[
     "restrictions",
     "daemon-status",
     "daemon-stop",
+    "allow",
+    "status",
+    "daemon-start",
+    "daemon-restart",
+    "rules",
+    "session",
 ];
 
 pub fn run(subcmd: &str, args: &[String]) {
@@ -191,7 +199,10 @@ pub fn run(subcmd: &str, args: &[String]) {
                 "schema" => {
                     print!("{}", include_str!("../../schemas/config.schema.json"));
                 }
-                _ => eprintln!("Usage: {} config <list|get|set|path|schema>", constants::NAME),
+                _ => eprintln!(
+                    "Usage: {} config <list|get|set|path|schema>",
+                    constants::NAME
+                ),
             }
         }
 
@@ -339,11 +350,15 @@ pub fn run(subcmd: &str, args: &[String]) {
             match action {
                 "enable" => {
                     let id = args.get(3).map(|s| s.as_str()).unwrap_or("");
-                    if !id.is_empty() { toggle_restriction(id, false); }
+                    if !id.is_empty() {
+                        toggle_restriction(id, false);
+                    }
                 }
                 "disable" => {
                     let id = args.get(3).map(|s| s.as_str()).unwrap_or("");
-                    if !id.is_empty() { toggle_restriction(id, true); }
+                    if !id.is_empty() {
+                        toggle_restriction(id, true);
+                    }
                 }
                 _ => config::restrictions::run(&args[2..]),
             }
@@ -357,9 +372,131 @@ pub fn run(subcmd: &str, args: &[String]) {
         }
         "daemon-stop" => {
             if let Some(resp) = runtime::ipc::try_daemon("shutdown", "") {
-                if resp.exit_code == 0 { eprintln!("Daemon stopped"); }
+                if resp.exit_code == 0 {
+                    eprintln!("Daemon stopped");
+                }
             } else {
                 eprintln!("Daemon not running");
+            }
+        }
+
+        // ── Phase 4: Appeal — one-time rule override ──
+        "allow" => {
+            let rule_id = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if rule_id.is_empty() {
+                eprintln!("Usage: {} allow <rule_id>", constants::NAME);
+                eprintln!(
+                    "Adds a one-time override for the specified rule (current session only)."
+                );
+                process::exit(1);
+            }
+            let mut state = common::read_session_state();
+            if !state.allowed_overrides.contains(&rule_id.to_string()) {
+                state.allowed_overrides.push(rule_id.to_string());
+                common::write_session_state(&state);
+                eprintln!("Override added for '{}' (this session only).", rule_id);
+            } else {
+                eprintln!("'{}' is already overridden.", rule_id);
+            }
+        }
+
+        // ── Phase 5: Missing CLI commands ──
+        "status" => {
+            let state = common::read_session_state();
+            let phase = &state.adaptive.phase;
+            let trust = crate::engines::anchor::trust::compute_trust(&state);
+            let focus = crate::engines::anchor::focus::compute_focus(&state);
+            eprintln!(
+                "Turn: {}  Phase: {:?}  Trust: {}  Focus: {}  Errors: {}  Milestone: {}",
+                state.turn,
+                phase,
+                trust,
+                focus.score,
+                state.errors_unresolved,
+                if state.last_milestone.is_empty() {
+                    "none"
+                } else {
+                    &state.last_milestone
+                }
+            );
+            if !state.session_goal.is_empty() {
+                eprintln!("Goal: {}", state.session_goal);
+            }
+        }
+
+        "daemon-start" => {
+            if runtime::ipc::daemon_is_running() {
+                eprintln!("Daemon already running.");
+            } else {
+                runtime::ipc::spawn_daemon();
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                if runtime::ipc::daemon_is_running() {
+                    eprintln!("Daemon started.");
+                } else {
+                    eprintln!("Failed to start daemon.");
+                }
+            }
+        }
+
+        "daemon-restart" => {
+            eprintln!("Stopping daemon...");
+            runtime::ipc::stop_daemon_graceful(2000);
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            runtime::ipc::spawn_daemon();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if runtime::ipc::daemon_is_running() {
+                eprintln!("Daemon restarted.");
+            } else {
+                eprintln!("Daemon stopped but failed to restart.");
+            }
+        }
+
+        "session" => {
+            let subcmd2 = args.get(2).map(|s| s.as_str()).unwrap_or("list");
+            match subcmd2 {
+                "list" => {
+                    let projects_dir = common::hooks_dir().join("projects");
+                    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
+                        eprintln!(
+                            "{:<10} {:<40} {:<6} {:<8}",
+                            "Hash", "Project", "Turns", "Phase"
+                        );
+                        eprintln!("{}", "-".repeat(70));
+                        for entry in entries.flatten() {
+                            let dir = entry.path();
+                            if !dir.is_dir() {
+                                continue;
+                            }
+                            let hash = entry.file_name().to_string_lossy().to_string();
+                            let project = std::fs::read_to_string(dir.join("project.txt"))
+                                .unwrap_or_else(|_| "unknown".into())
+                                .trim()
+                                .to_string();
+                            let state_path = dir.join("session-state.json");
+                            if let Ok(content) = std::fs::read_to_string(&state_path)
+                                && let Ok(state) =
+                                    serde_json::from_str::<serde_json::Value>(&content)
+                            {
+                                let turns = state["turn"].as_u64().unwrap_or(0);
+                                let phase = state["adaptive"]["phase"].as_str().unwrap_or("?");
+                                eprintln!(
+                                    "{:<10} {:<40} {:<6} {:<8}",
+                                    hash,
+                                    common::truncate(&project, 38),
+                                    turns,
+                                    phase
+                                );
+                            }
+                        }
+                    }
+                }
+                "end" => {
+                    let mut state = common::read_session_state();
+                    state.turn = 0;
+                    common::write_session_state(&state);
+                    eprintln!("Session ended (state reset).");
+                }
+                _ => eprintln!("Usage: {} session [list|end]", constants::NAME),
             }
         }
 
@@ -809,13 +946,19 @@ fn print_help() {
     term::print_colored(term::TEXT, "    install <assistant>   ");
     term::println_colored(term::DIM, "Configure hooks (claude-code, gemini-cli)");
     term::print_colored(term::TEXT, "    update                ");
-    term::println_colored(term::DIM, "Check + apply updates (--check print-only, --yes skip prompt)");
+    term::println_colored(
+        term::DIM,
+        "Check + apply updates (--check print-only, --yes skip prompt)",
+    );
     term::print_colored(term::TEXT, "    uninstall             ");
     term::println_colored(term::DIM, "Remove hooks, binary, and config");
     term::print_colored(term::TEXT, "    config                ");
     term::println_colored(term::DIM, "View or modify configuration");
     term::print_colored(term::TEXT, "    describe              ");
-    term::println_colored(term::DIM, "Show active user overrides (--all for full dump)");
+    term::println_colored(
+        term::DIM,
+        "Show active user overrides (--all for full dump)",
+    );
     term::print_colored(term::TEXT, "    doctor                ");
     term::println_colored(term::DIM, "Verify installation health");
     term::print_colored(term::TEXT, "    version               ");

@@ -299,8 +299,7 @@ pub struct ReplayReport {
 
 /// Replay events through current rules, comparing against recorded decisions
 pub fn replay_through_rules(events: &[Vec<u8>]) -> ReplayReport {
-    use crate::handlers::pretool_bash;
-    let patterns = &*pretool_bash::PATTERNS;
+    let patterns = &*crate::engines::reflex::compiled::PATTERNS;
 
     let mut report = ReplayReport::default();
 

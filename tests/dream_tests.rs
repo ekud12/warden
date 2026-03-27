@@ -90,16 +90,16 @@ struct ErrorCluster {
 // ─── Mirror: TASK_ORDER enum variants ───────────────────────────────────────
 
 const TASK_ORDER_NAMES: &[&str] = &[
-    "LearnEffectiveness",    // E5
-    "BuildResumePacket",     // E2
-    "LearnSequences",        // E7
-    "ClusterErrors",         // E4
-    "LearnRepairPatterns",   // E8
-    "LearnConventions",      // E9
+    "LearnEffectiveness",      // E5
+    "BuildResumePacket",       // E2
+    "LearnSequences",          // E7
+    "ClusterErrors",           // E4
+    "LearnRepairPatterns",     // E8
+    "LearnConventions",        // E9
     "UpdateWorkingSetRanking", // E3
-    "BuildDeadEndMemory",    // E6
-    "ScoreArtifacts",        // E10
-    "ConsolidateEvents",     // E1
+    "BuildDeadEndMemory",      // E6
+    "ScoreArtifacts",          // E10
+    "ConsolidateEvents",       // E1
 ];
 
 // ─── Test 1: TASK_ORDER has all 10 tasks, no duplicates ─────────────────────
@@ -115,11 +115,7 @@ fn test_dream_task_order_complete() {
     // No duplicates
     let mut seen = std::collections::HashSet::new();
     for name in TASK_ORDER_NAMES {
-        assert!(
-            seen.insert(name),
-            "Duplicate task in TASK_ORDER: {}",
-            name
-        );
+        assert!(seen.insert(name), "Duplicate task in TASK_ORDER: {}", name);
     }
 
     // All expected enum variants present
@@ -161,14 +157,23 @@ fn test_resume_packet_serde_default() {
         serde_json::from_value(v1_json).expect("V1 JSON should deserialize into ResumePacket");
 
     // V1 fields present
-    assert_eq!(packet.high_salience_files, vec!["src/main.rs", "src/lib.rs"]);
+    assert_eq!(
+        packet.high_salience_files,
+        vec!["src/main.rs", "src/lib.rs"]
+    );
     assert_eq!(packet.last_verified_state, "Build passed at turn 12");
     assert_eq!(packet.current_issue, "type error in handler");
     assert_eq!(packet.dead_ends, vec!["tried raw pointers"]);
-    assert_eq!(packet.probable_next_actions, vec!["cargo build", "run tests"]);
+    assert_eq!(
+        packet.probable_next_actions,
+        vec!["cargo build", "run tests"]
+    );
 
     // V2 fields have defaults
-    assert_eq!(packet.top_playbook, "", "V2 top_playbook should default to empty string");
+    assert_eq!(
+        packet.top_playbook, "",
+        "V2 top_playbook should default to empty string"
+    );
     assert!(
         packet.convention_hints.is_empty(),
         "V2 convention_hints should default to empty vec"
@@ -182,7 +187,10 @@ fn test_resume_packet_serde_default() {
     let serialized = serde_json::to_string(&packet).expect("serialize");
     let round_tripped: ResumePacket =
         serde_json::from_str(&serialized).expect("deserialize round-trip");
-    assert_eq!(packet, round_tripped, "Round-trip should preserve all fields");
+    assert_eq!(
+        packet, round_tripped,
+        "Round-trip should preserve all fields"
+    );
 }
 
 // ─── Test 3: DreamPlaybook fields ───────────────────────────────────────────
@@ -226,14 +234,20 @@ fn test_playbook_fields() {
 fn test_repair_pattern_fields() {
     let pattern = RepairPattern {
         error_signature: "cannot find type `Foo` in this scope".to_string(),
-        affected_files: vec!["src/handlers/mod.rs".to_string(), "src/types.rs".to_string()],
+        affected_files: vec![
+            "src/handlers/mod.rs".to_string(),
+            "src/types.rs".to_string(),
+        ],
         commands_that_helped: vec!["cargo build".to_string()],
         verification_step: "build/test".to_string(),
         success_count: 4,
         last_seen_turn: 88,
     };
 
-    assert_eq!(pattern.error_signature, "cannot find type `Foo` in this scope");
+    assert_eq!(
+        pattern.error_signature,
+        "cannot find type `Foo` in this scope"
+    );
     assert_eq!(pattern.affected_files.len(), 2);
     assert_eq!(pattern.affected_files[0], "src/handlers/mod.rs");
     assert_eq!(pattern.commands_that_helped, vec!["cargo build"]);

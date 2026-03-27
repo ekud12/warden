@@ -117,7 +117,9 @@ pub fn check_drift(actions: &[String], has_recent_edits: bool) -> Option<String>
     if entropy < 1.0 && read_count >= 7 && edit_count == 0 && !has_recent_edits {
         return Some(format!(
             "Action entropy: {:.2} (low). {} reads, 0 edits in last {} actions. If exploring for a new task, this is expected. Otherwise, consider narrowing focus.",
-            entropy, read_count, window.len()
+            entropy,
+            read_count,
+            window.len()
         ));
     }
 
@@ -130,7 +132,9 @@ pub fn check_drift(actions: &[String], has_recent_edits: bool) -> Option<String>
         if error_count >= 5 {
             return Some(format!(
                 "Action entropy: {:.2} (very low). {} errors in last {} actions. Try a different approach or ask for guidance.",
-                entropy, error_count, window.len()
+                entropy,
+                error_count,
+                window.len()
             ));
         }
     }
@@ -225,7 +229,8 @@ pub fn check_semantic_repetition(commands: &[String], threshold: f64) -> Option<
 // ─── Signal production ───────────────────────────────────────────────────────
 
 pub fn check_loop_signal(history: &[String]) -> Option<Signal> {
-    check_loop_patterns(history).map(|msg| Signal::advisory(SignalCategory::Loop, 0.9, msg, "loopbreaker"))
+    check_loop_patterns(history)
+        .map(|msg| Signal::advisory(SignalCategory::Loop, 0.9, msg, "loopbreaker"))
 }
 
 #[cfg(test)]
@@ -237,7 +242,14 @@ mod tests {
     #[test]
     fn detects_2gram_loop() {
         let history: Vec<String> = vec![
-            "bash_ok", "read", "bash_fail", "read", "bash_fail", "read", "bash_fail", "read",
+            "bash_ok",
+            "read",
+            "bash_fail",
+            "read",
+            "bash_fail",
+            "read",
+            "bash_fail",
+            "read",
         ]
         .into_iter()
         .map(String::from)
@@ -281,7 +293,11 @@ mod tests {
                 .map(String::from)
                 .collect();
         let e = shannon_entropy(&actions);
-        assert!(e > 2.0, "uniform distribution should have high entropy: {}", e);
+        assert!(
+            e > 2.0,
+            "uniform distribution should have high entropy: {}",
+            e
+        );
     }
 
     #[test]
@@ -350,10 +366,7 @@ mod tests {
             "rg 'fn main' tests/".into(),
         ];
         let result = check_semantic_repetition(&commands, 0.5);
-        assert!(
-            result.is_some(),
-            "should trigger on similar rg commands"
-        );
+        assert!(result.is_some(), "should trigger on similar rg commands");
         assert!(result.unwrap().contains("similar intent"));
     }
 
@@ -366,9 +379,6 @@ mod tests {
             "cat README.md".into(),
         ];
         let result = check_semantic_repetition(&commands, 0.5);
-        assert!(
-            result.is_none(),
-            "should not trigger on unrelated commands"
-        );
+        assert!(result.is_none(), "should not trigger on unrelated commands");
     }
 }

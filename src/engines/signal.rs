@@ -18,6 +18,10 @@ pub enum SignalCategory {
     Pressure,
     Repetition,
     Drift,
+    /// Dream engine learning signals (cross-session patterns)
+    Learn,
+    /// Harbor engine integration signals (MCP, bridge, adapter)
+    Integration,
 }
 
 /// A signal produced by any engine module, competing for injection into context.
@@ -41,18 +45,56 @@ pub struct Signal {
 
 impl Signal {
     /// Create an advisory signal (no blocking verdict).
-    pub fn advisory(category: SignalCategory, utility: f64, message: String, source: &'static str) -> Self {
-        Self { category, utility, message, source, verdict: None, score: None }
+    pub fn advisory(
+        category: SignalCategory,
+        utility: f64,
+        message: String,
+        source: &'static str,
+    ) -> Self {
+        Self {
+            category,
+            utility,
+            message,
+            source,
+            verdict: None,
+            score: None,
+        }
     }
 
     /// Create a signal with a specific verdict recommendation.
-    pub fn with_verdict(category: SignalCategory, utility: f64, message: String, source: &'static str, verdict: Verdict) -> Self {
-        Self { category, utility, message, source, verdict: Some(verdict), score: None }
+    pub fn with_verdict(
+        category: SignalCategory,
+        utility: f64,
+        message: String,
+        source: &'static str,
+        verdict: Verdict,
+    ) -> Self {
+        Self {
+            category,
+            utility,
+            message,
+            source,
+            verdict: Some(verdict),
+            score: None,
+        }
     }
 
     /// Create a signal with a numeric score.
-    pub fn with_score(category: SignalCategory, utility: f64, message: String, source: &'static str, score: f64) -> Self {
-        Self { category, utility, message, source, verdict: None, score: Some(score) }
+    pub fn with_score(
+        category: SignalCategory,
+        utility: f64,
+        message: String,
+        source: &'static str,
+        score: f64,
+    ) -> Self {
+        Self {
+            category,
+            utility,
+            message,
+            source,
+            verdict: None,
+            score: Some(score),
+        }
     }
 }
 

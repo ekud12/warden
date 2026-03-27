@@ -21,7 +21,9 @@ use crate::analytics;
 use crate::common;
 use crate::engines::anchor::compass as adaptation;
 use crate::engines::anchor::git_summary;
-use crate::engines::anchor::{budget as token_budget, debt as verification, error_prevention, focus};
+use crate::engines::anchor::{
+    budget as token_budget, debt as verification, error_prevention, focus,
+};
 use crate::engines::dream::imprint as anomaly;
 use crate::engines::reflex::loopbreaker as loop_patterns;
 use crate::rules;
@@ -31,27 +33,33 @@ pub fn run(_raw: &str) {
     let mut state = common::read_session_state();
     state.turn += 1;
 
-    // Goal extraction: on turn 1, try to extract session goal from user message
-    if state.turn == 1 && state.session_goal.is_empty() {
-        // Extract user prompt text from the raw input
-        if let Some(input) = common::parse_input(_raw) {
-            let text = input
-                .tool_input
-                .as_ref()
-                .and_then(|v| {
+    // Goal extraction: on turns 1-3, try to extract session goal from user message.
+    // Claude Code sends the user prompt in the top-level `prompt` field of UserPromptSubmit.
+    // We try turns 1-3 because the actual task often comes after an initial greeting.
+    if state.turn <= 3
+        && state.session_goal.is_empty()
+        && let Some(input) = common::parse_input(_raw)
+    {
+        // Primary: use the dedicated `prompt` field (UserPromptSubmit payload)
+        let text = input
+            .prompt
+            .as_deref()
+            // Fallback: try tool_input keys for other assistant formats
+            .or_else(|| {
+                input.tool_input.as_ref().and_then(|v| {
                     v.get("message")
                         .or_else(|| v.get("content"))
                         .or_else(|| v.get("prompt"))
+                        .and_then(|v| v.as_str())
                 })
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if let Some(goal) = analytics::goal::extract_goal(text) {
-                state.session_goal = goal;
-                common::log(
-                    "userprompt-context",
-                    &format!("Goal extracted: {}", &state.session_goal),
-                );
-            }
+            })
+            .unwrap_or("");
+        if let Some(goal) = analytics::goal::extract_goal(text) {
+            state.session_goal = goal;
+            common::log(
+                "userprompt-context",
+                &format!("Goal extracted: {}", &state.session_goal),
+            );
         }
     }
 

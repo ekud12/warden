@@ -4,8 +4,8 @@
 // in userprompt_context selects top-N by utility per category.
 // ──────────────────────────────────────────────────────────────────────────────
 
-use std::collections::HashMap;
 use super::signal::{Signal, SignalCategory};
+use std::collections::HashMap;
 
 /// Collects signals from all engines for a single request.
 pub struct SignalBus {
@@ -14,7 +14,9 @@ pub struct SignalBus {
 
 impl SignalBus {
     pub fn new() -> Self {
-        Self { signals: Vec::new() }
+        Self {
+            signals: Vec::new(),
+        }
     }
 
     pub fn push(&mut self, signal: Signal) {
@@ -48,7 +50,11 @@ impl SignalBus {
     /// Select top N signals overall by utility, regardless of category.
     pub fn top_n(&self, n: usize) -> Vec<&Signal> {
         let mut sorted: Vec<&Signal> = self.signals.iter().collect();
-        sorted.sort_by(|a, b| b.utility.partial_cmp(&a.utility).unwrap_or(std::cmp::Ordering::Equal));
+        sorted.sort_by(|a, b| {
+            b.utility
+                .partial_cmp(&a.utility)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         sorted.truncate(n);
         sorted
     }
@@ -68,21 +74,49 @@ mod tests {
     #[test]
     fn top_per_category_picks_highest() {
         let mut bus = SignalBus::new();
-        bus.push(Signal::advisory(SignalCategory::Safety, 0.3, "low".into(), "a"));
-        bus.push(Signal::advisory(SignalCategory::Safety, 0.9, "high".into(), "b"));
-        bus.push(Signal::advisory(SignalCategory::Loop, 0.5, "loop".into(), "c"));
+        bus.push(Signal::advisory(
+            SignalCategory::Safety,
+            0.3,
+            "low".into(),
+            "a",
+        ));
+        bus.push(Signal::advisory(
+            SignalCategory::Safety,
+            0.9,
+            "high".into(),
+            "b",
+        ));
+        bus.push(Signal::advisory(
+            SignalCategory::Loop,
+            0.5,
+            "loop".into(),
+            "c",
+        ));
         let top = bus.top_per_category();
         assert_eq!(top.len(), 2);
-        let safety = top.iter().find(|s| s.category == SignalCategory::Safety).unwrap();
+        let safety = top
+            .iter()
+            .find(|s| s.category == SignalCategory::Safety)
+            .unwrap();
         assert_eq!(safety.utility, 0.9);
     }
 
     #[test]
     fn top_n_returns_highest() {
         let mut bus = SignalBus::new();
-        bus.push(Signal::advisory(SignalCategory::Safety, 0.3, "a".into(), "x"));
+        bus.push(Signal::advisory(
+            SignalCategory::Safety,
+            0.3,
+            "a".into(),
+            "x",
+        ));
         bus.push(Signal::advisory(SignalCategory::Loop, 0.9, "b".into(), "x"));
-        bus.push(Signal::advisory(SignalCategory::Focus, 0.6, "c".into(), "x"));
+        bus.push(Signal::advisory(
+            SignalCategory::Focus,
+            0.6,
+            "c".into(),
+            "x",
+        ));
         let top = bus.top_n(2);
         assert_eq!(top.len(), 2);
         assert_eq!(top[0].utility, 0.9);

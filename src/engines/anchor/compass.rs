@@ -331,7 +331,8 @@ fn commit_transition(
 }
 
 pub fn adapt_signal(state: &mut crate::common::SessionState) -> Option<signal::Signal> {
-    adapt(state).map(|msg| signal::Signal::advisory(signal::SignalCategory::Phase, 0.7, msg, "compass"))
+    adapt(state)
+        .map(|msg| signal::Signal::advisory(signal::SignalCategory::Phase, 0.7, msg, "compass"))
 }
 
 /// Generate a human-readable reason for the transition.
@@ -420,7 +421,10 @@ mod tests {
 
     #[test]
     fn drift_aligned_goal() {
-        let actions = vec!["cargo build --release".into(), "edit src/build.rs error handling".into()];
+        let actions = vec![
+            "cargo build --release".into(),
+            "edit src/build.rs error handling".into(),
+        ];
         let score = drift_score("fix build error", &actions);
         assert!(score < 0.5, "aligned goal should have low drift: {}", score);
     }

@@ -290,11 +290,14 @@ use super::ProjectConvention;
 /// E9: Learn project conventions from recurring patterns
 pub fn learn_conventions() {
     let state = common::read_session_state();
-    let mut conventions: Vec<ProjectConvention> = common::storage::read_json("dream", "conventions").unwrap_or_default();
+    let mut conventions: Vec<ProjectConvention> =
+        common::storage::read_json("dream", "conventions").unwrap_or_default();
 
     // Convention: preferred build/test command (most successful)
     if state.last_build_turn > 0 {
-        let build_conv_idx = conventions.iter().position(|c| c.kind == "build_preference");
+        let build_conv_idx = conventions
+            .iter()
+            .position(|c| c.kind == "build_preference");
         if let Some(idx) = build_conv_idx {
             conventions[idx].evidence_count += 1;
             conventions[idx].confidence = (conventions[idx].confidence + 0.05).min(1.0);
@@ -314,7 +317,16 @@ pub fn learn_conventions() {
     let edited_count = state.files_edited.len();
     if edited_count >= 3 {
         let conv_idx = conventions.iter().position(|c| c.kind == "common_edit_set");
-        let obs = format!("Common edit set: {}", state.files_edited.iter().take(5).cloned().collect::<Vec<_>>().join(", "));
+        let obs = format!(
+            "Common edit set: {}",
+            state
+                .files_edited
+                .iter()
+                .take(5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
         if let Some(idx) = conv_idx {
             conventions[idx].observation = obs;
             conventions[idx].evidence_count += 1;
@@ -334,8 +346,13 @@ pub fn learn_conventions() {
     // Convention: verification frequency
     if state.edits_since_verification > 0 && state.last_build_turn > 0 {
         let avg_edits_per_verify = state.turn as f64 / (state.last_build_turn as f64).max(1.0);
-        let conv_idx = conventions.iter().position(|c| c.kind == "verification_frequency");
-        let obs = format!("Avg {:.1} turns between verifications", avg_edits_per_verify);
+        let conv_idx = conventions
+            .iter()
+            .position(|c| c.kind == "verification_frequency");
+        let obs = format!(
+            "Avg {:.1} turns between verifications",
+            avg_edits_per_verify
+        );
         if let Some(idx) = conv_idx {
             conventions[idx].observation = obs;
             conventions[idx].evidence_count += 1;

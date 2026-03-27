@@ -163,9 +163,10 @@ pub fn run() {
             for status in &statuses {
                 if !status.installed
                     && let Some(tool) = tools::TOOLS.iter().find(|t| t.name == status.name)
-                        && let Some(cmd) = tool.install_cargo {
-                            term::hint(&format!("{}: {}", tool.name, cmd));
-                        }
+                    && let Some(cmd) = tool.install_cargo
+                {
+                    term::hint(&format!("{}: {}", tool.name, cmd));
+                }
             }
         }
     } else {

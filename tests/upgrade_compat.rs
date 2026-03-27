@@ -1,5 +1,4 @@
 /// Upgrade compatibility tests — verify Warden handles old/malformed state gracefully.
-
 use std::collections::HashMap;
 
 /// Old config with missing new fields deserializes cleanly (serde(default))
@@ -18,7 +17,10 @@ fn old_session_state_missing_fields() {
 
     // This should deserialize without error — all missing fields get defaults
     let result: Result<serde_json::Value, _> = serde_json::from_str(old_state_json);
-    assert!(result.is_ok(), "Old session state should parse as valid JSON");
+    assert!(
+        result.is_ok(),
+        "Old session state should parse as valid JSON"
+    );
 
     let value = result.unwrap();
     assert_eq!(value["turn"], 5);
@@ -103,12 +105,18 @@ fn non_warden_hooks_preserved_in_merge() {
     // The non-Warden hook should be identifiable
     let custom_hook = &pretool[0];
     let cmd = custom_hook["hooks"][0]["command"].as_str().unwrap();
-    assert!(!cmd.to_lowercase().contains("warden"), "First hook is non-Warden");
+    assert!(
+        !cmd.to_lowercase().contains("warden"),
+        "First hook is non-Warden"
+    );
 
     // The Warden hook should be identifiable
     let warden_hook = &pretool[1];
     let cmd = warden_hook["hooks"][0]["command"].as_str().unwrap();
-    assert!(cmd.to_lowercase().contains("warden"), "Second hook is Warden");
+    assert!(
+        cmd.to_lowercase().contains("warden"),
+        "Second hook is Warden"
+    );
 
     // CustomEvent should exist and be preserved
     assert!(hooks.contains_key("CustomEvent"));

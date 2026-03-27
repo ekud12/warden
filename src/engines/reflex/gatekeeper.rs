@@ -56,6 +56,34 @@ pub fn evaluate(signals: &[Signal]) -> Verdict {
     DefaultGatekeeper.decide(signals)
 }
 
+/// Confidence threshold below which denials include an appeal hint.
+/// Safety denials (1.0) never get appeal hints. Hallucination (0.9) doesn't.
+/// Only medium-confidence patterns (< 0.85) suggest the appeal path.
+const APPEAL_THRESHOLD: f64 = 0.85;
+
+/// Evaluate signals and return verdict with optional appeal hint.
+/// If the winning Deny signal has confidence (utility) < APPEAL_THRESHOLD,
+/// the denial message includes instructions for overriding via `warden allow`.
+pub fn evaluate_with_appeal(signals: &[Signal]) -> Verdict {
+    // Find the winning deny signal (if any)
+    for s in signals {
+        if let Some(Verdict::Deny(ref msg)) = s.verdict {
+            if s.utility < APPEAL_THRESHOLD {
+                // Medium confidence — include appeal hint
+                let rule_id = s.source;
+                return Verdict::Deny(format!(
+                    "{}\n\nIf intentional, override with: warden allow {}",
+                    msg, rule_id
+                ));
+            }
+            return Verdict::Deny(msg.clone());
+        }
+    }
+
+    // No deny — fall through to standard evaluate
+    evaluate(signals)
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -224,10 +252,7 @@ mod tests {
             sig("a", None),
             sig("b", Some(Verdict::Allow)),
             sig("c", Some(Verdict::Advisory("info".into()))),
-            sig(
-                "d",
-                Some(Verdict::Transform(serde_json::json!({"x": 1}))),
-            ),
+            sig("d", Some(Verdict::Transform(serde_json::json!({"x": 1})))),
             sig("e", Some(Verdict::Deny("nope".into()))),
         ];
         assert_eq!(evaluate(&signals), Verdict::Deny("nope".into()));

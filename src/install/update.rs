@@ -159,7 +159,10 @@ pub fn run(args: &[String]) {
         }
     };
 
-    term::print_colored(term::SUCCESS, &format!("  New version available: v{}\n", info.version));
+    term::print_colored(
+        term::SUCCESS,
+        &format!("  New version available: v{}\n", info.version),
+    );
     term::print_colored(term::DIM, &format!("  Release: {}\n", info.url));
     eprintln!();
 
@@ -171,10 +174,8 @@ pub fn run(args: &[String]) {
     }
 
     // Interactive prompt (or auto-yes)
-    let should_apply = auto_yes || term::confirm(
-        &format!("  Update v{} → v{}?", current, info.version),
-        true,
-    );
+    let should_apply =
+        auto_yes || term::confirm(&format!("  Update v{} → v{}?", current, info.version), true);
 
     if !should_apply {
         term::print_colored(term::DIM, "  Update skipped.\n");
@@ -188,7 +189,10 @@ pub fn run(args: &[String]) {
         InstallMethod::Npm => apply_npm(&info),
         InstallMethod::Standalone => apply_standalone(&info),
         InstallMethod::Unknown => {
-            term::print_colored(term::WARN, "  Cannot auto-update: unknown install method.\n");
+            term::print_colored(
+                term::WARN,
+                "  Cannot auto-update: unknown install method.\n",
+            );
             term::hint("Update manually from https://github.com/ekud12/warden/releases");
             eprintln!();
         }
@@ -210,7 +214,13 @@ fn apply_cargo(info: &ReleaseInfo) {
         Ok(output) => {
             spinner.finish_fail("failed");
             let stderr = String::from_utf8_lossy(&output.stderr);
-            term::print_colored(term::ERROR, &format!("  cargo install failed: {}\n", stderr.lines().last().unwrap_or("")));
+            term::print_colored(
+                term::ERROR,
+                &format!(
+                    "  cargo install failed: {}\n",
+                    stderr.lines().last().unwrap_or("")
+                ),
+            );
         }
         Err(e) => {
             spinner.finish_fail("failed");
@@ -235,7 +245,13 @@ fn apply_npm(_info: &ReleaseInfo) {
         Ok(output) => {
             spinner.finish_fail("failed");
             let stderr = String::from_utf8_lossy(&output.stderr);
-            term::print_colored(term::ERROR, &format!("  npm update failed: {}\n", stderr.lines().last().unwrap_or("")));
+            term::print_colored(
+                term::ERROR,
+                &format!(
+                    "  npm update failed: {}\n",
+                    stderr.lines().last().unwrap_or("")
+                ),
+            );
         }
         Err(e) => {
             spinner.finish_fail("failed");
@@ -292,7 +308,12 @@ fn apply_standalone(info: &ReleaseInfo) {
             .unwrap_or(false)
     };
 
-    if !success || !tmp.exists() || std::fs::metadata(&tmp).map(|m| m.len() < 1_000_000).unwrap_or(true) {
+    if !success
+        || !tmp.exists()
+        || std::fs::metadata(&tmp)
+            .map(|m| m.len() < 1_000_000)
+            .unwrap_or(true)
+    {
         spinner.finish_fail("Download failed or file too small");
         term::print_colored(term::ERROR, "  Download failed or file too small.\n");
         let _ = std::fs::remove_file(&tmp);
@@ -329,7 +350,10 @@ fn swap_binary(exe: &std::path::Path, tmp: &std::path::Path) -> Result<(), Strin
     // Step 1: move current exe to backup
     if let Err(e) = std::fs::rename(exe, &backup) {
         let _ = std::fs::remove_file(tmp);
-        return Err(format!("Could not rename current binary: {}. Is it in use?", e));
+        return Err(format!(
+            "Could not rename current binary: {}. Is it in use?",
+            e
+        ));
     }
 
     // Step 2: move new binary into place
@@ -339,7 +363,10 @@ fn swap_binary(exe: &std::path::Path, tmp: &std::path::Path) -> Result<(), Strin
             return Err(format!(
                 "Could not place new binary ({}), AND failed to restore backup ({}). \
                  Manual recovery needed: rename {} to {}",
-                e, restore_err, backup.display(), exe.display()
+                e,
+                restore_err,
+                backup.display(),
+                exe.display()
             ));
         }
         return Err(format!("Could not place new binary: {}. Rolled back.", e));
@@ -383,7 +410,11 @@ fn post_update_verify() {
 
     // Check binary exists
     let bin_dir = super::bin_dir();
-    let bin_name = if cfg!(windows) { "warden.exe" } else { "warden" };
+    let bin_name = if cfg!(windows) {
+        "warden.exe"
+    } else {
+        "warden"
+    };
     let binary = bin_dir.join(bin_name);
     if binary.exists() {
         term::print_colored(term::SUCCESS, "  Binary: OK\n");
@@ -408,7 +439,10 @@ fn print_upgrade_instructions(method: &InstallMethod, info: &ReleaseInfo) {
         }
         InstallMethod::Unknown => {
             term::print_colored(term::DIM, &format!("    Download from: {}\n", info.url));
-            term::print_colored(term::DIM, "    Or: cargo install --locked --force warden-ai\n");
+            term::print_colored(
+                term::DIM,
+                "    Or: cargo install --locked --force warden-ai\n",
+            );
         }
     }
 }
@@ -512,25 +546,40 @@ pub fn run_doctor() {
             };
             if ratio > 0.10 {
                 term::print_colored(term::WARN, "  [!!] ");
-                term::print_colored(term::TEXT, &format!(
-                    "Binary size mismatch: CLI={}KB, Daemon={}KB ({:.0}% diff)\n",
-                    cli_size / 1024, daemon_size / 1024, ratio * 100.0
-                ));
-                term::print_colored(term::DIM, "       Possible version mismatch — run `warden daemon-stop` to force refresh\n");
+                term::print_colored(
+                    term::TEXT,
+                    &format!(
+                        "Binary size mismatch: CLI={}KB, Daemon={}KB ({:.0}% diff)\n",
+                        cli_size / 1024,
+                        daemon_size / 1024,
+                        ratio * 100.0
+                    ),
+                );
+                term::print_colored(
+                    term::DIM,
+                    "       Possible version mismatch — run `warden daemon-stop` to force refresh\n",
+                );
                 warn_count += 1;
             } else {
                 term::print_colored(term::SUCCESS, "  [OK] ");
-                term::print_colored(term::TEXT, &format!(
-                    "Binary sizes consistent: CLI={}KB, Daemon={}KB\n",
-                    cli_size / 1024, daemon_size / 1024
-                ));
+                term::print_colored(
+                    term::TEXT,
+                    &format!(
+                        "Binary sizes consistent: CLI={}KB, Daemon={}KB\n",
+                        cli_size / 1024,
+                        daemon_size / 1024
+                    ),
+                );
                 ok_count += 1;
             }
         }
     } else {
         term::print_colored(term::WARN, "  [!!] ");
         term::print_colored(term::TEXT, "Daemon binary missing");
-        term::print_colored(term::DIM, &format!(" (expected at {})\n", daemon_bin.display()));
+        term::print_colored(
+            term::DIM,
+            &format!(" (expected at {})\n", daemon_bin.display()),
+        );
         warn_count += 1;
     }
 
@@ -545,7 +594,10 @@ pub fn run_doctor() {
             term::print_colored(term::TEXT, "Claude Code: hooks configured\n");
             ok_count += 1;
         } else {
-            term::print_colored(term::WARN, "  [!!] Claude Code: settings exists but no Warden hooks\n");
+            term::print_colored(
+                term::WARN,
+                "  [!!] Claude Code: settings exists but no Warden hooks\n",
+            );
             warn_count += 1;
         }
     } else {
@@ -554,9 +606,15 @@ pub fn run_doctor() {
 
     eprintln!();
     if warn_count == 0 {
-        term::print_colored(term::SUCCESS, &format!("  All {} checks passed.\n", ok_count));
+        term::print_colored(
+            term::SUCCESS,
+            &format!("  All {} checks passed.\n", ok_count),
+        );
     } else {
-        term::print_colored(term::WARN, &format!("  {} OK, {} warnings.\n", ok_count, warn_count));
+        term::print_colored(
+            term::WARN,
+            &format!("  {} OK, {} warnings.\n", ok_count, warn_count),
+        );
     }
     eprintln!();
 }
@@ -569,15 +627,14 @@ fn doctor_daemon_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
     match crate::runtime::ipc::try_daemon("daemon-status", "") {
         Some(resp) if resp.exit_code == 0 => {
             // Parse the status JSON
-            let status: serde_json::Value = serde_json::from_str(&resp.stdout)
-                .unwrap_or_default();
-            let daemon_pid = status.get("pid")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let daemon_version = status.get("version")
+            let status: serde_json::Value = serde_json::from_str(&resp.stdout).unwrap_or_default();
+            let daemon_pid = status.get("pid").and_then(|v| v.as_u64()).unwrap_or(0);
+            let daemon_version = status
+                .get("version")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            let started_at = status.get("started_at")
+            let started_at = status
+                .get("started_at")
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
 
@@ -592,7 +649,10 @@ fn doctor_daemon_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
                     .unwrap_or_default()
                     .as_secs();
                 let uptime_secs = now.saturating_sub(started_at);
-                term::print_colored(term::DIM, &format!(", uptime {}\n", format_duration(uptime_secs)));
+                term::print_colored(
+                    term::DIM,
+                    &format!(", uptime {}\n", format_duration(uptime_secs)),
+                );
             } else {
                 eprintln!();
             }
@@ -601,15 +661,24 @@ fn doctor_daemon_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
             // Version match
             if daemon_version == cli_version {
                 term::print_colored(term::SUCCESS, "  [OK] ");
-                term::print_colored(term::TEXT, &format!("Daemon version: v{} (matches CLI)\n", daemon_version));
+                term::print_colored(
+                    term::TEXT,
+                    &format!("Daemon version: v{} (matches CLI)\n", daemon_version),
+                );
                 *ok_count += 1;
             } else {
                 term::print_colored(term::WARN, "  [!!] ");
-                term::print_colored(term::TEXT, &format!(
-                    "Daemon version mismatch: daemon=v{}, CLI=v{}\n",
-                    daemon_version, cli_version
-                ));
-                term::print_colored(term::DIM, "       Run `warden daemon-stop` — it will auto-restart with the correct version\n");
+                term::print_colored(
+                    term::TEXT,
+                    &format!(
+                        "Daemon version mismatch: daemon=v{}, CLI=v{}\n",
+                        daemon_version, cli_version
+                    ),
+                );
+                term::print_colored(
+                    term::DIM,
+                    "       Run `warden daemon-stop` — it will auto-restart with the correct version\n",
+                );
                 *warn_count += 1;
             }
         }
@@ -618,18 +687,21 @@ fn doctor_daemon_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
             if let Some(pid_val) = pid {
                 if crate::runtime::ipc::pid_is_alive(pid_val) {
                     term::print_colored(term::WARN, "  [!!] ");
-                    term::print_colored(term::TEXT, &format!(
-                        "Daemon: PID {} alive but not responding on pipe\n",
-                        pid_val
-                    ));
+                    term::print_colored(
+                        term::TEXT,
+                        &format!("Daemon: PID {} alive but not responding on pipe\n", pid_val),
+                    );
                     *warn_count += 1;
                 } else {
                     term::print_colored(term::WARN, "  [!!] ");
-                    term::print_colored(term::TEXT, &format!(
-                        "Daemon: stale PID file (PID {} not running)\n",
-                        pid_val
-                    ));
-                    term::print_colored(term::DIM, "       Will auto-restart on next hook invocation\n");
+                    term::print_colored(
+                        term::TEXT,
+                        &format!("Daemon: stale PID file (PID {} not running)\n", pid_val),
+                    );
+                    term::print_colored(
+                        term::DIM,
+                        "       Will auto-restart on next hook invocation\n",
+                    );
                     *warn_count += 1;
                 }
             } else {

@@ -139,7 +139,10 @@ pub fn run_server(source_mtime: u64) {
                     let response = DaemonResponse {
                         stdout: format!(
                             "{{\"pid\":{},\"mtime\":{},\"version\":\"{}\",\"started_at\":{}}}",
-                            pid, startup_mtime, env!("CARGO_PKG_VERSION"), startup_time
+                            pid,
+                            startup_mtime,
+                            env!("CARGO_PKG_VERSION"),
+                            startup_time
                         ),
                         exit_code: 0,
                     };
@@ -148,9 +151,7 @@ pub fn run_server(source_mtime: u64) {
                 }
 
                 // Version mismatch detection: client version differs from daemon version
-                if !request.version.is_empty()
-                    && request.version != env!("CARGO_PKG_VERSION")
-                {
+                if !request.version.is_empty() && request.version != env!("CARGO_PKG_VERSION") {
                     common::log(
                         "daemon",
                         &format!(

@@ -3,9 +3,9 @@
 // Wraps verbose commands with `warden truncate-filter --mode MODE` pipe.
 // Mode is detected from command type: test, build, install, or default.
 
-use super::PATTERNS;
 use crate::common;
 use crate::config;
+use crate::engines::reflex::compiled::PATTERNS;
 
 /// Handle truncation wrapping for verbose commands + auto-allow for safe commands
 pub fn handle_truncation(cmd: &str) {

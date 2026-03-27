@@ -92,9 +92,9 @@ pub const BASH_MISSING_TOOL: &str = r"command not found|is not recognized|not fo
 pub const BASH_MISSING_TOOL_NAME: &str = r#"['"]?(\S+)['"]?:?\s*(?:command )?not found"#;
 pub const BASH_KNIP_CHECK: &str = r"(?i)unused|unresolved";
 pub const BASH_KNIP_COUNT: &str = r"(\d+) (?:unused|unresolved)";
-pub const BASH_BUILD_SUCCESS: &str =
-    r"(?i)success|completed|done|Build succeeded|Finished.*profile";
-pub const BASH_TEST_PASS: &str = r"pass|✓|✔|\d+ passing|Tests:\s*\d+ passed";
+pub const BASH_BUILD_SUCCESS: &str = r"(?i)Build succeeded|Finished.*profile|Finished.*target|Successfully compiled|webpack compiled|build completed successfully";
+pub const BASH_TEST_PASS: &str =
+    r"(?i)test result:\s*ok|✓|✔|\d+ passing|\d+ passed|Tests:\s*\d+ passed|all \d+ tests? passed";
 pub const BASH_KNIP_DIRTY: &str = r"(?i)unused|unresolved|error";
 pub const BASH_NO_CIRCULAR: &str = r"(?i)no circular";
 pub const BASH_GIT_COMMIT: &str = r"git\s+commit";

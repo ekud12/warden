@@ -133,7 +133,14 @@ pub fn check_patterns_signal(
     turns_since_test: u32,
     threshold: f64,
 ) -> Option<Signal> {
-    check_patterns(priors, edits_since_build, edited_dirs, turns_since_test, threshold).map(|msg| Signal::advisory(SignalCategory::Recovery, 0.6, msg, "error_prevention"))
+    check_patterns(
+        priors,
+        edits_since_build,
+        edited_dirs,
+        turns_since_test,
+        threshold,
+    )
+    .map(|msg| Signal::advisory(SignalCategory::Recovery, 0.6, msg, "error_prevention"))
 }
 
 /// Update priors based on session outcome

@@ -72,6 +72,9 @@ pub fn process(cmd: &str, output: &str, exit_code: Option<i64>) {
         }
     }
 
+    // Failure/timeout tracking for prediction
+    track_failures(cmd, output, exit_code, &mut state);
+
     // Truncation savings: detect truncation markers in output and record savings
     // (truncate-filter is a subprocess that can't update daemon cache directly)
     detect_truncation_savings(output, &mut state);
@@ -394,6 +397,70 @@ fn extract_error_locations(output: &str) -> Vec<String> {
     }
 
     locations
+}
+
+/// Track command failures and timeouts for predictive advisories.
+/// When a command fails 2+ times or times out, inject a warning on next attempt.
+fn track_failures(
+    cmd: &str,
+    output: &str,
+    exit_code: Option<i64>,
+    state: &mut common::SessionState,
+) {
+    let prefix = cmd_prefix(cmd);
+    if prefix.is_empty() {
+        return;
+    }
+
+    // Track failures (exit_code != 0)
+    if let Some(code) = exit_code {
+        if code != 0 {
+            let count = state.cmd_failure_counts.entry(prefix.clone()).or_insert(0);
+            *count = count.saturating_add(1);
+            if *count >= 3 {
+                common::additional_context(&format!(
+                    "`{}` has failed {} times this session. Consider a different approach or check error output carefully.",
+                    common::truncate(cmd, 40),
+                    count
+                ));
+            }
+        } else {
+            // Success — reset failure count for this prefix
+            state.cmd_failure_counts.remove(&prefix);
+        }
+    }
+
+    // Track likely timeouts (no exit_code AND empty/minimal output)
+    if exit_code.is_none() && output.trim().len() < 10 {
+        let count = state.cmd_timeout_counts.entry(prefix.clone()).or_insert(0);
+        *count = count.saturating_add(1);
+        if *count >= 2 {
+            common::additional_context(&format!(
+                "`{}` appears to have timed out {} times. Consider using `run_in_background: true` or breaking into smaller steps.",
+                common::truncate(cmd, 40),
+                count
+            ));
+        }
+    }
+
+    // Bound maps
+    if state.cmd_failure_counts.len() > 30 {
+        let keys: Vec<String> = state.cmd_failure_counts.keys().take(10).cloned().collect();
+        for k in keys {
+            state.cmd_failure_counts.remove(&k);
+        }
+    }
+    if state.cmd_timeout_counts.len() > 30 {
+        let keys: Vec<String> = state.cmd_timeout_counts.keys().take(10).cloned().collect();
+        for k in keys {
+            state.cmd_timeout_counts.remove(&k);
+        }
+    }
+}
+
+/// Extract command prefix (first 2 words) for failure grouping.
+fn cmd_prefix(cmd: &str) -> String {
+    cmd.split_whitespace().take(2).collect::<Vec<_>>().join(" ")
 }
 
 /// Detect truncation markers in output and record savings in session state.

@@ -402,6 +402,17 @@ pub fn run(subcmd: &str, args: &[String]) {
         }
 
         // ── Phase 5: Missing CLI commands ──
+        "state" => {
+            // Dump raw session state as JSON to stdout (for tests + debugging)
+            if let Ok(cwd) = std::env::current_dir() {
+                common::set_project_cwd(&cwd.to_string_lossy());
+            }
+            let state = common::read_session_state();
+            if let Ok(json) = serde_json::to_string_pretty(&state) {
+                println!("{}", json);
+            }
+        }
+
         "status" => {
             let state = common::read_session_state();
             let phase = &state.adaptive.phase;
@@ -429,7 +440,8 @@ pub fn run(subcmd: &str, args: &[String]) {
             if runtime::ipc::daemon_is_running() {
                 eprintln!("Daemon already running.");
             } else {
-                runtime::ipc::spawn_daemon();
+                // v2.4: spawn warden.exe __server directly (no binary copy needed)
+                runtime::server::spawn();
                 std::thread::sleep(std::time::Duration::from_millis(300));
                 if runtime::ipc::daemon_is_running() {
                     eprintln!("Daemon started.");

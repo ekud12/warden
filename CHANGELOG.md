@@ -1,5 +1,46 @@
 # Changelog
 
+## [2.4.0] - 2026-03-27
+
+### Unified Binary Architecture
+- Relay rewritten as IPC client — connects directly to warden server via named pipe (~10ms)
+- Server entry point (`__server`) — warden.exe runs as persistent background server
+- No more daemon binary copy/shadow-copy — server IS warden.exe
+- dispatch.rs simplified — no daemon fast-path, direct execution for fallback
+- Dream worker thread runs inside server (same as before)
+
+### Cold Start Fix
+- stdin read timeout (5s) prevents deadlock on first hook call
+- install_binary() stops server before copying
+
+### Testing & Diagnostics
+- Compass E2E tests (5 phase transition scenarios)
+- Performance benchmarks (pretool 49ms, posttool 28ms, userprompt 21ms)
+- Redb diagnostics table (flight recorder, 500-entry ring buffer)
+- `warden redb` CLI (stats, diagnostics, events, dump)
+- `warden state` command for cross-platform test support
+
+### Engine & Architecture
+- Engine trait: ReflexEngine + AnchorEngine implement process()
+- SignalCategory: added Learn, Integration
+- FocusCritical signal at score < 20
+- Gatekeeper confidence scoring + `warden allow` appeal
+- Webhook bridge (fire-and-forget HTTP POST)
+- Timeout/failure prediction in Anchor ledger
+
+### CLI
+- New: status, allow, daemon-start, daemon-restart, session list/end, redb, state
+- CLI internalization: rule counts + daemon health logged at session boundaries
+
+### Docs & Legal
+- License changed from MIT to AGPL-3.0
+- Bitmill: privacy/local-only messaging, phase names aligned, version badge
+- Normalization pipeline documented (whitespace, quotes, compound, alias)
+
+### CI
+- Pinned Rust 1.93.0 for consistent fmt/clippy
+- Cross-platform test helpers (warden state command, no hash computation)
+
 ## [2.0.0] - 2026-03-26
 
 ### Architecture — 4-Engine Model

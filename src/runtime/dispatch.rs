@@ -4,8 +4,9 @@
 // Includes stdin reading, daemon fast-path, CI mode, and panic isolation.
 // ──────────────────────────────────────────────────────────────────────────────
 
-use crate::{common, constants, engines, handlers, runtime};
-use std::process;
+#[allow(unused_imports)]
+use crate::runtime;
+use crate::{common, constants, engines, handlers}; // Used when daemon feature is active
 
 const HOOK_SUBCMDS: &[&str] = &[
     "pretool-bash",
@@ -32,44 +33,25 @@ pub fn is_hook(subcmd: &str) -> bool {
 }
 
 pub fn run_hook(subcmd: &str, args: &[String]) {
-    let _ = args; // args available for future use; currently stdin-driven
+    let _ = args;
 
     // Set per-project CWD
     if let Ok(cwd) = std::env::current_dir() {
         common::set_project_cwd(&cwd.to_string_lossy());
     }
 
-    // CI mode: safety rules only, skip daemon, skip analytics
+    // CI mode: safety rules only, skip analytics
     if common::is_ci() {
         let raw = read_stdin();
         dispatch_hook_ci(subcmd, &raw);
         return;
     }
 
-    // IPC fast-path: try daemon first unless WARDEN_NO_DAEMON is set
-    if std::env::var("WARDEN_NO_DAEMON").is_err() {
-        let raw = read_stdin();
-        if let Some(resp) = runtime::ipc::try_daemon(subcmd, &raw) {
-            if resp.exit_code == runtime::ipc::EXIT_RESTART {
-                // Daemon detected rebuild — fall through to direct execution
-                dispatch_hook(subcmd, &raw);
-            } else {
-                if !resp.stdout.is_empty() {
-                    print!("{}", resp.stdout);
-                }
-                process::exit(resp.exit_code);
-            }
-        } else {
-            // Daemon not available — direct execution (fast path).
-            // Spawn daemon in background for *next* call (fire-and-forget).
-            // This avoids the old 3x150ms retry loop that added 450ms latency.
-            std::thread::spawn(runtime::ipc::spawn_daemon);
-            dispatch_hook(subcmd, &raw);
-        }
-    } else {
-        let raw = read_stdin();
-        dispatch_hook(subcmd, &raw);
-    }
+    // v2.4: Direct execution. The relay handles IPC to the server.
+    // When called inside the server process, this runs with cached state.
+    // When called as fallback (relay couldn't reach server), this runs cold.
+    let raw = read_stdin();
+    dispatch_hook(subcmd, &raw);
 }
 
 fn read_stdin() -> String {

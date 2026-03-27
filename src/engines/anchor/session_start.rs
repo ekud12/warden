@@ -76,17 +76,8 @@ pub fn run(raw: &str) {
         common::log("session-start", &format!("Project type: {}", project_type));
     }
 
-    // A.6: Self-healing daemon — auto-start if not running
-    if std::env::var("WARDEN_NO_DAEMON").is_err() && !crate::runtime::ipc::daemon_is_running() {
-        // Clean stale PID if process is dead
-        if let Some(pid) = crate::runtime::ipc::read_pid()
-            && (!crate::runtime::ipc::pid_is_alive(pid) || !crate::runtime::ipc::pid_is_warden(pid))
-        {
-            crate::runtime::ipc::remove_pid_file();
-        }
-        crate::runtime::ipc::spawn_daemon();
-        common::log("session-start", "Auto-started daemon");
-    }
+    // v2.4: Server lifecycle handled by relay. No daemon auto-start needed.
+    // The relay spawns warden.exe __server on first hook call if not running.
 
     // Persist WARDEN_HOME to CLAUDE_ENV_FILE if available (makes path available to Bash calls)
     persist_warden_home();

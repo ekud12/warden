@@ -235,10 +235,20 @@ pub fn run(raw: &str) {
         if !file_path.is_empty() {
             // Check if code file extension
             if CODE_EXTS.as_ref().is_some_and(|re| re.is_match(file_path)) {
-                // Dedup: check last 300 bytes of session file for same path
-                let session_path = common::project_dir().join("session-notes.jsonl");
-                let tail = common::read_tail(&session_path, 300);
-                if !tail.contains(file_path) {
+                // Dedup: check recent events for same path (redb first, JSONL fallback)
+                let recent_has_path = if common::storage::is_available() {
+                    let last = common::storage::read_last_events(3);
+                    last.iter().any(|e| {
+                        String::from_utf8(e.clone())
+                            .map(|s| s.contains(file_path))
+                            .unwrap_or(false)
+                    })
+                } else {
+                    let session_path = common::project_dir().join("session-notes.jsonl");
+                    let tail = common::read_tail(&session_path, 300);
+                    tail.contains(file_path)
+                };
+                if !recent_has_path {
                     common::add_session_note("edit", file_path);
                     common::log("posttool-session", &format!("EDIT {}", file_path));
                 } else {

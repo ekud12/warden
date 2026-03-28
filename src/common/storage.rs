@@ -1,7 +1,7 @@
 // ─── common::storage — redb embedded database abstraction ────────────────────
 //
 // Single-file ACID storage replacing JSON files. Each project gets one
-// `warden.db` in its project directory.
+// `warden.redb` in its project directory.
 //
 // Tables:
 //   session_state  — current session state (key: "current")
@@ -33,7 +33,10 @@ static DB_PATH: LazyLock<Mutex<Option<PathBuf>>> = LazyLock::new(|| Mutex::new(N
 
 /// Open the database for a project directory. Stores path for future access.
 pub fn open_db(project_dir: &Path) -> Option<()> {
-    let db_path = project_dir.join("warden.db");
+    // Migrate legacy warden.db → warden.redb if needed
+    migrate_db_rename(project_dir);
+
+    let db_path = project_dir.join("warden.redb");
 
     // Create tables on first open
     let db = Database::create(&db_path).ok()?;
@@ -218,7 +221,7 @@ pub fn is_available() -> bool {
 
 /// Get the DB file path for a project directory
 pub fn db_path(project_dir: &Path) -> PathBuf {
-    project_dir.join("warden.db")
+    project_dir.join("warden.redb")
 }
 
 /// Close the database
@@ -238,6 +241,16 @@ fn resolve_table(name: &str) -> Option<TableDefinition<'static, &'static str, &'
         "dream" => Some(DREAM_TABLE),
         "resume_packets" => Some(RESUME_TABLE),
         _ => None,
+    }
+}
+
+/// Migrate legacy `warden.db` to `warden.redb` (rename only, same format).
+/// Called on open_db when old file exists but new one doesn't.
+pub fn migrate_db_rename(project_dir: &Path) {
+    let old = project_dir.join("warden.db");
+    let new = project_dir.join("warden.redb");
+    if old.exists() && !new.exists() {
+        let _ = std::fs::rename(&old, &new);
     }
 }
 

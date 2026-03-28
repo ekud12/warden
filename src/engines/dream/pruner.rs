@@ -262,13 +262,11 @@ pub fn learn_effectiveness() {
                         "new": *score,
                         "reason": "milestone_within_5_turns"
                     });
-                    let path = common::project_dir().join("session-notes.jsonl");
-                    let _ = std::fs::OpenOptions::new()
-                        .create(true).append(true).open(&path)
-                        .and_then(|mut f| {
-                            use std::io::Write;
-                            writeln!(f, "{}", note)
-                        });
+                    common::add_session_note_ext(
+                        "dream_score_update",
+                        &format!("{}:{}->{} (milestone_within_5_turns)", cat, old_score, *score),
+                        Some(&note),
+                    );
                 }
             }
             _ => {}

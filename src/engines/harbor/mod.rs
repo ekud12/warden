@@ -7,7 +7,7 @@
 //   Adapter         — trait Assistant (Claude Code, Gemini CLI, future assistants)
 //   MCP             — bidirectional MCP server (6 tools via JSON-RPC 2.0)
 //   CLI commands    — describe, explain, export_sessions, replay, tui, proc_mgmt
-//   Bridge          — future integrations (LangChain, CrewAI, AutoGen, webhooks)
+//   Bridge          — webhook integrations
 // ──────────────────────────────────────────────────────────────────────────────
 
 pub mod adapter;

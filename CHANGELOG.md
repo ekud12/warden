@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.0] - 2026-03-28
+
+### Per-Project Storage & CLI Hygiene
+- **Per-project redb** — each project gets its own `warden.redb` in `~/.warden/projects/{hash8}/`, replacing the single global `warden.db`. Eliminates cross-project lock contention.
+- **Session notes → redb primary** — `session-notes.jsonl` is now written to redb events table first, JSONL only as fallback. All readers (doctor intelligence, MCP, dream, export) updated to prefer redb.
+- **Auto-migration** — old `warden.db` → `warden.redb` rename on first open
+- **`warden cleanup`** — new command scans for stale project directories (>30 days), supports `--dry-run`, `--force`, `--days N`
+- **Doctor command fixed** — removed stale "Daemon binary missing" check, all output now says "Server" instead of "Daemon"
+- **CLI daemon→server** — all user-facing messages purged of "daemon" terminology
+- **Harbor bridge simplified** — removed aspirational LangChain/CrewAI/AutoGen stubs, kept webhook (shipped)
+- **Bitmill pager fixed** — first docs page no longer shows itself as "next" link (robust slug matching + index guard)
+
 ## [2.6.0] - 2026-03-28
 
 ### Audit Grounding Pass

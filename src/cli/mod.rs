@@ -35,6 +35,7 @@ pub const USER_COMMANDS: &[&str] = &[
     "rules",
     "session",
     "redb",
+    "cleanup",
 ];
 
 pub fn run(subcmd: &str, args: &[String]) {
@@ -478,7 +479,7 @@ pub fn run(subcmd: &str, args: &[String]) {
                 "stats" => {
                     let events = common::storage::read_last_events(10000);
                     let diags = common::storage::read_last_diagnostics(10000);
-                    eprintln!("  Database: {}/warden.db", project_dir.display());
+                    eprintln!("  Database: {}/warden.redb", project_dir.display());
                     eprintln!("  Events:      {}", events.len());
                     eprintln!("  Diagnostics: {}", diags.len());
                     // Show table keys for dream/resume/stats
@@ -562,11 +563,18 @@ pub fn run(subcmd: &str, args: &[String]) {
                                 .unwrap_or_else(|_| "unknown".into())
                                 .trim()
                                 .to_string();
-                            let state_path = dir.join("session-state.json");
-                            if let Ok(content) = std::fs::read_to_string(&state_path)
-                                && let Ok(state) =
-                                    serde_json::from_str::<serde_json::Value>(&content)
-                            {
+                            // Try redb first, fall back to JSON
+                            let state_opt: Option<serde_json::Value> = {
+                                common::storage::close();
+                                common::storage::open_db(&dir);
+                                common::storage::read_json::<serde_json::Value>("session_state", "current")
+                            }.or_else(|| {
+                                let state_path = dir.join("session-state.json");
+                                std::fs::read_to_string(&state_path).ok()
+                                    .and_then(|c| serde_json::from_str(&c).ok())
+                            });
+                            common::storage::close();
+                            if let Some(state) = state_opt {
                                 let turns = state["turn"].as_u64().unwrap_or(0);
                                 let phase = state["adaptive"]["phase"].as_str().unwrap_or("?");
                                 eprintln!(
@@ -588,6 +596,10 @@ pub fn run(subcmd: &str, args: &[String]) {
                 }
                 _ => eprintln!("Usage: {} session [list|end]", constants::NAME),
             }
+        }
+
+        "cleanup" => {
+            run_cleanup(args);
         }
 
         _ => {
@@ -621,6 +633,138 @@ pub fn run(subcmd: &str, args: &[String]) {
             process::exit(0);
         }
     }
+}
+
+fn run_cleanup(args: &[String]) {
+    use install::term;
+    let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
+    let force = args.iter().any(|a| a == "--force" || a == "-f");
+    let stale_days: u64 = args
+        .iter()
+        .position(|a| a == "--days")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
+
+    let projects_dir = common::hooks_dir().join("projects");
+    if !projects_dir.exists() {
+        eprintln!("No projects directory found.");
+        return;
+    }
+
+    let now = std::time::SystemTime::now();
+    let stale_threshold = std::time::Duration::from_secs(stale_days * 86400);
+    let mut stale_dirs: Vec<(std::path::PathBuf, String, u64)> = Vec::new();
+    let mut active_count = 0u32;
+
+    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if !dir.is_dir() {
+                continue;
+            }
+            let hash = entry.file_name().to_string_lossy().to_string();
+            let project_name = std::fs::read_to_string(dir.join("project.txt"))
+                .unwrap_or_else(|_| "unknown".into())
+                .trim()
+                .to_string();
+
+            // Check most recent mtime across key files
+            let mut latest_mtime = std::time::SystemTime::UNIX_EPOCH;
+            for name in ["warden.redb", "warden.db", "session-state.json", "session-notes.jsonl"] {
+                let p = dir.join(name);
+                if let Ok(meta) = std::fs::metadata(&p) {
+                    if let Ok(mt) = meta.modified() {
+                        if mt > latest_mtime {
+                            latest_mtime = mt;
+                        }
+                    }
+                }
+            }
+
+            let age = now.duration_since(latest_mtime).unwrap_or_default();
+            if age > stale_threshold {
+                let days = age.as_secs() / 86400;
+                stale_dirs.push((dir, format!("{} ({})", project_name, hash), days));
+            } else {
+                active_count += 1;
+            }
+        }
+    }
+
+    // Check for old global warden.db
+    let global_db = common::hooks_dir().join("warden.db");
+    let has_global_db = global_db.exists();
+
+    if stale_dirs.is_empty() && !has_global_db {
+        eprintln!("Nothing to clean up. {} active project(s).", active_count);
+        return;
+    }
+
+    eprintln!(
+        "Found {} stale project(s) (>{} days), {} active.",
+        stale_dirs.len(),
+        stale_days,
+        active_count
+    );
+
+    if !stale_dirs.is_empty() {
+        eprintln!();
+        for (_, name, days) in &stale_dirs {
+            eprintln!("  {} ({} days old)", name, days);
+        }
+    }
+
+    if has_global_db {
+        eprintln!();
+        eprintln!("  Legacy global warden.db found at {}", global_db.display());
+    }
+
+    if dry_run {
+        eprintln!("\nDry run — no changes made. Use --force to delete.");
+        return;
+    }
+
+    if !force {
+        eprintln!();
+        eprint!("Delete stale projects? [y/N] ");
+        use std::io::BufRead;
+        let mut answer = String::new();
+        let _ = std::io::stdin().lock().read_line(&mut answer);
+        if !answer.trim().eq_ignore_ascii_case("y") {
+            eprintln!("Aborted.");
+            return;
+        }
+    }
+
+    let mut deleted = 0u32;
+    for (dir, name, _) in &stale_dirs {
+        match std::fs::remove_dir_all(dir) {
+            Ok(_) => {
+                term::print_colored(term::SUCCESS, &format!("  Deleted: {}\n", name));
+                deleted += 1;
+            }
+            Err(e) => {
+                term::print_colored(term::ERROR, &format!("  Failed to delete {}: {}\n", name, e));
+            }
+        }
+    }
+
+    if has_global_db {
+        match std::fs::remove_file(&global_db) {
+            Ok(_) => {
+                term::print_colored(term::SUCCESS, "  Removed legacy global warden.db\n");
+            }
+            Err(e) => {
+                term::print_colored(
+                    term::ERROR,
+                    &format!("  Failed to remove global warden.db: {}\n", e),
+                );
+            }
+        }
+    }
+
+    eprintln!("\nCleaned up {} project(s).", deleted);
 }
 
 fn install_assistant<A: assistant::Assistant + Default>() {
@@ -1091,25 +1235,33 @@ fn run_doctor_intelligence() {
     let tel = &config::CONFIG.telemetry;
     let state = common::read_session_state();
     let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
 
-    // Count events and find last turn per type
+    // Count events and find last turn per type — prefer redb, fall back to JSONL
     let mut event_counts: std::collections::HashMap<String, u32> =
         std::collections::HashMap::new();
     let mut last_turn: std::collections::HashMap<String, u32> =
         std::collections::HashMap::new();
-    if let Ok(content) = std::fs::read_to_string(&session_path) {
-        for line in content.lines() {
-            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-                let t = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if !t.is_empty() {
-                    *event_counts.entry(t.to_string()).or_default() += 1;
-                    if let Some(turn_val) = entry.get("turn").and_then(|v| v.as_u64()) {
-                        let e = last_turn.entry(t.to_string()).or_default();
-                        if turn_val as u32 > *e {
-                            *e = turn_val as u32;
-                        }
-                    }
+    let event_entries: Vec<serde_json::Value> = if common::storage::is_available() {
+        let raw = common::storage::read_last_events(1000);
+        raw.iter()
+            .filter_map(|e| serde_json::from_slice(e).ok())
+            .collect()
+    } else {
+        let session_path = project_dir.join("session-notes.jsonl");
+        std::fs::read_to_string(&session_path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect()
+    };
+    for entry in &event_entries {
+        let t = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        if !t.is_empty() {
+            *event_counts.entry(t.to_string()).or_default() += 1;
+            if let Some(turn_val) = entry.get("turn").and_then(|v| v.as_u64()) {
+                let e = last_turn.entry(t.to_string()).or_default();
+                if turn_val as u32 > *e {
+                    *e = turn_val as u32;
                 }
             }
         }

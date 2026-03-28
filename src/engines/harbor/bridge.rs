@@ -3,10 +3,7 @@
 // Bridges connect Warden to external systems. Currently implemented:
 //   - Webhook: HTTP POST on deny/milestone/phase-change events
 //
-// Planned (config schema defined, implementation pending):
-//   - LangChain / LangGraph callback handlers
-//   - CrewAI agent hooks
-//   - AutoGen integration
+// Future connectors: evaluate n8n, Slack, Discord webhooks based on user demand
 // ──────────────────────────────────────────────────────────────────────────────
 
 use serde::{Deserialize, Serialize};
@@ -25,22 +22,11 @@ pub struct WebhookConfig {
     pub timeout_ms: u64,
 }
 
-/// Bridge configuration for planned integrations
+/// Bridge configuration
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BridgeConfig {
     pub webhook: WebhookConfig,
-    // Planned — config schema only, implementation pending
-    pub langchain: PlannedBridge,
-    pub crewai: PlannedBridge,
-    pub autogen: PlannedBridge,
-}
-
-/// Placeholder config for planned bridges
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct PlannedBridge {
-    pub enabled: bool,
 }
 
 /// Fire a webhook event (non-blocking, fire-and-forget).
@@ -136,24 +122,3 @@ fn post_webhook(url: &str, auth: &str, body: &str, _timeout_ms: u64) {
     crate::common::log("bridge", &format!("Webhook fired: {} → {}", host, path));
 }
 
-/// Check if a planned bridge is configured but not yet available.
-/// Returns a user-friendly message if so.
-pub fn check_planned_bridges(config: &BridgeConfig) -> Option<String> {
-    let mut planned = Vec::new();
-    if config.langchain.enabled {
-        planned.push("LangChain");
-    }
-    if config.crewai.enabled {
-        planned.push("CrewAI");
-    }
-    if config.autogen.enabled {
-        planned.push("AutoGen");
-    }
-    if planned.is_empty() {
-        return None;
-    }
-    Some(format!(
-        "Bridge(s) configured but not yet available: {}. Coming in a future release.",
-        planned.join(", ")
-    ))
-}

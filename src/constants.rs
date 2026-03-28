@@ -13,7 +13,7 @@ pub const DIR: &str = ".warden";
 /// Named pipe prefix: \\.\pipe\warden-{username}
 pub const PIPE_PREFIX: &str = "warden";
 
-/// Daemon binary name
+/// Server binary name (used by ipc.rs for pid file and binary copy naming)
 pub const DAEMON_NAME: &str = "warden-daemon";
 
 /// Config file name inside home dir

@@ -465,17 +465,26 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
         ));
     }
 
-    // Recent errors mentioning this file
-    let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
-    if let Ok(content) = std::fs::read_to_string(&session_path) {
-        let error_count = content
-            .lines()
-            .rev()
-            .take(100) // last 100 events
-            .filter(|line| {
-                line.contains("\"error\"") && line.contains(short)
-            })
+    // Recent errors mentioning this file — try redb first, fall back to JSONL
+    {
+        let events = if common::storage::is_available() {
+            common::storage::read_last_events(100)
+                .iter()
+                .filter_map(|e| String::from_utf8(e.clone()).ok())
+                .collect::<Vec<_>>()
+        } else {
+            let session_path = common::project_dir().join("session-notes.jsonl");
+            std::fs::read_to_string(&session_path)
+                .unwrap_or_default()
+                .lines()
+                .rev()
+                .take(100)
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        };
+        let error_count = events
+            .iter()
+            .filter(|line| line.contains("\"error\"") && line.contains(short))
             .count();
         if error_count > 0 {
             info.push(format!(
@@ -501,29 +510,52 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
 }
 
 fn tool_session_history() -> serde_json::Value {
-    let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
-
-    let content = match std::fs::read_to_string(&session_path) {
-        Ok(c) => c,
-        Err(_) => return text_result("No session history available."),
-    };
-
-    let lines: Vec<&str> = content.lines().collect();
-    let recent = if lines.len() > 20 {
-        &lines[lines.len() - 20..]
+    // Try redb events first, fall back to session-notes.jsonl
+    let entries: Vec<serde_json::Value> = if common::storage::is_available() {
+        let raw = common::storage::read_last_events(20);
+        if !raw.is_empty() {
+            raw.iter()
+                .filter_map(|e| serde_json::from_slice(e).ok())
+                .collect()
+        } else {
+            Vec::new()
+        }
     } else {
-        &lines
+        Vec::new()
     };
+
+    let entries = if entries.is_empty() {
+        // Fallback: session-notes.jsonl
+        let session_path = common::project_dir().join("session-notes.jsonl");
+        match std::fs::read_to_string(&session_path) {
+            Ok(c) => {
+                let lines: Vec<&str> = c.lines().collect();
+                let recent = if lines.len() > 20 {
+                    &lines[lines.len() - 20..]
+                } else {
+                    &lines
+                };
+                recent
+                    .iter()
+                    .filter_map(|line| serde_json::from_str(line).ok())
+                    .collect()
+            }
+            Err(_) => return text_result("No session history available."),
+        }
+    } else {
+        entries
+    };
+
+    if entries.is_empty() {
+        return text_result("No session history available.");
+    }
 
     let mut history = String::from("Recent session events:\n");
-    for line in recent {
-        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-            let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("?");
-            let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
-            let ts = entry.get("ts").and_then(|v| v.as_str()).unwrap_or("");
-            history.push_str(&format!("[{}] {} — {}\n", note_type, detail, ts));
-        }
+    for entry in &entries {
+        let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+        let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+        let ts = entry.get("ts").and_then(|v| v.as_str()).unwrap_or("");
+        history.push_str(&format!("[{}] {} — {}\n", note_type, detail, ts));
     }
 
     text_result(&history)

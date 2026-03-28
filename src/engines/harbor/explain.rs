@@ -67,9 +67,17 @@ pub fn explain_rule(rule_id: &str) {
 pub fn explain_session() {
     let project_dir = common::project_dir();
 
-    // Read session notes
-    let session_path = project_dir.join("session-notes.jsonl");
-    let notes = std::fs::read_to_string(&session_path).unwrap_or_default();
+    // Read session notes — prefer redb, fall back to JSONL
+    let notes = if common::storage::is_available() {
+        let raw = common::storage::read_last_events(500);
+        raw.iter()
+            .filter_map(|e| String::from_utf8(e.clone()).ok())
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        let session_path = project_dir.join("session-notes.jsonl");
+        std::fs::read_to_string(&session_path).unwrap_or_default()
+    };
 
     // Read logs
     let log_dir = project_dir.join("logs");

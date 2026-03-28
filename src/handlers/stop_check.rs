@@ -25,32 +25,49 @@ pub fn run(raw: &str) {
         return;
     }
 
-    let project_dir = common::project_dir();
-    let session_path = project_dir.join(crate::constants::SESSION_NOTES_FILE);
+    // Read recent events — prefer redb, fall back to session-notes.jsonl
+    let entries: Vec<serde_json::Value> = if common::storage::is_available() {
+        let raw = common::storage::read_last_events(50);
+        if !raw.is_empty() {
+            raw.iter()
+                .filter_map(|e| serde_json::from_slice(e).ok())
+                .collect()
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
 
-    if !session_path.exists() {
-        common::log("stop-check", "No session file — allow");
+    let entries = if entries.is_empty() {
+        let project_dir = common::project_dir();
+        let session_path = project_dir.join(crate::constants::SESSION_NOTES_FILE);
+        if !session_path.exists() {
+            common::log("stop-check", "No session data — allow");
+            return;
+        }
+        let tail = common::read_tail(&session_path, 2048);
+        tail.lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect::<Vec<serde_json::Value>>()
+    } else {
+        entries
+    };
+
+    if entries.is_empty() {
+        common::log("stop-check", "No session data — allow");
         return;
     }
 
     // Check if current project has .aidex/ (only enforce aidex_update if it does)
     let has_aidex = aidex_exists();
 
-    // Read last 2KB of session file
-    let tail = common::read_tail(&session_path, 2048);
-    let lines: Vec<&str> = tail.lines().collect();
-
     let mut has_recent_edit = false;
     let mut has_aidex_update = false;
     let mut unresolved_errors = 0u32;
 
     // Scan backwards through entries
-    for line in lines.iter().rev() {
-        let entry = match serde_json::from_str::<serde_json::Value>(line) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
+    for entry in entries.iter().rev() {
         let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
         match note_type {

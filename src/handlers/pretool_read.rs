@@ -95,6 +95,7 @@ pub fn run(raw: &str) {
             "post-edit",
             truncate_path(file_path),
         );
+        common::add_session_note("read_governance", &format!("[post-edit] {}", truncate_path(file_path)));
         common::allow_with_advisory(
             "PreToolUse",
             &format!(
@@ -119,6 +120,7 @@ pub fn run(raw: &str) {
             "read-dedup",
             truncate_path(file_path),
         );
+        common::add_session_note("read_governance", &format!("[dedup] {}", truncate_path(file_path)));
         common::allow_with_advisory("PreToolUse", &msg);
         return;
     }
@@ -161,6 +163,7 @@ pub fn run(raw: &str) {
             "large-file-advisory",
             &format!("~{}KB {}", kb, truncate_path(file_path)),
         );
+        common::add_session_note("read_governance", &format!("[large-file] ~{}KB {}", kb, truncate_path(file_path)));
         common::allow_with_advisory(
             "PreToolUse",
             &format!(
@@ -185,6 +188,7 @@ pub fn run(raw: &str) {
                     "progressive",
                     truncate_path(file_path),
                 );
+                common::add_session_note("deny", &format!("[progressive-read] {}", truncate_path(file_path)));
                 common::deny("PreToolUse", &msg);
                 return;
             }

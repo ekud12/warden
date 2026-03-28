@@ -312,6 +312,44 @@ fn tool_session_status() -> serde_json::Value {
         }
     }
 
+    // Verification debt
+    if state.edits_since_verification > 0 {
+        status.push_str(&format!(
+            "\nVerification debt: {} edits since last build/test",
+            state.edits_since_verification
+        ));
+    }
+
+    // "Why this phase?" — last transition reason
+    if let Some(t) = state.adaptive.transitions.last() {
+        status.push_str(&format!("\nWhy {}: {}", t.to, t.reason));
+    }
+
+    // Last dropped advisories (from recent events)
+    let recent_events = common::storage::read_last_events(20);
+    for raw in recent_events.iter().rev() {
+        if let Ok(entry) = serde_json::from_slice::<serde_json::Value>(raw)
+            && entry.get("type").and_then(|t| t.as_str()) == Some("advisory_selection") {
+                if let Some(dropped) = entry
+                    .get("data")
+                    .and_then(|d| d.get("dropped_budget"))
+                    .and_then(|d| d.as_array())
+                    && !dropped.is_empty() {
+                        let cats: Vec<&str> = dropped
+                            .iter()
+                            .filter_map(|d| d.get("cat").and_then(|c| c.as_str()))
+                            .collect();
+                        if !cats.is_empty() {
+                            status.push_str(&format!(
+                                "\nDropped advisories (budget): {}",
+                                cats.join(", ")
+                            ));
+                        }
+                    }
+                break;
+            }
+    }
+
     text_result(&status)
 }
 

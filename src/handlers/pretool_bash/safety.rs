@@ -40,6 +40,7 @@ pub fn check_expansion_risk(cmd: &str) -> bool {
             "expansion-risk",
             &common::truncate(cmd, 60),
         );
+        common::add_session_note("deny", &format!("[expansion-risk] {}", common::truncate(cmd, 60)));
         common::deny(
             "PreToolUse",
             "BLOCKED: Command uses variable expansion or indirect execution in a potentially dangerous context. \
@@ -140,6 +141,7 @@ pub fn check_hallucination(cmd: &str) -> bool {
             "hallucination",
             &common::truncate(cmd, 60),
         );
+        common::add_session_note("deny", &format!("[hallucination] {}", common::truncate(cmd, 60)));
         common::deny("PreToolUse", &PATTERNS.hallucination_messages[idx]);
         return true;
     }
@@ -160,6 +162,7 @@ pub fn check_hallucination_advisory(cmd: &str) -> bool {
             "hallucination",
             &common::truncate(cmd, 60),
         );
+        common::add_session_note("advisory", &format!("[hallucination-advisory] {}", common::truncate(cmd, 60)));
         common::allow_with_advisory("PreToolUse", &PATTERNS.hallucination_advisory_messages[idx]);
         return true;
     }
@@ -197,6 +200,7 @@ pub fn check_destructive(cmd: &str) -> bool {
                 "destructive",
                 &common::truncate(cmd, 60),
             );
+            common::add_session_note("deny", &format!("[{}] {}", restriction_id, common::truncate(cmd, 60)));
             common::deny_with_id(
                 "PreToolUse",
                 &PATTERNS.destructive_messages[idx],
@@ -221,6 +225,7 @@ pub fn check_zero_trace(cmd: &str) -> bool {
         if !is_path_context {
             record_deny_savings();
             common::log_structured("pretool-bash", common::LogLevel::Deny, "zero-trace", cmd);
+            common::add_session_note("deny", &format!("[zero-trace] {}", common::truncate(cmd, 60)));
             common::deny(
                 "PreToolUse",
                 "BLOCKED: Do not include AI/Claude/Copilot/LLM attribution in echo/printf/tee commands. Remove the attribution text and retry.",
@@ -313,6 +318,7 @@ pub fn check_advisories(cmd: &str) -> bool {
             "advisory",
             &common::truncate(cmd, 60),
         );
+        common::add_session_note("advisory", &format!("[advisory] {}", common::truncate(cmd, 60)));
         common::allow_with_advisory("PreToolUse", &PATTERNS.advisories_messages[idx]);
         return true;
     }

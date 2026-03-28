@@ -691,6 +691,13 @@ fn run_cleanup(args: &[String]) {
                 }
             }
 
+            // Fallback: use directory mtime when no key files exist
+            if latest_mtime == std::time::SystemTime::UNIX_EPOCH
+                && let Ok(meta) = std::fs::metadata(&dir)
+                    && let Ok(mt) = meta.modified() {
+                        latest_mtime = mt;
+                    }
+
             let age = now.duration_since(latest_mtime).unwrap_or_default();
             if age > stale_threshold {
                 let days = age.as_secs() / 86400;
@@ -1380,14 +1387,20 @@ fn run_doctor_intelligence() {
 
     // Table header
     let header = format!(
-        "  {:<22} {:<8} {:<10} {:<8} {:<10} {}",
-        "Feature", "Status", "Last Turn", "Events", "Injected", "Effect."
+        "  {:<22} {:<8} {:<10} {:<8} {:<10} {:<10} {}",
+        "Feature", "Status", "Last Turn", "Events", "Injected", "Reason", "Effect."
     );
     eprintln!("{header}");
-    eprintln!("  {}", "─".repeat(76));
+    eprintln!("  {}", "─".repeat(88));
 
     // Feature definitions: (name, enabled, event_key, is_injected)
     // is_injected: true = competes for advisory budget, false = silent/logged only
+    // Count promoted signal events
+    let promoted_count = |key: &str| event_counts.get(key).copied().unwrap_or(0);
+    let anomaly_promoted = promoted_count("anomaly_promoted");
+    let forecast_promoted = promoted_count("forecast_promoted");
+    let goal_promoted = promoted_count("goal_anchoring");
+
     let features: Vec<(&str, bool, &str, bool)> = vec![
         ("phase_detection", true, "adaptation", true),
         ("goal_extraction", true, "goal", true),
@@ -1395,8 +1408,8 @@ fn run_doctor_intelligence() {
         ("drift_detection", tel.drift_velocity, "drift", true),
         ("focus_scoring", true, "focus", true),
         ("verification_debt", true, "verification", true),
-        ("compaction_forecast", tel.token_forecast, "forecast", false),
-        ("anomaly_detection", tel.anomaly_detection, "anomaly", false),
+        ("compaction_forecast", tel.token_forecast, "forecast", true),
+        ("anomaly_detection", tel.anomaly_detection, "anomaly", true),
         ("quality_score", tel.quality_predictor, "quality", false),
         ("markov_transitions", true, "markov", false),
         ("error_hints", tel.command_recovery, "error_hint", true),
@@ -1429,18 +1442,34 @@ fn run_doctor_intelligence() {
         } else {
             "silent"
         };
-        let effect_str = dream_scores
-            .scores
-            .get(*event_key)
-            .map(|s| format!("{:.2}", s))
-            .unwrap_or_else(|| "\u{2014}".to_string());
+
+        // Reason: why is the feature in its current state?
+        let reason = if !*enabled {
+            "config-off"
+        } else if count > 0 {
+            "active"
+        } else if *is_injected && budget == 0 {
+            "budget=0"
+        } else {
+            "no-trigger"
+        };
+
+        let effect_val = dream_scores.scores.get(*event_key).copied();
+        let effect_str = match effect_val {
+            Some(s) if (s - 0.5).abs() > 0.01 => {
+                let arrow = if s > 0.5 { "\u{2191}" } else { "\u{2193}" };
+                format!("{:.2}{}", s, arrow)
+            }
+            Some(s) => format!("{:.2}", s),
+            None => "\u{2014}".to_string(),
+        };
 
         let status_color = if *enabled { term::SUCCESS } else { term::DIM };
         eprint!("  {:<22} ", name);
         term::print_colored(status_color, &format!("{:<8} ", status));
         eprintln!(
-            "{:<10} {:<8} {:<10} {}",
-            last_str, count_str, injected_str, effect_str
+            "{:<10} {:<8} {:<10} {:<10} {}",
+            last_str, count_str, injected_str, reason, effect_str
         );
     }
 
@@ -1458,5 +1487,31 @@ fn run_doctor_intelligence() {
         state.files_edited.len(),
         state.errors_unresolved
     );
+
+    // Promoted signal counts
+    if anomaly_promoted + forecast_promoted + goal_promoted > 0 {
+        eprintln!(
+            "  Promoted signals: anomaly={} forecast={} goal={}",
+            anomaly_promoted, forecast_promoted, goal_promoted
+        );
+    }
+
+    // Phase transition history
+    if !state.adaptive.transitions.is_empty() {
+        eprintln!();
+        eprintln!("  Phase transitions:");
+        for t in &state.adaptive.transitions {
+            eprintln!(
+                "    turn {}: {} \u{2192} {} ({})",
+                t.turn, t.from, t.to, t.reason
+            );
+        }
+    }
+
+    // Last compaction turn
+    if state.last_compaction_turn > 0 {
+        eprintln!("  Last compaction: turn {}", state.last_compaction_turn);
+    }
+
     eprintln!();
 }

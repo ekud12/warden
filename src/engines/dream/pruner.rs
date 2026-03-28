@@ -231,8 +231,26 @@ pub fn learn_effectiveness() {
         let event_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
         match event_type {
-            // Track advisory emissions
-            t if t.contains("advisory") || t.contains("injection") => {
+            // Track advisory emissions — structured event types
+            "advisory_selection" => {
+                // Extract first selected category from enriched data
+                let category = entry
+                    .get("data")
+                    .and_then(|d| d.get("selected"))
+                    .and_then(|s| s.as_array())
+                    .and_then(|arr| arr.first())
+                    .and_then(|item| {
+                        // Handle both enriched (object with "cat") and legacy (string) formats
+                        item.get("cat")
+                            .and_then(|c| c.as_str())
+                            .or_else(|| item.as_str())
+                    })
+                    .unwrap_or("unknown")
+                    .to_string();
+                last_advisory_category = Some(category);
+                last_advisory_turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            }
+            "advisory" | "adaptation" => {
                 let category = entry
                     .get("detail")
                     .and_then(|v| v.as_str())
@@ -244,8 +262,8 @@ pub fn learn_effectiveness() {
                 last_advisory_category = Some(category);
                 last_advisory_turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
             }
-            // Milestone within 5 turns of advisory = positive signal
-            "milestone" => {
+            // Milestone or verification success within 5 turns = positive signal
+            "milestone" | "build-ok" | "test-pass" => {
                 let turn = entry.get("turn").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                 if let Some(ref cat) = last_advisory_category
                     && turn > 0

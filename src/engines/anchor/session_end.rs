@@ -120,6 +120,9 @@ pub fn run(raw: &str) {
         effectiveness::save(&project_dir, &eff);
     }
 
+    // Update Dream intervention effectiveness at session end (normally async)
+    crate::engines::dream::pruner::learn_effectiveness();
+
     // Update project DNA (anomaly baselines, quality scores)
     {
         let project_dir = common::project_dir();

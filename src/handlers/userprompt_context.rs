@@ -84,6 +84,7 @@ pub fn run(_raw: &str) {
                 && !state.last_milestone.is_empty(),
             edits_this_turn: state.last_edit_turn == state.turn - 1,
             denials_this_turn: state.denial_rate(1) as u8,
+            quality_score: None, // populated by quality predictor later
         };
         state.prev_snapshot_tokens_in = state.estimated_tokens_in;
         state.prev_snapshot_tokens_out = state.estimated_tokens_out;
@@ -419,6 +420,12 @@ pub fn run(_raw: &str) {
         .filter(|a| a.z_score > 2.5)
         .map(|a| a.to_string());
     if let Some(msg) = anomaly_promoted {
+        let z = anomaly_alerts.first().map(|a| a.z_score).unwrap_or(0.0);
+        common::add_session_note_ext(
+            "anomaly_promoted",
+            &common::truncate(&msg, 80),
+            Some(&serde_json::json!({"z_score": z, "threshold": 2.5})),
+        );
         candidates.push((0.35, "pressure", msg));
     }
 
@@ -428,13 +435,141 @@ pub fn run(_raw: &str) {
     {
         let msg = analytics::forecast::format_forecast(f);
         if !msg.is_empty() {
+            common::add_session_note_ext(
+                "forecast_promoted",
+                &common::truncate(&msg, 80),
+                Some(&serde_json::json!({"turns_remaining": f.turns_remaining, "threshold": 5})),
+            );
             candidates.push((0.4, "pressure", msg));
         }
     }
 
     // Goal anchoring: promote every-5-turn reinjection (focus, 0.3)
     if let Some(msg) = goal_anchor {
+        common::add_session_note("goal_anchoring", &format!("turn {} reinjection", turn));
         candidates.push((0.3, "focus", msg));
+    }
+
+    // ── Dream-wired signals (repair patterns, conventions, resume, sequences) ──
+
+    // Repair pattern matching: if recent errors match known patterns, inject hint (0.65)
+    if state.errors_unresolved > 0 {
+        let patterns = crate::engines::dream::get_repair_patterns();
+        if let Some(hint) = match_repair_pattern(&patterns, &state) {
+            candidates.push((0.65, "repair", hint));
+        }
+    }
+
+    // Convention hint: high-confidence project conventions (0.25)
+    {
+        let conventions = crate::engines::dream::get_conventions();
+        if let Some(conv) = conventions
+            .iter()
+            .find(|c| c.confidence > 0.8 && (c.kind == "build_preference" || c.kind == "common_edit_set"))
+        {
+            candidates.push((
+                0.25,
+                "convention",
+                format!("Project convention: {}", conv.observation),
+            ));
+        }
+    }
+
+    // Resume packet injection: after compaction or long inactivity (0.85)
+    {
+        let post_compaction = state.last_compaction_turn > 0
+            && state.turn == state.last_compaction_turn + 1;
+        let long_inactive = {
+            let now_epoch = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let inactive_min = if state.last_turn_epoch > 0 {
+                (now_epoch.saturating_sub(state.last_turn_epoch)) / 60
+            } else {
+                0
+            };
+            state.last_turn_epoch = now_epoch;
+            inactive_min >= 10
+        };
+        if (post_compaction || long_inactive)
+            && let Some(packet) = crate::engines::dream::get_resume_packet() {
+                let mut parts = Vec::new();
+                if !packet.current_issue.is_empty() {
+                    parts.push(format!("Current issue: {}", packet.current_issue));
+                }
+                if !packet.dead_ends.is_empty() {
+                    parts.push(format!("Avoid: {}", packet.dead_ends.join(", ")));
+                }
+                if packet.verification_debt > 0 {
+                    parts.push(format!(
+                        "Verification debt: {} edits unverified",
+                        packet.verification_debt
+                    ));
+                }
+                if !parts.is_empty() {
+                    let trigger = if post_compaction {
+                        "post-compaction"
+                    } else {
+                        "post-inactivity"
+                    };
+                    candidates.push((
+                        0.85,
+                        "resume",
+                        format!("Resume ({}): {}", trigger, parts.join(". ")),
+                    ));
+                    common::add_session_note(
+                        "resume_injection",
+                        &format!("turn {} {}", turn, trigger),
+                    );
+                }
+            }
+    }
+
+    // Sequence-based next-step suggestion (0.2)
+    {
+        let sequences = crate::engines::dream::get_sequences();
+        if !sequences.is_empty() && state.action_history.len() >= 2 {
+            let len = state.action_history.len();
+            let last2 = (&state.action_history[len - 2], &state.action_history[len - 1]);
+            for seq in sequences.values().filter(|s| s.occurrences >= 3) {
+                if seq.actions.len() >= 3
+                    && seq.actions[0] == *last2.0
+                    && seq.actions[1] == *last2.1
+                {
+                    candidates.push((
+                        0.2,
+                        "sequence",
+                        format!(
+                            "Pattern suggests: {} next (seen {} times)",
+                            seq.actions[2], seq.occurrences
+                        ),
+                    ));
+                    break;
+                }
+            }
+        }
+    }
+
+    // Quality trend decline advisory (0.3)
+    if state.turn_snapshots.len() >= 3 {
+        let recent: Vec<u32> = state
+            .turn_snapshots
+            .iter()
+            .rev()
+            .take(3)
+            .filter_map(|s| s.quality_score)
+            .collect();
+        if recent.len() >= 3 && recent[0] < recent[1] && recent[1] < recent[2] {
+            candidates.push((
+                0.3,
+                "quality_trend",
+                format!(
+                    "Quality declining: {} \u{2192} {} \u{2192} {}. Consider verifying recent changes.",
+                    recent[2], recent[1], recent[0]
+                ),
+            ));
+        }
     }
 
     // ── Silent signals (logged to redb, never candidates) ──
@@ -550,11 +685,23 @@ pub fn run(_raw: &str) {
             .map(|(u, cat, _)| serde_json::json!({"cat": cat, "utility": u}))
             .collect();
         if !selected_cats.is_empty() || !dropped.is_empty() {
+            let selected_detail: Vec<serde_json::Value> = candidates
+                .iter()
+                .take(advisory_budget)
+                .map(|(u, cat, msg)| {
+                    serde_json::json!({
+                        "cat": cat,
+                        "utility": u,
+                        "id": common::string_hash(&common::truncate(msg, 80)),
+                    })
+                })
+                .collect();
             let selection_data = serde_json::json!({
-                "selected": selected_cats,
+                "selected": selected_detail,
                 "dropped_budget": dropped,
                 "trust": trust,
                 "budget": advisory_budget,
+                "phase": state.adaptive.phase.to_string(),
             });
             common::add_session_note_ext(
                 "advisory_selection",
@@ -664,6 +811,35 @@ fn should_reinject_rules(state: &common::SessionState) -> bool {
     }
 
     false
+}
+
+/// Match current errors against Dream's learned repair patterns.
+/// Returns advisory message if a known error signature matches.
+fn match_repair_pattern(
+    patterns: &[crate::engines::dream::RepairPattern],
+    state: &common::SessionState,
+) -> Option<String> {
+    if patterns.is_empty() {
+        return None;
+    }
+    // Compare dead ends and recent errors against known repair signatures
+    for pattern in patterns {
+        for dead_end in &state.dead_ends {
+            if jaccard_similarity(dead_end, &pattern.error_signature) > 0.5 {
+                let fix = if !pattern.commands_that_helped.is_empty() {
+                    format!("Try: {}", pattern.commands_that_helped.join(", "))
+                } else {
+                    "Known error pattern — check recent fixes.".to_string()
+                };
+                return Some(format!(
+                    "Repair pattern match: {} — {}",
+                    common::truncate(&pattern.error_signature, 60),
+                    fix
+                ));
+            }
+        }
+    }
+    None
 }
 
 // ─── Heuristic advisories from turn snapshots ──────────────────────────────

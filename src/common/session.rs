@@ -64,6 +64,8 @@ pub struct TurnSnapshot {
     pub milestones_hit: bool,
     pub edits_this_turn: bool,
     pub denials_this_turn: u8,
+    #[serde(default)]
+    pub quality_score: Option<u32>,
 }
 
 /// Mutable session state persisted to session-state.json
@@ -186,6 +188,11 @@ pub struct SessionState {
     /// Subsystem switches without milestone
     #[serde(default)]
     pub subsystem_switches: u32,
+
+    // ─── Intelligence: Inactivity Detection ──
+    /// Last turn epoch (seconds since UNIX epoch) for inactivity detection
+    #[serde(default)]
+    pub last_turn_epoch: u64,
 
     // ─── Intelligence: Negative Memory ──
     /// Dead ends: "file_or_cmd:reason" (bounded to 20)

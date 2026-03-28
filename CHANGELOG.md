@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.9.0] - 2026-03-28
+
+### Evidence Consolidation (Audit V3 — Phase 1)
+- **Session events for all safety checks** — expansion-risk, hallucination, zero-trace, destructive, and advisory checks now produce persistent session events (was log-only for 5 of 6 checks)
+- **Session events for read/write governance** — post-edit, dedup, large-file, progressive-read, sensitive-path, and zero-trace-write all produce session events
+- **Enriched advisory_selection events** — now include advisory_id (stable hash), utility score per selected, and session phase
+- **Threshold promotion events** — anomaly_promoted, forecast_promoted, goal_anchoring emit structured events with threshold data
+- **Fixed learn_effectiveness** — uses structured event types instead of fragile substring matching; recognizes build-ok/test-pass as positive signals
+- **Enhanced doctor intelligence** — new Reason column (config-off/budget-gated/no-trigger/active), phase transition history, promoted signal counts, effectiveness arrows
+
+### Intelligence Wiring (Audit V3 — Phase 2)
+- **Repair patterns → advisory pipeline** — Dream's learned repair patterns now surface as advisories (utility 0.65) when recent errors match known signatures
+- **Project conventions → advisory pipeline** — high-confidence conventions (>0.8) inject as low-priority advisories (utility 0.25)
+- **Promoted signal diagnostics** — threshold crossing events enable Dream to learn from promoted signals
+
+### Dream Deepening (Audit V3 — Phase 3)
+- **Resume packet auto-injection** — after compaction or 10+ minutes inactivity, Dream's resume packet injects as high-priority advisory (utility 0.85) with current issue, dead ends, and verification debt
+- **Sequence-based next-step suggestion** — when last 2 actions match a known successful 3-gram (3+ occurrences), suggests the next action (utility 0.2)
+- **Quality trend decline advisory** — warns when quality score declines for 3+ consecutive snapshots (utility 0.3)
+- **Intervention effectiveness at session end** — learn_effectiveness now runs at session close, not just during daemon idle time
+- **MCP introspection expanded** — session_status now shows verification debt, "why this phase" reason, and dropped advisories
+
+### CLI & Diagnostics
+- **Fixed cleanup age calculation** — project dirs without key files no longer show "20540 days old" (UNIX_EPOCH fallback → directory mtime)
+
 ## [2.8.0] - 2026-03-28
 
 ### Audit V2 Implementation

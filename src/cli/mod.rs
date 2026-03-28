@@ -683,12 +683,11 @@ fn run_cleanup(args: &[String]) {
                 "session-notes.jsonl",
             ] {
                 let p = dir.join(name);
-                if let Ok(meta) = std::fs::metadata(&p) {
-                    if let Ok(mt) = meta.modified() {
-                        if mt > latest_mtime {
-                            latest_mtime = mt;
-                        }
-                    }
+                if let Ok(meta) = std::fs::metadata(&p)
+                    && let Ok(mt) = meta.modified()
+                    && mt > latest_mtime
+                {
+                    latest_mtime = mt;
                 }
             }
 

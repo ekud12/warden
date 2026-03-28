@@ -215,7 +215,7 @@ pub fn run(_raw: &str) {
     };
     let forecast_msg = raw_forecast
         .as_ref()
-        .map(|f| analytics::forecast::format_forecast(f))
+        .map(analytics::forecast::format_forecast)
         .filter(|s| !s.is_empty());
 
     // Quality prediction: fires at turn 10, then every 5 turns
@@ -423,12 +423,12 @@ pub fn run(_raw: &str) {
     }
 
     // Compaction forecast: promote when < 5 turns remaining (pressure, 0.4)
-    if let Some(ref f) = raw_forecast {
-        if f.turns_remaining < 5 {
-            let msg = analytics::forecast::format_forecast(f);
-            if !msg.is_empty() {
-                candidates.push((0.4, "pressure", msg));
-            }
+    if let Some(ref f) = raw_forecast
+        && f.turns_remaining < 5
+    {
+        let msg = analytics::forecast::format_forecast(f);
+        if !msg.is_empty() {
+            candidates.push((0.4, "pressure", msg));
         }
     }
 
@@ -443,10 +443,7 @@ pub fn run(_raw: &str) {
         .first()
         .filter(|a| a.z_score <= 2.5)
         .map(|a| a.to_string());
-    let forecast_silent = if raw_forecast
-        .as_ref()
-        .map_or(true, |f| f.turns_remaining >= 5)
-    {
+    let forecast_silent = if raw_forecast.as_ref().is_none_or(|f| f.turns_remaining >= 5) {
         forecast_msg
     } else {
         None

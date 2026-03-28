@@ -681,9 +681,8 @@ fn doctor_server_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
         }
         _ => {
             // Daemon not reachable via IPC — try to auto-start
-            let alive_but_unresponsive = pid
-                .map(|p| crate::runtime::ipc::pid_is_alive(p))
-                .unwrap_or(false);
+            let alive_but_unresponsive =
+                pid.map(crate::runtime::ipc::pid_is_alive).unwrap_or(false);
 
             if alive_but_unresponsive {
                 let pid_val = pid.unwrap();

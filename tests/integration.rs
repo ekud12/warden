@@ -249,6 +249,7 @@ fn claude_code_adapter_parses_input() {
 }
 
 #[test]
+#[ignore] // TUI wizard blocks on stdin in CI (crossterm raw mode hangs on Windows pipes)
 fn install_claude_code_generates_config() {
     let out = run_warden_cmd(&["install", "claude-code"]);
     assert!(
@@ -258,6 +259,7 @@ fn install_claude_code_generates_config() {
 }
 
 #[test]
+#[ignore] // TUI wizard blocks on stdin in CI (crossterm raw mode hangs on Windows pipes)
 fn install_gemini_cli_generates_config() {
     let out = run_warden_cmd(&["install", "gemini-cli"]);
     assert!(

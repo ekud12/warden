@@ -34,6 +34,9 @@ jobs:
         run: cargo build --release
       - name: Test
         run: cargo test
+        env:
+          WARDEN_TEST: "1"
+          WARDEN_NO_DAEMON: "1"
       - name: Docs parity
         if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 5

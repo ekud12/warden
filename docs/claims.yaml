@@ -41,8 +41,8 @@ claims:
   - id: progressive-onboarding
     claim: "Safety-only for first 3 sessions, full features unlock gradually"
     class: planned
-    status: missing
-    action: delete
+    status: removed
+    action: deleted from README
     detail: "Not wired to runtime. Only turn-based thresholds (50/80) exist. Session count tracked but not gated."
     files: [README.md, src/engines/anchor/session_start.rs]
 
@@ -95,7 +95,7 @@ claims:
   - id: rule-count-safety
     claim: "Safety: 47 patterns"
     class: strict
-    status: stale
+    status: fixed
     action: rewrite
     detail: "Actual: 50 patterns."
     files: [README.md, src/config/core/safety.rs]
@@ -103,7 +103,7 @@ claims:
   - id: rule-count-hallucination
     claim: "Hallucination: 50 patterns"
     class: strict
-    status: stale
+    status: fixed
     action: rewrite
     detail: "Actual: 48 patterns."
     files: [README.md, src/config/core/hallucination.rs]
@@ -111,7 +111,7 @@ claims:
   - id: rule-count-substitution
     claim: "Substitution: 12 patterns"
     class: strict
-    status: stale
+    status: fixed
     action: rewrite
     detail: "Actual: 11 (4 transforms + 7 denials)."
     files: [README.md, src/config/core/substitutions.rs]
@@ -121,7 +121,7 @@ claims:
   - id: cli-daemon-names
     claim: "daemon-status, daemon-stop"
     class: strict
-    status: stale
+    status: fixed
     action: rewrite
     detail: "Renamed to server-status, server-stop in v2.4."
     files: [README.md, src/cli/mod.rs]
@@ -137,7 +137,7 @@ claims:
   - id: cli-export-name
     claim: "export-sessions"
     class: strict
-    status: stale
+    status: fixed
     action: rewrite
     detail: "Canonical name is 'export'. 'export-sessions' kept as alias."
     files: [README.md]
@@ -213,7 +213,7 @@ claims:
     class: heuristic
     status: overstated
     action: rewrite
-    detail: "learning.json has per-project session stats. No fingerprinting algorithm."
+    detail: "Per-project baselines via Welford's algorithm"
     files: [README.md, src/engines/dream/lore.rs]
 
   - id: rule-effectiveness

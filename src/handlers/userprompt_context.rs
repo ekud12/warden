@@ -494,10 +494,37 @@ pub fn run(_raw: &str) {
 
     // Take top N by budget
     let selected: Vec<String> = candidates
-        .into_iter()
+        .iter()
         .take(advisory_budget)
-        .map(|(_, _, msg)| msg)
+        .map(|(_, _, msg)| msg.clone())
         .collect();
+
+    // Log advisory selection for diagnostics
+    {
+        let selected_cats: Vec<&str> = candidates
+            .iter()
+            .take(advisory_budget)
+            .map(|(_, cat, _)| *cat)
+            .collect();
+        let dropped: Vec<serde_json::Value> = candidates
+            .iter()
+            .skip(advisory_budget)
+            .map(|(u, cat, _)| serde_json::json!({"cat": cat, "utility": u}))
+            .collect();
+        if !selected_cats.is_empty() || !dropped.is_empty() {
+            let selection_data = serde_json::json!({
+                "selected": selected_cats,
+                "dropped_budget": dropped,
+                "trust": trust,
+                "budget": advisory_budget,
+            });
+            common::add_session_note_ext(
+                "advisory_selection",
+                &format!("turn {} selected={} dropped={}", turn, selected_cats.len(), dropped.len()),
+                Some(&selection_data),
+            );
+        }
+    }
 
     // Event-based rule reinjection (replaces periodic)
     let mut parts = selected;

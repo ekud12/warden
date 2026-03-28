@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.6.0] - 2026-03-28
+
+### Audit Grounding Pass
+- README overhauled to stable stub — dynamic version badge, no drifting content, full docs at bitmill.dev
+- Added `docs/feature-maturity.md` — 4-tier classification (deterministic, heuristic, analytics, experimental)
+- Strengthened `doctor intelligence` — last turn, injected/silent, effectiveness scores, trust+budget display
+- Added advisory selection logging to session-notes.jsonl (selected vs dropped categories)
+- Added dream score change logging (intervention effectiveness updates)
+- Enriched MCP `session_status` — focus score, advisory budget, goal, forecast, effectiveness scores
+- Added telemetry flag documentation (11 flags with runtime effect + visibility)
+- Expanded parity script — prohibited wording check, feature maturity validation, dream task honesty
+- Updated claims registry — removed onboarding, softened Project DNA language
+- 6 new intelligence tests (context switch, budget, forecast, struggling phase, reinjection, dream scores)
+
+### Bitmill Docs
+- Dream task table now shows Active/Stub status with cross-links to Feature Maturity page
+- New Feature Maturity docs page with 4-tier classification
+- Softened "Project DNA" to "per-project baselines" throughout
+- Version bumped to v2.6.0
+
 ## [2.5.0] - 2026-03-27
 
 ### Trust & Sync Repair

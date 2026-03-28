@@ -252,7 +252,23 @@ pub fn learn_effectiveness() {
                     && turn.saturating_sub(last_advisory_turn) <= 5
                 {
                     let score = scores.scores.entry(cat.clone()).or_insert(0.5);
-                    *score = (*score + crate::config::DREAM_LEARNING_RATE).min(1.0);
+                    let old_score = *score;
+                    *score = (old_score + crate::config::DREAM_LEARNING_RATE).min(1.0);
+                    // Log score change to session notes
+                    let note = serde_json::json!({
+                        "type": "dream_score_update",
+                        "category": cat,
+                        "old": old_score,
+                        "new": *score,
+                        "reason": "milestone_within_5_turns"
+                    });
+                    let path = common::project_dir().join("session-notes.jsonl");
+                    let _ = std::fs::OpenOptions::new()
+                        .create(true).append(true).open(&path)
+                        .and_then(|mut f| {
+                            use std::io::Write;
+                            writeln!(f, "{}", note)
+                        });
                 }
             }
             _ => {}

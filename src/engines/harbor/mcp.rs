@@ -240,6 +240,78 @@ fn tool_session_status() -> serde_json::Value {
         }
     }
 
+    // ─── Enriched fields ─────────────────────────────────────────────────
+
+    // Trust-based advisory budget
+    let trust = crate::engines::anchor::trust::compute_trust(&state);
+    let advisory_budget = if trust > 85 {
+        1
+    } else if trust > 50 {
+        3
+    } else if trust > 25 {
+        5
+    } else {
+        15
+    };
+    status.push_str(&format!(
+        "\nTrust: {}\nAdvisory budget: {}",
+        trust, advisory_budget
+    ));
+
+    // Session goal
+    if !state.session_goal.is_empty() {
+        status.push_str(&format!("\nSession goal: {}", state.session_goal));
+    }
+
+    // Last phase transition turn
+    if let Some(last_transition) = state.adaptive.transitions.last() {
+        status.push_str(&format!(
+            "\nLast phase transition: turn {} ({} -> {}, {})",
+            last_transition.turn, last_transition.from, last_transition.to, last_transition.reason
+        ));
+    }
+
+    // Intervention effectiveness (top 3 categories from dream scores)
+    let intervention_scores = crate::engines::dream::get_intervention_scores();
+    if !intervention_scores.scores.is_empty() {
+        let mut sorted: Vec<(&String, &f64)> = intervention_scores.scores.iter().collect();
+        sorted.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+        status.push_str("\nIntervention effectiveness (top 3):");
+        for (cat, score) in sorted.iter().take(3) {
+            status.push_str(&format!("\n  {}: {:.2}", cat, score));
+        }
+    }
+
+    // Focus score (directories_touched vs subsystem_switches)
+    if !state.directories_touched.is_empty() {
+        let unique_dirs = state.directories_touched.len() as f64;
+        let focus = if unique_dirs > 0.0 {
+            (1.0 - (state.subsystem_switches as f64 / unique_dirs)).max(0.0)
+        } else {
+            1.0
+        };
+        status.push_str(&format!("\nFocus score: {:.2}", focus));
+    }
+
+    // Compaction forecast (if snapshots available)
+    if state.turn_snapshots.len() >= 3 {
+        let avg_tokens_per_turn = total_tokens / state.turn.max(1) as u64;
+        if avg_tokens_per_turn > 0 {
+            // Claude context ~ 200K tokens; estimate turns until ~80% fill
+            let target = 160_000u64;
+            if total_tokens < target {
+                let remaining = target - total_tokens;
+                let eta_turns = remaining / avg_tokens_per_turn;
+                status.push_str(&format!(
+                    "\nCompaction forecast: ~{} turns until 80% context",
+                    eta_turns
+                ));
+            } else {
+                status.push_str("\nCompaction forecast: context at/above 80%");
+            }
+        }
+    }
+
     text_result(&status)
 }
 

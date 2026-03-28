@@ -1093,122 +1093,135 @@ fn run_doctor_intelligence() {
     let project_dir = common::project_dir();
     let session_path = project_dir.join("session-notes.jsonl");
 
-    // Count events by type from session notes
+    // Count events and find last turn per type
     let mut event_counts: std::collections::HashMap<String, u32> =
+        std::collections::HashMap::new();
+    let mut last_turn: std::collections::HashMap<String, u32> =
         std::collections::HashMap::new();
     if let Ok(content) = std::fs::read_to_string(&session_path) {
         for line in content.lines() {
-            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line)
-                && let Some(t) = entry.get("type").and_then(|v| v.as_str())
-            {
-                *event_counts.entry(t.to_string()).or_default() += 1;
+            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
+                let t = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if !t.is_empty() {
+                    *event_counts.entry(t.to_string()).or_default() += 1;
+                    if let Some(turn_val) = entry.get("turn").and_then(|v| v.as_u64()) {
+                        let e = last_turn.entry(t.to_string()).or_default();
+                        if turn_val as u32 > *e {
+                            *e = turn_val as u32;
+                        }
+                    }
+                }
             }
         }
     }
 
-    term::print_bold(term::TEXT, "\nIntelligence diagnostics\n\n");
+    // Load intervention effectiveness scores
+    let dream_scores = crate::engines::dream::get_intervention_scores();
+
+    // Compute trust
+    let trust = crate::engines::anchor::trust::compute_trust(&state);
+    let budget = if trust > 85 {
+        1
+    } else if trust > 50 {
+        3
+    } else if trust > 25 {
+        5
+    } else {
+        15
+    };
+    let budget_label = if trust > 85 {
+        "minimal"
+    } else if trust > 50 {
+        "normal"
+    } else if trust > 25 {
+        "elevated"
+    } else {
+        "aggressive"
+    };
+
+    let phase = &state.adaptive.phase;
+    term::print_bold(
+        term::TEXT,
+        &format!(
+            "\nIntelligence diagnostics (turn {}, phase: {}, trust: {})\n\n",
+            state.turn, phase, trust
+        ),
+    );
 
     // Table header
     let header = format!(
-        "  {:<24} {:<10} {:<24} {}",
-        "Feature", "Status", "Recent Activity", "Observable via"
+        "  {:<22} {:<8} {:<10} {:<8} {:<10} {}",
+        "Feature", "Status", "Last Turn", "Events", "Injected", "Effect."
     );
     eprintln!("{header}");
-    eprintln!("  {}", "─".repeat(78));
+    eprintln!("  {}", "─".repeat(76));
 
-    // Each feature row
-    let features: Vec<(&str, bool, &str, &str)> = vec![
-        (
-            "phase_detection",
-            true, // always active (compass)
-            "adaptation",
-            "status, tui, MCP",
-        ),
-        (
-            "drift_detection",
-            tel.drift_velocity,
-            "drift",
-            "session notes",
-        ),
-        (
-            "loop_detection",
-            true, // always active (loopbreaker)
-            "loop",
-            "session notes",
-        ),
-        (
-            "compaction_forecast",
-            tel.token_forecast,
-            "forecast",
-            "session notes",
-        ),
-        (
-            "quality_score",
-            tel.quality_predictor,
-            "quality",
-            "MCP session_status",
-        ),
-        (
-            "anomaly_detection",
-            tel.anomaly_detection,
-            "anomaly",
-            "MCP session_status",
-        ),
-        (
-            "goal_extraction",
-            true, // always active
-            "goal",
-            "session notes",
-        ),
-        (
-            "markov_transitions",
-            true, // always active
-            "markov",
-            "session notes",
-        ),
-        (
-            "error_hints",
-            tel.command_recovery,
-            "error_hint",
-            "session notes",
-        ),
-        (
-            "output_compression",
-            tel.smart_truncation,
-            "truncation",
-            "session notes",
-        ),
+    // Feature definitions: (name, enabled, event_key, is_injected)
+    // is_injected: true = competes for advisory budget, false = silent/logged only
+    let features: Vec<(&str, bool, &str, bool)> = vec![
+        ("phase_detection", true, "adaptation", true),
+        ("goal_extraction", true, "goal", true),
+        ("loop_detection", true, "loop", true),
+        ("drift_detection", tel.drift_velocity, "drift", true),
+        ("focus_scoring", true, "focus", true),
+        ("verification_debt", true, "verification", true),
+        ("compaction_forecast", tel.token_forecast, "forecast", false),
+        ("anomaly_detection", tel.anomaly_detection, "anomaly", false),
+        ("quality_score", tel.quality_predictor, "quality", false),
+        ("markov_transitions", true, "markov", false),
+        ("error_hints", tel.command_recovery, "error_hint", true),
+        ("output_compression", tel.smart_truncation, "truncation", false),
     ];
 
-    for (name, enabled, event_key, observable) in &features {
+    for (name, enabled, event_key, is_injected) in &features {
         let status = if *enabled { "active" } else { "off" };
         let count = event_counts.get(*event_key).copied().unwrap_or(0);
-        let activity = if count > 0 {
-            format!("{} events", count)
-        } else {
-            "—".to_string()
+        let last = last_turn.get(*event_key).copied();
+
+        let last_str = match last {
+            Some(t) => format!("turn {}", t),
+            None => "\u{2014}".to_string(),
         };
+        let count_str = if count > 0 {
+            format!("{}", count)
+        } else {
+            "\u{2014}".to_string()
+        };
+        let injected_str = if !*enabled {
+            "off"
+        } else if *is_injected {
+            "yes"
+        } else {
+            "silent"
+        };
+        let effect_str = dream_scores
+            .scores
+            .get(*event_key)
+            .map(|s| format!("{:.2}", s))
+            .unwrap_or_else(|| "\u{2014}".to_string());
 
         let status_color = if *enabled { term::SUCCESS } else { term::DIM };
-        eprint!("  {:<24} ", name);
-        term::print_colored(status_color, &format!("{:<10} ", status));
-        eprintln!("{:<24} {}", activity, observable);
+        eprint!("  {:<22} ", name);
+        term::print_colored(status_color, &format!("{:<8} ", status));
+        eprintln!(
+            "{:<10} {:<8} {:<10} {}",
+            last_str, count_str, injected_str, effect_str
+        );
     }
 
-    // Session context
+    // Footer
     eprintln!();
-    let phase = state.adaptive.phase;
     eprintln!(
-        "  Session: turn {}, phase {}, {} files edited, {} errors",
-        state.turn,
-        phase,
+        "  Advisory budget: {} ({} \u{2014} trust {})",
+        budget, budget_label, trust
+    );
+    if !state.session_goal.is_empty() {
+        eprintln!("  Session goal: \"{}\"", state.session_goal);
+    }
+    eprintln!(
+        "  Files edited: {} | Errors unresolved: {}",
         state.files_edited.len(),
         state.errors_unresolved
     );
-
-    if !state.session_goal.is_empty() {
-        eprintln!("  Goal: {}", state.session_goal);
-    }
-
     eprintln!();
 }

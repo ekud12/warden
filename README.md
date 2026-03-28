@@ -613,22 +613,9 @@ warden explain substitution.grep              # Show rule details + disable comm
 
 ---
 
-## 15. Built With
-
-| Crate | Purpose |
-|-------|---------|
-| `regex` | Pattern compilation + RegexSet for single-pass matching |
-| `serde` + `serde_json` | Serialization for hook JSON, session state, config |
-| `toml` | 3-level TOML configuration parsing |
-| `redb` | Embedded ACID database (session state, events, analytics) |
-| `dashmap` | Lock-free concurrent HashMap for server session cache |
-| `ratatui` + `crossterm` | Terminal UI dashboard + interactive init wizard |
-| `compact_str` | Memory-efficient inline strings |
-| `smallvec` | Stack-allocated bounded vectors |
-
-Rust 2024 edition. AGPL-3.0 license. Built by [Liel Kaysari](https://github.com/ekud12).
-
----
+<p align="center">
+  Rust 2024 edition &bull; AGPL-3.0 license &bull; Built by <a href="https://github.com/ekud12">Liel Kaysari</a>
+</p>
 
 <p align="center">
   <a href="https://bitmill.dev">Docs</a> &bull;

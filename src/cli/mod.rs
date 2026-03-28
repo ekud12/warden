@@ -694,9 +694,10 @@ fn run_cleanup(args: &[String]) {
             // Fallback: use directory mtime when no key files exist
             if latest_mtime == std::time::SystemTime::UNIX_EPOCH
                 && let Ok(meta) = std::fs::metadata(&dir)
-                    && let Ok(mt) = meta.modified() {
-                        latest_mtime = mt;
-                    }
+                && let Ok(mt) = meta.modified()
+            {
+                latest_mtime = mt;
+            }
 
             let age = now.duration_since(latest_mtime).unwrap_or_default();
             if age > stale_threshold {

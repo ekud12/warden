@@ -463,10 +463,9 @@ pub fn run(_raw: &str) {
     // Convention hint: high-confidence project conventions (0.25)
     {
         let conventions = crate::engines::dream::get_conventions();
-        if let Some(conv) = conventions
-            .iter()
-            .find(|c| c.confidence > 0.8 && (c.kind == "build_preference" || c.kind == "common_edit_set"))
-        {
+        if let Some(conv) = conventions.iter().find(|c| {
+            c.confidence > 0.8 && (c.kind == "build_preference" || c.kind == "common_edit_set")
+        }) {
             candidates.push((
                 0.25,
                 "convention",
@@ -477,8 +476,8 @@ pub fn run(_raw: &str) {
 
     // Resume packet injection: after compaction or long inactivity (0.85)
     {
-        let post_compaction = state.last_compaction_turn > 0
-            && state.turn == state.last_compaction_turn + 1;
+        let post_compaction =
+            state.last_compaction_turn > 0 && state.turn == state.last_compaction_turn + 1;
         let long_inactive = {
             let now_epoch = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -493,37 +492,35 @@ pub fn run(_raw: &str) {
             inactive_min >= 10
         };
         if (post_compaction || long_inactive)
-            && let Some(packet) = crate::engines::dream::get_resume_packet() {
-                let mut parts = Vec::new();
-                if !packet.current_issue.is_empty() {
-                    parts.push(format!("Current issue: {}", packet.current_issue));
-                }
-                if !packet.dead_ends.is_empty() {
-                    parts.push(format!("Avoid: {}", packet.dead_ends.join(", ")));
-                }
-                if packet.verification_debt > 0 {
-                    parts.push(format!(
-                        "Verification debt: {} edits unverified",
-                        packet.verification_debt
-                    ));
-                }
-                if !parts.is_empty() {
-                    let trigger = if post_compaction {
-                        "post-compaction"
-                    } else {
-                        "post-inactivity"
-                    };
-                    candidates.push((
-                        0.85,
-                        "resume",
-                        format!("Resume ({}): {}", trigger, parts.join(". ")),
-                    ));
-                    common::add_session_note(
-                        "resume_injection",
-                        &format!("turn {} {}", turn, trigger),
-                    );
-                }
+            && let Some(packet) = crate::engines::dream::get_resume_packet()
+        {
+            let mut parts = Vec::new();
+            if !packet.current_issue.is_empty() {
+                parts.push(format!("Current issue: {}", packet.current_issue));
             }
+            if !packet.dead_ends.is_empty() {
+                parts.push(format!("Avoid: {}", packet.dead_ends.join(", ")));
+            }
+            if packet.verification_debt > 0 {
+                parts.push(format!(
+                    "Verification debt: {} edits unverified",
+                    packet.verification_debt
+                ));
+            }
+            if !parts.is_empty() {
+                let trigger = if post_compaction {
+                    "post-compaction"
+                } else {
+                    "post-inactivity"
+                };
+                candidates.push((
+                    0.85,
+                    "resume",
+                    format!("Resume ({}): {}", trigger, parts.join(". ")),
+                ));
+                common::add_session_note("resume_injection", &format!("turn {} {}", turn, trigger));
+            }
+        }
     }
 
     // Sequence-based next-step suggestion (0.2)
@@ -531,7 +528,10 @@ pub fn run(_raw: &str) {
         let sequences = crate::engines::dream::get_sequences();
         if !sequences.is_empty() && state.action_history.len() >= 2 {
             let len = state.action_history.len();
-            let last2 = (&state.action_history[len - 2], &state.action_history[len - 1]);
+            let last2 = (
+                &state.action_history[len - 2],
+                &state.action_history[len - 1],
+            );
             for seq in sequences.values().filter(|s| s.occurrences >= 3) {
                 if seq.actions.len() >= 3
                     && seq.actions[0] == *last2.0

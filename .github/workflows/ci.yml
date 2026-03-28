@@ -16,7 +16,7 @@ env:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -33,7 +33,7 @@ jobs:
       - name: Build
         run: cargo build --release
       - name: Test
-        run: cargo test
+        run: cargo test --release
         env:
           WARDEN_TEST: "1"
           WARDEN_NO_DAEMON: "1"

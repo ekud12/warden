@@ -1,5 +1,63 @@
 # Changelog
 
+## [2.8.0] - 2026-03-28
+
+### Audit V2 Implementation
+- **Promoted 3 silent signals to injected** — anomaly (z>2.5→pressure), compaction forecast (<5 turns→pressure), goal anchoring (every 5 turns→focus). 10 injected signal categories now, up from 7.
+- **Removed dead code** — `build_files_in_context()` and `shorten_path()` (flagged by audit as unused)
+- **Updated claims registry** — 5 stale claims marked fixed, 5 new v2.6/v2.7 claims added, LangChain/CrewAI/AutoGen removed
+- **Updated feature maturity** — 3 signals promoted from Background Analytics to Runtime Heuristics
+- **Assistant boundary docs** — new bitmill page covering Claude Code + Gemini CLI ownership boundaries
+- **Docs visibility filter** — `public: false` frontmatter hides internal pages from sidebar/search
+- **Claims registry migrated** — warden docs/claims.yaml → bitmill internal page (contributor-only)
+- **Enhanced `warden cleanup`** — now detects and removes stale global files (warden.db, daemon shadows, legacy JSON)
+- **Enhanced `warden doctor`** — warns about stale files, auto-starts server if not running before health check
+
+## [2.7.0] - 2026-03-28
+
+### Per-Project Storage & CLI Hygiene
+- **Per-project redb** — each project gets its own `warden.redb` in `~/.warden/projects/{hash8}/`, replacing the single global `warden.db`. Eliminates cross-project lock contention.
+- **Session notes → redb primary** — `session-notes.jsonl` is now written to redb events table first, JSONL only as fallback. All readers (doctor intelligence, MCP, dream, export) updated to prefer redb.
+- **Auto-migration** — old `warden.db` → `warden.redb` rename on first open
+- **`warden cleanup`** — new command scans for stale project directories (>30 days), supports `--dry-run`, `--force`, `--days N`
+- **Doctor command fixed** — removed stale "Daemon binary missing" check, all output now says "Server" instead of "Daemon"
+- **CLI daemon→server** — all user-facing messages purged of "daemon" terminology
+- **Harbor bridge simplified** — removed aspirational LangChain/CrewAI/AutoGen stubs, kept webhook (shipped)
+- **Bitmill pager fixed** — first docs page no longer shows itself as "next" link (robust slug matching + index guard)
+
+## [2.6.0] - 2026-03-28
+
+### Audit Grounding Pass
+- README overhauled to stable stub — dynamic version badge, no drifting content, full docs at bitmill.dev
+- Added `docs/feature-maturity.md` — 4-tier classification (deterministic, heuristic, analytics, experimental)
+- Strengthened `doctor intelligence` — last turn, injected/silent, effectiveness scores, trust+budget display
+- Added advisory selection logging to session-notes.jsonl (selected vs dropped categories)
+- Added dream score change logging (intervention effectiveness updates)
+- Enriched MCP `session_status` — focus score, advisory budget, goal, forecast, effectiveness scores
+- Added telemetry flag documentation (11 flags with runtime effect + visibility)
+- Expanded parity script — prohibited wording check, feature maturity validation, dream task honesty
+- Updated claims registry — removed onboarding, softened Project DNA language
+- 6 new intelligence tests (context switch, budget, forecast, struggling phase, reinjection, dream scores)
+
+### Bitmill Docs
+- Dream task table now shows Active/Stub status with cross-links to Feature Maturity page
+- New Feature Maturity docs page with 4-tier classification
+- Softened "Project DNA" to "per-project baselines" throughout
+- Version bumped to v2.6.0
+
+## [2.5.0] - 2026-03-27
+
+### Trust & Sync Repair
+- Audited 31 public claims against codebase, created claims registry (docs/claims.yaml)
+- Fixed version badge, latency claims (~2ms → ~10ms), config tiers (4 → 3)
+- Removed unimplemented progressive onboarding claim
+- Reframed intelligence features as heuristics, removed unverified algorithms
+- Enriched check_file MCP: working set, syntax coverage, generated files, error history
+- Added `doctor intelligence` subcommand
+- Added docs/code parity CI script
+- Added intelligence fixture tests
+- Fixed CI test failures: strip CI env vars so session tracking works on GitHub Actions
+
 ## [2.4.0] - 2026-03-27
 
 ### Unified Binary Architecture

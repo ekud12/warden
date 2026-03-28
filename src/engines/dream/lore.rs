@@ -379,6 +379,20 @@ pub fn learn_conventions() {
 use std::fs;
 use std::path::Path;
 
+/// Detect recurring errors from pre-loaded content string.
+pub fn detect_recurring_from_content(content: &str) -> Option<String> {
+    if content.is_empty() {
+        return None;
+    }
+    // Cap input to prevent excessive processing
+    let content = if content.len() > 102_400 {
+        &content[content.len() - 102_400..]
+    } else {
+        content
+    };
+    detect_recurring_inner(content)
+}
+
 /// Detect recurring errors across sessions. Returns advisory if 3+ occurrences.
 pub fn detect_recurring(session_notes_path: &Path) -> Option<String> {
     let content = fs::read_to_string(session_notes_path).ok()?;
@@ -389,7 +403,10 @@ pub fn detect_recurring(session_notes_path: &Path) -> Option<String> {
     } else {
         &content
     };
+    detect_recurring_inner(content)
+}
 
+fn detect_recurring_inner(content: &str) -> Option<String> {
     // Split into sessions by "session-end" markers
     let mut sessions: Vec<Vec<String>> = Vec::new();
     let mut current_errors: Vec<String> = Vec::new();

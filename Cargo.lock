@@ -1695,7 +1695,7 @@ dependencies = [
 
 [[package]]
 name = "warden-ai"
-version = "2.4.0"
+version = "2.8.0"
 dependencies = [
  "candle-core",
  "compact_str 0.9.0",

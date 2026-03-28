@@ -13,6 +13,8 @@ fn run_warden(subcmd: &str, input: &str) -> String {
         .arg(subcmd)
         .env("WARDEN_NO_DAEMON", "1")
         .env("WARDEN_TEST", "1")
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())

@@ -319,38 +319,33 @@ pub fn add_session_note(note_type: &str, detail: &str) {
     add_session_note_ext(note_type, detail, None);
 }
 
-/// Append a JSONL entry with optional structured data field
+/// Append a JSONL entry with optional structured data field.
+/// Primary storage: redb events table. Fallback: session-notes.jsonl file.
 pub fn add_session_note_ext(note_type: &str, detail: &str, data: Option<&serde_json::Value>) {
     if is_test_mode() {
         return;
     }
-    let path = project_dir().join("session-notes.jsonl");
 
-    rotate_if_needed(&path, 102_400, 51_200);
-
-    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let mut entry = serde_json::json!({
-            "ts": now_iso(),
-            "type": note_type,
-            "detail": detail,
-        });
-        if let Some(d) = data {
-            entry["data"] = d.clone();
-        }
-        let _ = writeln!(f, "{}", entry);
+    let mut entry = serde_json::json!({
+        "ts": now_iso(),
+        "type": note_type,
+        "detail": detail,
+    });
+    if let Some(d) = data {
+        entry["data"] = d.clone();
     }
 
-    // Also persist to redb events table when available
+    // Primary: persist to redb events table
     if super::storage::is_available() {
-        let mut entry = serde_json::json!({
-            "ts": now_iso(),
-            "type": note_type,
-            "detail": detail,
-        });
-        if let Some(d) = data {
-            entry["data"] = d.clone();
-        }
         let _ = super::storage::append_event(entry.to_string().as_bytes());
+        return;
+    }
+
+    // Fallback: append to JSONL file when redb unavailable
+    let path = project_dir().join("session-notes.jsonl");
+    rotate_if_needed(&path, 102_400, 51_200);
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "{}", entry);
     }
 }
 

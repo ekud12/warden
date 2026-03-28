@@ -143,8 +143,28 @@ pub fn run(raw: &str) {
     }
 
     // Cross-session recurring errors → redb (silent)
+    // Try redb events first, fall back to JSONL
+    let session_notes_content = if common::storage::is_available() {
+        let raw = common::storage::read_last_events(500);
+        if !raw.is_empty() {
+            let lines: Vec<String> = raw
+                .iter()
+                .filter_map(|e| String::from_utf8(e.clone()).ok())
+                .collect();
+            Some(lines.join("\n"))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let session_path = common::project_dir().join("session-notes.jsonl");
-    if let Some(recurring) = lore::detect_recurring(&session_path) {
+    // detect_recurring reads the file — only use it if redb didn't have data
+    if let Some(recurring) = if session_notes_content.is_some() {
+        lore::detect_recurring_from_content(session_notes_content.as_deref().unwrap_or(""))
+    } else {
+        lore::detect_recurring(&session_path)
+    } {
         let _ = common::storage::write_json("dream", "cross_session_recurring", &recurring);
     }
 

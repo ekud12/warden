@@ -19,41 +19,27 @@ pub fn run(raw: &str) {
         .unwrap_or("unknown");
 
     let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
 
-    // Count session stats from session-notes.jsonl
+    // Count session stats — prefer redb events, fall back to session-notes.jsonl
     let mut edits = 0u32;
     let mut errors = 0u32;
     let mut milestones = 0u32;
 
-    if session_path.exists() {
-        // Read last 10KB for stats (covers most sessions)
-        let tail = common::read_tail(&session_path, 10_240);
-        let lines: Vec<&str> = tail.lines().collect();
+    let event_lines = read_session_events(&project_dir);
+    // Find the last "session-end" entry — only count entries after it
+    let start_idx = event_lines
+        .iter()
+        .rposition(|e| e.get("type").and_then(|v| v.as_str()) == Some("session-end"))
+        .map(|i| i + 1)
+        .unwrap_or(0);
 
-        // Find the last "session-end" entry — only count entries after it
-        // (entries before it belong to a previous session)
-        let start_idx = lines
-            .iter()
-            .rposition(|line| {
-                serde_json::from_str::<serde_json::Value>(line)
-                    .ok()
-                    .and_then(|e| e.get("type")?.as_str().map(|s| s == "session-end"))
-                    .unwrap_or(false)
-            })
-            .map(|i| i + 1) // start AFTER the previous session-end
-            .unwrap_or(0); // no previous session-end → count everything
-
-        for line in &lines[start_idx..] {
-            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-                let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                match note_type {
-                    "edit" => edits += 1,
-                    "error" => errors += 1,
-                    "milestone" => milestones += 1,
-                    _ => {}
-                }
-            }
+    for entry in &event_lines[start_idx..] {
+        let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        match note_type {
+            "edit" => edits += 1,
+            "error" => errors += 1,
+            "milestone" => milestones += 1,
+            _ => {}
         }
     }
 
@@ -355,6 +341,30 @@ fn compute_session_summary(
     let detail = format!("quality={} turns={} edits={}", quality_score, turns, edits);
     common::add_session_note_ext("session-summary", &detail, Some(&data));
     quality_score
+}
+
+/// Read session events: redb primary, session-notes.jsonl fallback.
+fn read_session_events(project_dir: &std::path::Path) -> Vec<serde_json::Value> {
+    // Try redb first
+    if common::storage::is_available() {
+        let raw_events = common::storage::read_last_events(500);
+        if !raw_events.is_empty() {
+            return raw_events
+                .iter()
+                .filter_map(|e| serde_json::from_slice(e).ok())
+                .collect();
+        }
+    }
+    // Fallback: session-notes.jsonl
+    let session_path = project_dir.join("session-notes.jsonl");
+    if session_path.exists() {
+        let tail = common::read_tail(&session_path, 10_240);
+        return tail
+            .lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect();
+    }
+    Vec::new()
 }
 
 /// Detect if current project is the Warden repo itself (for auto-replay regression checks)

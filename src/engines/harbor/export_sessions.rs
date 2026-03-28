@@ -55,19 +55,41 @@ pub fn run(args: &[String]) {
                 .trim()
                 .to_string();
 
-            let session_path = dir.join(crate::constants::SESSION_NOTES_FILE);
-            let content = match fs::read_to_string(&session_path) {
-                Ok(c) => c,
-                Err(_) => continue,
+            // Read events — try redb first, fall back to JSONL
+            let event_entries: Vec<serde_json::Value> = {
+                common::storage::close();
+                common::storage::open_db(&dir);
+                let from_redb = if common::storage::is_available() {
+                    common::storage::read_last_events(1000)
+                        .iter()
+                        .filter_map(|e| serde_json::from_slice(e).ok())
+                        .collect::<Vec<serde_json::Value>>()
+                } else {
+                    Vec::new()
+                };
+                common::storage::close();
+                if !from_redb.is_empty() {
+                    from_redb
+                } else {
+                    let session_path = dir.join(crate::constants::SESSION_NOTES_FILE);
+                    fs::read_to_string(&session_path)
+                        .unwrap_or_default()
+                        .lines()
+                        .filter_map(|line| serde_json::from_str(line).ok())
+                        .collect()
+                }
             };
 
-            // Extract session-summary records (structured data field)
-            for line in content.lines() {
-                let entry = match serde_json::from_str::<serde_json::Value>(line) {
-                    Ok(e) => e,
-                    Err(_) => continue,
-                };
+            if event_entries.is_empty() {
+                continue;
+            }
 
+            let has_summary = event_entries
+                .iter()
+                .any(|e| e.get("type").and_then(|v| v.as_str()) == Some("session-summary"));
+
+            // Extract session-summary records (structured data field)
+            for entry in &event_entries {
                 let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
                 if note_type == "session-summary" {
@@ -84,7 +106,7 @@ pub fn run(args: &[String]) {
                     }
                 } else if note_type == "session-end" {
                     // Fallback for pre-upgrade sessions: count basic stats from detail string
-                    if !content.contains("session-summary") {
+                    if !has_summary {
                         let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
                         let mut fallback = serde_json::json!({
                             "project": project_name,

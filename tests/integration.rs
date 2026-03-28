@@ -19,18 +19,16 @@ fn run_warden(subcmd: &str, input: &str) -> String {
         .arg(subcmd)
         .env("WARDEN_NO_DAEMON", "1")
         .env("WARDEN_TEST", "1")
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
         .spawn()
         .and_then(|mut child| {
             use std::io::Write;
-            child
-                .stdin
-                .take()
-                .unwrap()
-                .write_all(input.as_bytes())
-                .unwrap();
+            // Ignore broken pipe — process may exit before consuming all stdin
+            let _ = child.stdin.take().unwrap().write_all(input.as_bytes());
             child.wait_with_output()
         })
         .expect("failed to run warden");
@@ -42,6 +40,9 @@ fn run_warden_cmd(args: &[&str]) -> String {
     let output = Command::new(exe)
         .args(args)
         .env("WARDEN_NO_DAEMON", "1")
+        .env("WARDEN_TEST", "1")
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output()

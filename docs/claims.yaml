@@ -1,0 +1,349 @@
+# Warden Claims Registry
+# Generated: 2026-03-27 — Trust & Sync Repair Pass (v2.5)
+#
+# Every significant public claim from README.md and bitmill docs.
+# class: strict (deterministic guarantee) | heuristic (best-effort signal) | planned (not yet implemented)
+# status: accurate | overstated | stale | missing | contradictory | inaccurate
+# action: keep | rewrite | delete | implement
+
+claims:
+
+  # ── Version & Badges ──────────────────────────────────────────────
+
+  - id: version-badge
+    claim: "Version badge shows v2.0.0"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Cargo.toml = 2.4.0. Badge 4 versions behind."
+    files: [README.md, Cargo.toml]
+
+  - id: latency-badge
+    claim: "Badge shows <2ms hook latency"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Unified arch = ~10ms IPC. OS process spawn floor = 35ms. Old daemon claim no longer applies."
+    files: [README.md]
+
+  # ── Configuration ──────────────────────────────────────────────────
+
+  - id: config-tiers
+    claim: "4-tier config: compiled → core.toml → personal.toml → project"
+    class: strict
+    status: inaccurate
+    action: rewrite
+    detail: "Code has 3 tiers: compiled defaults → ~/.warden/rules.toml → .warden/rules.toml. No core.toml or personal.toml."
+    files: [README.md, src/rules/mod.rs]
+
+  # ── Onboarding ─────────────────────────────────────────────────────
+
+  - id: progressive-onboarding
+    claim: "Safety-only for first 3 sessions, full features unlock gradually"
+    class: planned
+    status: removed
+    action: deleted from README
+    detail: "Not wired to runtime. Only turn-based thresholds (50/80) exist. Session count tracked but not gated."
+    files: [README.md, src/engines/anchor/session_start.rs]
+
+  # ── MCP Tools ──────────────────────────────────────────────────────
+
+  - id: mcp-tools-count
+    claim: "6 MCP tools"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "session_status, explain_denial, suggest_action, check_file, session_history, reset_context — all functional."
+    files: [src/engines/harbor/mcp.rs]
+
+  - id: mcp-check-file
+    claim: "check_file returns edit safety, known issues, co-change suggestions from git"
+    class: heuristic
+    status: overstated
+    action: rewrite
+    detail: "Returns: already edited?, already read?, sensitive path?, file exists?. No git co-change, no known issues DB."
+    files: [README.md, src/engines/harbor/mcp.rs]
+
+  # ── Pipeline ───────────────────────────────────────────────────────
+
+  - id: pipeline-stages
+    claim: "10-stage linear pipeline"
+    class: strict
+    status: inaccurate
+    action: rewrite
+    detail: "Stages 1-4 combined into Gatekeeper signal bus. 3 undocumented pre-stages (health gate, cd+just, just-passthrough). Actual flow is signal-based, not strictly linear."
+    files: [README.md, src/pretool_bash/mod.rs]
+
+  - id: catch-unwind
+    claim: "catch_unwind per handler — panics fail open"
+    class: strict
+    status: overstated
+    action: rewrite
+    detail: "3 catch_unwind instances in codebase, not per-stage. Hook dispatch level is panic-isolated."
+    files: [README.md]
+
+  # ── Rule Counts ────────────────────────────────────────────────────
+
+  - id: rule-count-total
+    claim: "+300 rules"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "307 total compiled patterns across all categories."
+    files: [src/config/core/]
+
+  - id: rule-count-safety
+    claim: "Safety: 47 patterns"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Actual: 50 patterns."
+    files: [README.md, src/config/core/safety.rs]
+
+  - id: rule-count-hallucination
+    claim: "Hallucination: 50 patterns"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Actual: 48 patterns."
+    files: [README.md, src/config/core/hallucination.rs]
+
+  - id: rule-count-substitution
+    claim: "Substitution: 12 patterns"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Actual: 11 (4 transforms + 7 denials)."
+    files: [README.md, src/config/core/substitutions.rs]
+
+  # ── CLI Commands ───────────────────────────────────────────────────
+
+  - id: cli-daemon-names
+    claim: "daemon-status, daemon-stop"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Renamed to server-status, server-stop in v2.4."
+    files: [README.md, src/cli/mod.rs]
+
+  - id: cli-missing-commands
+    claim: "Command table omits allow, status, server-start, server-restart, session, rules, redb, doctor"
+    class: strict
+    status: missing
+    action: implement
+    detail: "8 public commands in USER_COMMANDS not documented in README."
+    files: [README.md, src/cli/mod.rs]
+
+  - id: cli-export-name
+    claim: "export-sessions"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Canonical name is 'export'. 'export-sessions' kept as alias."
+    files: [README.md]
+
+  # ── Intelligence ───────────────────────────────────────────────────
+
+  - id: session-phases
+    claim: "5 session phases with 8 adapted parameters"
+    class: heuristic
+    status: accurate
+    action: keep
+    detail: "Warmup, Productive, Exploring, Struggling, Late. All threshold-based, deterministic."
+    files: [src/engines/anchor/compass.rs]
+
+  - id: goal-extraction
+    claim: "Extracts session goals from first user message (22 action verbs)"
+    class: heuristic
+    status: accurate
+    action: keep
+    detail: "Real, in analytics/goal.rs. Keyword-based extraction."
+    files: [src/analytics/goal.rs]
+
+  - id: shannon-entropy
+    claim: "Shannon entropy for exploration spiral detection"
+    class: heuristic
+    status: accurate
+    action: keep
+    detail: "Real, in engines/reflex/loopbreaker.rs. H < 1.0 threshold."
+    files: [src/engines/reflex/loopbreaker.rs]
+
+  - id: markov-prediction
+    claim: "Markov prediction for read chains >70%, error loops >50%"
+    class: heuristic
+    status: accurate
+    action: keep
+    detail: "Real, in analytics/markov.rs. Sparse transition matrix."
+    files: [src/analytics/markov.rs]
+
+  - id: compaction-forecast
+    claim: "Linear regression predicts context compaction"
+    class: heuristic
+    status: accurate
+    action: keep
+    detail: "Real, in analytics/forecast.rs. >=5 snapshots required."
+    files: [src/analytics/forecast.rs]
+
+  - id: quality-scoring
+    claim: "Quality scoring (0-100) with Welford anomaly detection"
+    class: heuristic
+    status: accurate
+    action: keep
+    detail: "Real, in analytics/quality.rs + engines/dream/imprint.rs."
+    files: [src/analytics/quality.rs, src/engines/dream/imprint.rs]
+
+  - id: salience-decay
+    claim: "Salience decay"
+    class: planned
+    status: missing
+    action: delete
+    detail: "Not found in codebase."
+    files: [README.md]
+
+  - id: error-prevention-bayesian
+    claim: "Error prevention: Bayesian priors on risky patterns"
+    class: planned
+    status: missing
+    action: rewrite
+    detail: "No Bayesian code. Error hints are pattern-matched recovery suggestions (28 patterns)."
+    files: [README.md, src/config/core/error_hints.rs]
+
+  - id: project-dna
+    claim: "Project DNA: Per-project statistical fingerprint"
+    class: heuristic
+    status: overstated
+    action: rewrite
+    detail: "Per-project baselines via Welford's algorithm"
+    files: [README.md, src/engines/dream/lore.rs]
+
+  - id: rule-effectiveness
+    claim: "Rule effectiveness: Quality delta per rule across sessions"
+    class: planned
+    status: missing
+    action: rewrite
+    detail: "Dream task E5 not implemented. Scaffolding only."
+    files: [README.md]
+
+  - id: drift-detection
+    claim: "Drift detection: Denial density monitoring"
+    class: heuristic
+    status: inaccurate
+    action: rewrite
+    detail: "Drift is keyword-based Jaccard overlap on goal vs recent actions, not denial density."
+    files: [README.md, src/engines/anchor/compass.rs]
+
+  # ── Dream State ────────────────────────────────────────────────────
+
+  - id: dream-tasks
+    claim: "10 prioritized learning tasks"
+    class: heuristic
+    status: overstated
+    action: rewrite
+    detail: "E2 (resume packet) and E3 (working set ranking) are real. E1 is log health check. E4-E10 are stubs."
+    files: [README.md, src/engines/dream/]
+
+  # ── Performance ────────────────────────────────────────────────────
+
+  - id: hook-latency-daemon
+    claim: "~2ms per hook invocation (daemon)"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Unified architecture = ~10ms via IPC. Process spawn overhead is OS-level (~35ms)."
+    files: [README.md]
+
+  - id: hook-latency-cold
+    claim: "~12ms cold (direct execution)"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Cold start with server auto-spawn = ~50ms."
+    files: [README.md]
+
+  - id: binary-size
+    claim: "3.7MB binary"
+    class: strict
+    status: fixed
+    action: rewrite
+    detail: "Needs measurement — binary may be larger after v2.4 additions."
+    files: [README.md]
+
+  - id: regexset-dfa
+    claim: "Single RegexSet DFA pass for all patterns"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "Real, in engines/reflex/compiled.rs. LazyLock initialization."
+    files: [src/engines/reflex/compiled.rs]
+
+  # ── Install ────────────────────────────────────────────────────────
+
+  - id: install-platforms
+    claim: "Releases published to 5 platforms: GitHub, crates.io, npm, Homebrew, Scoop"
+    class: strict
+    status: contradictory
+    action: rewrite
+    detail: "GitHub + crates.io + npm confirmed. Homebrew/Scoop say 'coming soon' in same README."
+    files: [README.md]
+
+  # ── Providers ──────────────────────────────────────────────────────
+
+  - id: providers-directory
+    claim: "Drop scripts in ~/.warden/providers/ for custom context injection"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "Real — session_start.rs reads and executes scripts from providers/ dir."
+    files: [src/engines/anchor/session_start.rs]
+
+  # ── Syntax Validation ──────────────────────────────────────────────
+
+  - id: yaml-validation
+    claim: "YAML validation (implied parity with JSON/TOML)"
+    class: heuristic
+    status: overstated
+    action: rewrite
+    detail: "YAML = lightweight structural checks (tabs, brace/bracket balance). No serde_yaml parsing."
+    files: [README.md, src/engines/anchor/ledger/syntax.rs]
+
+  # ── v2.6/v2.7 Features ───────────────────────────────────────────
+
+  - id: feature-maturity
+    claim: "4-tier feature maturity classification"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "Deterministic, Runtime Heuristics, Background Analytics, Experimental/Infrastructure."
+    files: [docs/feature-maturity.md]
+
+  - id: per-project-redb
+    claim: "Per-project redb storage isolation"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "Each project gets its own redb database file, no cross-contamination."
+    files: [src/engines/anchor/redb.rs]
+
+  - id: cleanup-command
+    claim: "warden cleanup command for stale project dirs"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "CLI command to remove data for projects no longer on disk."
+    files: [src/cli/mod.rs]
+
+  - id: advisory-selection-logging
+    claim: "Advisory selection events logged to session notes"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "Each advisory injection is recorded with category, utility score, and dedup status."
+    files: [src/engines/anchor/advisory.rs]
+
+  - id: doctor-intelligence
+    claim: "Enhanced doctor intelligence with last turn, injected/silent, effectiveness"
+    class: strict
+    status: accurate
+    action: keep
+    detail: "warden doctor intelligence shows last-turn analytics, which signals were injected vs silent, and effectiveness scores."
+    files: [src/cli/doctor.rs]

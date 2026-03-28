@@ -54,25 +54,34 @@ pub fn generate(state: &common::SessionState) -> Option<String> {
         sections.push(read_section);
     }
 
-    // Session notes summary (errors, milestones)
-    let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
-    if session_path.exists() {
-        let content = std::fs::read_to_string(&session_path).unwrap_or_default();
+    // Session notes summary (errors, milestones) — redb primary, JSONL fallback
+    {
+        let event_entries: Vec<serde_json::Value> = if common::storage::is_available() {
+            common::storage::read_last_events(500)
+                .iter()
+                .filter_map(|e| serde_json::from_slice(e).ok())
+                .collect()
+        } else {
+            let project_dir = common::project_dir();
+            let session_path = project_dir.join("session-notes.jsonl");
+            std::fs::read_to_string(&session_path)
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|line| serde_json::from_str(line).ok())
+                .collect()
+        };
         let mut errors = Vec::new();
         let mut milestones = Vec::new();
         let mut edits_count = 0u32;
 
-        for line in content.lines() {
-            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-                let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
-                match note_type {
-                    "error" if errors.len() < 10 => errors.push(detail.to_string()),
-                    "milestone" if milestones.len() < 10 => milestones.push(detail.to_string()),
-                    "edit" => edits_count += 1,
-                    _ => {}
-                }
+        for entry in &event_entries {
+            let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+            match note_type {
+                "error" if errors.len() < 10 => errors.push(detail.to_string()),
+                "milestone" if milestones.len() < 10 => milestones.push(detail.to_string()),
+                "edit" => edits_count += 1,
+                _ => {}
             }
         }
 
@@ -104,7 +113,7 @@ pub fn generate(state: &common::SessionState) -> Option<String> {
     let changelog = sections.join("\n");
 
     // Write to project dir
-    let output_path = project_dir.join("last-session.md");
+    let output_path = common::project_dir().join("last-session.md");
     let _ = std::fs::write(&output_path, &changelog);
     common::log(
         "auto-changelog",

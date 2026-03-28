@@ -2,16 +2,19 @@
 //
 // UserPromptSubmit handler. Runs before Claude processes each user message.
 //
-// 7 consolidated advisory signals (candidates for injection):
-//   1. Safety  (1.0) — drift detection
-//   2. Loop    (0.9) — loop pattern detection
-//   3. Verify  (0.8) — verification debt, read drift, checkpoint
-//   4. Phase   (0.7) — adaptation phase change
-//   5. Recovery(0.6) — error prevention
-//   6. Focus   (0.5) — focus score, explore hint
-//   7. Pressure(0.4) — context pressure, token/cost budget
+// 10 advisory signals (candidates for injection):
+//   1.  Safety  (1.0)  — drift detection
+//   2.  Loop    (0.9)  — loop pattern detection
+//   3.  Verify  (0.8)  — verification debt, read drift, checkpoint
+//   4.  Phase   (0.7)  — adaptation phase change
+//   5.  Recovery(0.6)  — error prevention
+//   6.  Focus   (0.5)  — focus score, explore hint
+//   7.  Pressure(0.4)  — context pressure, token/cost budget
+//   8.  Forecast(0.4)  — compaction forecast (< 5 turns)       [promoted]
+//   9.  Anomaly (0.35) — anomaly detection (z > 2.5)           [promoted]
+//  10.  Goal    (0.3)  — goal anchoring (every 5 turns)        [promoted]
 //
-// All other analytics compute + write redb silently (never candidates).
+// Remaining analytics compute + write redb silently (never candidates).
 // Budget: trust > 85 → top 1, > 50 → top 3, > 25 → top 5, else → 15.
 //
 // Performance target: < 5ms (git subprocess only on cache miss ~50ms)
@@ -199,18 +202,21 @@ pub fn run(_raw: &str) {
     };
 
     // Token budget forecasting: predict compaction ETA
-    let forecast_msg = if tel.token_forecast {
+    // Keep raw forecast for turns_remaining check; format for silent logging
+    let raw_forecast = if tel.token_forecast {
         analytics::forecast::predict_compaction(
             &state.turn_snapshots,
             state.turn,
             state.estimated_tokens_in + state.estimated_tokens_out,
             rules::RULES.token_budget_advisory,
         )
-        .map(|f| analytics::forecast::format_forecast(&f))
-        .filter(|s| !s.is_empty())
     } else {
         None
     };
+    let forecast_msg = raw_forecast
+        .as_ref()
+        .map(|f| analytics::forecast::format_forecast(f))
+        .filter(|s| !s.is_empty());
 
     // Quality prediction: fires at turn 10, then every 5 turns
     let quality_msg = if tel.quality_predictor {
@@ -285,9 +291,6 @@ pub fn run(_raw: &str) {
         None
     };
 
-    // Files-in-context: last 5 files read, sorted by turn (most recent first)
-    let _files_in_context = build_files_in_context(&state);
-
     // Read session-notes.jsonl for recent context
     let project_dir = common::project_dir();
     let _session_path = project_dir.join("session-notes.jsonl");
@@ -313,8 +316,8 @@ pub fn run(_raw: &str) {
     // Collect ALL candidates with utility scores
     let mut candidates: Vec<(f32, &str, String)> = Vec::new(); // (utility, category, message)
 
-    // ── 7 Consolidated Signals (candidates for injection) ──
-    // All analytics still compute + write state. Only 7 categories compete for budget.
+    // ── 10 Consolidated Signals (candidates for injection) ──
+    // All analytics still compute + write state. 10 categories compete for budget.
 
     // 1. Safety (1.0): drift detection
     let drift_threshold: u32 = state.adaptive.params.drift_threshold;
@@ -408,15 +411,53 @@ pub fn run(_raw: &str) {
         }
     }
 
+    // ── Promoted signals (from silent → candidates with threshold gates) ──
+
+    // Anomaly detection: promote when z-score > 2.5 (pressure, 0.35)
+    let anomaly_promoted = anomaly_alerts
+        .first()
+        .filter(|a| a.z_score > 2.5)
+        .map(|a| a.to_string());
+    if let Some(msg) = anomaly_promoted {
+        candidates.push((0.35, "pressure", msg));
+    }
+
+    // Compaction forecast: promote when < 5 turns remaining (pressure, 0.4)
+    if let Some(ref f) = raw_forecast {
+        if f.turns_remaining < 5 {
+            let msg = analytics::forecast::format_forecast(f);
+            if !msg.is_empty() {
+                candidates.push((0.4, "pressure", msg));
+            }
+        }
+    }
+
+    // Goal anchoring: promote every-5-turn reinjection (focus, 0.3)
+    if let Some(msg) = goal_anchor {
+        candidates.push((0.3, "focus", msg));
+    }
+
     // ── Silent signals (logged to redb, never candidates) ──
+    // anomaly (below z>2.5), forecast (>=5 turns), and goal (off-cycle) logged here
+    let anomaly_silent = anomaly_alerts
+        .first()
+        .filter(|a| a.z_score <= 2.5)
+        .map(|a| a.to_string());
+    let forecast_silent = if raw_forecast
+        .as_ref()
+        .map_or(true, |f| f.turns_remaining >= 5)
+    {
+        forecast_msg
+    } else {
+        None
+    };
     for (cat, msg) in [
-        ("anomaly", anomaly_alerts.first().map(|s| s.to_string())),
-        ("forecast", forecast_msg),
+        ("anomaly", anomaly_silent),
+        ("forecast", forecast_silent),
         ("quality", quality_msg),
         ("entropy", entropy_advisory),
         ("markov", markov_advisory),
         ("coherence", coherence_advisory),
-        ("goal", goal_anchor),
         ("git", git_uncommitted),
     ] {
         if let Some(m) = msg {
@@ -494,10 +535,42 @@ pub fn run(_raw: &str) {
 
     // Take top N by budget
     let selected: Vec<String> = candidates
-        .into_iter()
+        .iter()
         .take(advisory_budget)
-        .map(|(_, _, msg)| msg)
+        .map(|(_, _, msg)| msg.clone())
         .collect();
+
+    // Log advisory selection for diagnostics
+    {
+        let selected_cats: Vec<&str> = candidates
+            .iter()
+            .take(advisory_budget)
+            .map(|(_, cat, _)| *cat)
+            .collect();
+        let dropped: Vec<serde_json::Value> = candidates
+            .iter()
+            .skip(advisory_budget)
+            .map(|(u, cat, _)| serde_json::json!({"cat": cat, "utility": u}))
+            .collect();
+        if !selected_cats.is_empty() || !dropped.is_empty() {
+            let selection_data = serde_json::json!({
+                "selected": selected_cats,
+                "dropped_budget": dropped,
+                "trust": trust,
+                "budget": advisory_budget,
+            });
+            common::add_session_note_ext(
+                "advisory_selection",
+                &format!(
+                    "turn {} selected={} dropped={}",
+                    turn,
+                    selected_cats.len(),
+                    dropped.len()
+                ),
+                Some(&selection_data),
+            );
+        }
+    }
 
     // Event-based rule reinjection (replaces periodic)
     let mut parts = selected;
@@ -537,41 +610,6 @@ pub fn run(_raw: &str) {
     } else {
         common::additional_context(&combined);
     }
-}
-
-/// Build compact "files in context" string from recent reads.
-/// Applies salience decay: files read >10 turns ago are dropped,
-/// files read >5 turns ago are marked as stale.
-fn build_files_in_context(state: &common::SessionState) -> String {
-    if state.files_read.is_empty() {
-        return String::new();
-    }
-
-    let turn = state.turn;
-
-    // Sort by turn descending, filter by salience
-    let mut entries: Vec<(&String, &common::FileReadEntry)> = state
-        .files_read
-        .iter()
-        .filter(|(_, entry)| turn.saturating_sub(entry.turn) <= 10) // salience decay: drop after 10 turns
-        .collect();
-    entries.sort_by(|a, b| b.1.turn.cmp(&a.1.turn));
-
-    let items: Vec<String> = entries
-        .iter()
-        .take(5)
-        .map(|(path, entry)| {
-            let short = shorten_path(path);
-            let age = turn.saturating_sub(entry.turn);
-            if age > 5 {
-                format!("{} (t{}, stale)", short, entry.turn)
-            } else {
-                format!("{} (t{})", short, entry.turn)
-            }
-        })
-        .collect();
-
-    items.join(", ")
 }
 
 /// Detect context switch: >60% of rolling working set dirs are NOT in initial set
@@ -629,17 +667,6 @@ fn should_reinject_rules(state: &common::SessionState) -> bool {
     }
 
     false
-}
-
-/// Shorten path to last 2 components
-fn shorten_path(path: &str) -> String {
-    let normalized = path.replace('\\', "/");
-    let parts: Vec<&str> = normalized.rsplit('/').take(2).collect();
-    if parts.len() >= 2 {
-        format!("{}/{}", parts[1], parts[0])
-    } else {
-        parts.first().unwrap_or(&path).to_string()
-    }
 }
 
 // ─── Heuristic advisories from turn snapshots ──────────────────────────────

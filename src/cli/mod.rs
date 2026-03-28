@@ -35,6 +35,7 @@ pub const USER_COMMANDS: &[&str] = &[
     "rules",
     "session",
     "redb",
+    "cleanup",
 ];
 
 pub fn run(subcmd: &str, args: &[String]) {
@@ -164,7 +165,12 @@ pub fn run(subcmd: &str, args: &[String]) {
         }
 
         "doctor" => {
-            install::update::run_doctor();
+            let sub = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            if sub == "intelligence" {
+                run_doctor_intelligence();
+            } else {
+                install::update::run_doctor();
+            }
         }
 
         // ── Config commands ──
@@ -473,7 +479,7 @@ pub fn run(subcmd: &str, args: &[String]) {
                 "stats" => {
                     let events = common::storage::read_last_events(10000);
                     let diags = common::storage::read_last_diagnostics(10000);
-                    eprintln!("  Database: {}/warden.db", project_dir.display());
+                    eprintln!("  Database: {}/warden.redb", project_dir.display());
                     eprintln!("  Events:      {}", events.len());
                     eprintln!("  Diagnostics: {}", diags.len());
                     // Show table keys for dream/resume/stats
@@ -557,11 +563,23 @@ pub fn run(subcmd: &str, args: &[String]) {
                                 .unwrap_or_else(|_| "unknown".into())
                                 .trim()
                                 .to_string();
-                            let state_path = dir.join("session-state.json");
-                            if let Ok(content) = std::fs::read_to_string(&state_path)
-                                && let Ok(state) =
-                                    serde_json::from_str::<serde_json::Value>(&content)
-                            {
+                            // Try redb first, fall back to JSON
+                            let state_opt: Option<serde_json::Value> = {
+                                common::storage::close();
+                                common::storage::open_db(&dir);
+                                common::storage::read_json::<serde_json::Value>(
+                                    "session_state",
+                                    "current",
+                                )
+                            }
+                            .or_else(|| {
+                                let state_path = dir.join("session-state.json");
+                                std::fs::read_to_string(&state_path)
+                                    .ok()
+                                    .and_then(|c| serde_json::from_str(&c).ok())
+                            });
+                            common::storage::close();
+                            if let Some(state) = state_opt {
                                 let turns = state["turn"].as_u64().unwrap_or(0);
                                 let phase = state["adaptive"]["phase"].as_str().unwrap_or("?");
                                 eprintln!(
@@ -583,6 +601,10 @@ pub fn run(subcmd: &str, args: &[String]) {
                 }
                 _ => eprintln!("Usage: {} session [list|end]", constants::NAME),
             }
+        }
+
+        "cleanup" => {
+            run_cleanup(args);
         }
 
         _ => {
@@ -616,6 +638,214 @@ pub fn run(subcmd: &str, args: &[String]) {
             process::exit(0);
         }
     }
+}
+
+fn run_cleanup(args: &[String]) {
+    use install::term;
+    let dry_run = args.iter().any(|a| a == "--dry-run" || a == "-n");
+    let force = args.iter().any(|a| a == "--force" || a == "-f");
+    let stale_days: u64 = args
+        .iter()
+        .position(|a| a == "--days")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
+
+    let projects_dir = common::hooks_dir().join("projects");
+    if !projects_dir.exists() {
+        eprintln!("No projects directory found.");
+        return;
+    }
+
+    let now = std::time::SystemTime::now();
+    let stale_threshold = std::time::Duration::from_secs(stale_days * 86400);
+    let mut stale_dirs: Vec<(std::path::PathBuf, String, u64)> = Vec::new();
+    let mut active_count = 0u32;
+
+    if let Ok(entries) = std::fs::read_dir(&projects_dir) {
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            if !dir.is_dir() {
+                continue;
+            }
+            let hash = entry.file_name().to_string_lossy().to_string();
+            let project_name = std::fs::read_to_string(dir.join("project.txt"))
+                .unwrap_or_else(|_| "unknown".into())
+                .trim()
+                .to_string();
+
+            // Check most recent mtime across key files
+            let mut latest_mtime = std::time::SystemTime::UNIX_EPOCH;
+            for name in [
+                "warden.redb",
+                "warden.db",
+                "session-state.json",
+                "session-notes.jsonl",
+            ] {
+                let p = dir.join(name);
+                if let Ok(meta) = std::fs::metadata(&p) {
+                    if let Ok(mt) = meta.modified() {
+                        if mt > latest_mtime {
+                            latest_mtime = mt;
+                        }
+                    }
+                }
+            }
+
+            let age = now.duration_since(latest_mtime).unwrap_or_default();
+            if age > stale_threshold {
+                let days = age.as_secs() / 86400;
+                stale_dirs.push((dir, format!("{} ({})", project_name, hash), days));
+            } else {
+                active_count += 1;
+            }
+        }
+    }
+
+    // Check for old global warden.db (kept for backward compat — also in stale_global below)
+    let global_db = common::hooks_dir().join("warden.db");
+    let has_global_db = global_db.exists();
+
+    // Check all stale global files in ~/.warden/
+    let home = install::home_dir();
+    let stale_global = find_stale_global_files(&home);
+
+    if stale_dirs.is_empty() && !has_global_db && stale_global.is_empty() {
+        eprintln!("Nothing to clean up. {} active project(s).", active_count);
+        return;
+    }
+
+    eprintln!(
+        "Found {} stale project(s) (>{} days), {} active.",
+        stale_dirs.len(),
+        stale_days,
+        active_count
+    );
+
+    if !stale_dirs.is_empty() {
+        eprintln!();
+        for (_, name, days) in &stale_dirs {
+            eprintln!("  {} ({} days old)", name, days);
+        }
+    }
+
+    if has_global_db {
+        eprintln!();
+        eprintln!("  Legacy global warden.db found at {}", global_db.display());
+    }
+
+    if !stale_global.is_empty() {
+        eprintln!();
+        eprintln!("Stale global files in {}:", home.display());
+        for (path, reason) in &stale_global {
+            let name = path.file_name().unwrap_or_default().to_string_lossy();
+            term::print_colored(term::WARN, &format!("  {}", name));
+            term::print_colored(term::DIM, &format!(" — {}\n", reason));
+        }
+    }
+
+    if dry_run {
+        eprintln!(
+            "\nDry run — no changes made. {} stale project(s), {} stale file(s). Use --force to delete.",
+            stale_dirs.len(),
+            stale_global.len()
+        );
+        return;
+    }
+
+    if !force {
+        eprintln!();
+        eprint!("Delete stale projects? [y/N] ");
+        use std::io::BufRead;
+        let mut answer = String::new();
+        let _ = std::io::stdin().lock().read_line(&mut answer);
+        if !answer.trim().eq_ignore_ascii_case("y") {
+            eprintln!("Aborted.");
+            return;
+        }
+    }
+
+    let mut deleted = 0u32;
+    for (dir, name, _) in &stale_dirs {
+        match std::fs::remove_dir_all(dir) {
+            Ok(_) => {
+                term::print_colored(term::SUCCESS, &format!("  Deleted: {}\n", name));
+                deleted += 1;
+            }
+            Err(e) => {
+                term::print_colored(
+                    term::ERROR,
+                    &format!("  Failed to delete {}: {}\n", name, e),
+                );
+            }
+        }
+    }
+
+    // ── Remove stale global files ──
+    let mut stale_files_removed = 0u32;
+    for (path, _) in &stale_global {
+        match std::fs::remove_file(path) {
+            Ok(_) => {
+                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                term::print_colored(term::SUCCESS, &format!("  Removed: {}\n", name));
+                stale_files_removed += 1;
+            }
+            Err(e) => {
+                term::print_colored(
+                    term::ERROR,
+                    &format!("  Failed to remove {}: {}\n", path.display(), e),
+                );
+            }
+        }
+    }
+
+    let total = deleted + stale_files_removed;
+    if total > 0 {
+        eprintln!(
+            "\nCleaned up {} project(s), {} stale file(s).",
+            deleted, stale_files_removed
+        );
+    } else {
+        eprintln!("\nCleaned up {} project(s).", deleted);
+    }
+}
+
+/// Scan ~/.warden/ for known stale/legacy files and return (path, reason) pairs.
+pub fn find_stale_global_files(home: &std::path::Path) -> Vec<(std::path::PathBuf, &'static str)> {
+    let candidates: &[(&str, &str)] = &[
+        ("warden.db", "old global DB, replaced by per-project redb"),
+        ("daemon-restarts.json", "legacy daemon tracking file"),
+        ("proc-state.json", "legacy ephemeral process state"),
+        ("stats.json", "legacy global stats, now per-project"),
+        (
+            "session-state.json",
+            "legacy global session state, now per-project",
+        ),
+    ];
+
+    let mut stale = Vec::new();
+
+    for &(name, reason) in candidates {
+        let path = home.join(name);
+        if path.exists() {
+            stale.push((path, reason));
+        }
+    }
+
+    // Glob for warden-daemon-*.exe shadow copies (pre-v2.4)
+    if let Ok(entries) = std::fs::read_dir(home) {
+        for entry in entries.flatten() {
+            let fname = entry.file_name().to_string_lossy().to_string();
+            if fname.starts_with("warden-daemon-") && fname.ends_with(".exe") {
+                stale.push((
+                    entry.path(),
+                    "pre-v2.4 daemon shadow copy, no longer needed",
+                ));
+            }
+        }
+    }
+
+    stale
 }
 
 fn install_assistant<A: assistant::Assistant + Default>() {
@@ -1078,5 +1308,156 @@ fn print_help() {
     );
     eprintln!();
     term::print_colored(term::DIM, "  https://github.com/ekud12/warden\n");
+    eprintln!();
+}
+
+fn run_doctor_intelligence() {
+    use install::term;
+    let tel = &config::CONFIG.telemetry;
+    let state = common::read_session_state();
+    let project_dir = common::project_dir();
+
+    // Count events and find last turn per type — prefer redb, fall back to JSONL
+    let mut event_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let mut last_turn: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+    let event_entries: Vec<serde_json::Value> = if common::storage::is_available() {
+        let raw = common::storage::read_last_events(1000);
+        raw.iter()
+            .filter_map(|e| serde_json::from_slice(e).ok())
+            .collect()
+    } else {
+        let session_path = project_dir.join("session-notes.jsonl");
+        std::fs::read_to_string(&session_path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| serde_json::from_str(line).ok())
+            .collect()
+    };
+    for entry in &event_entries {
+        let t = entry.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        if !t.is_empty() {
+            *event_counts.entry(t.to_string()).or_default() += 1;
+            if let Some(turn_val) = entry.get("turn").and_then(|v| v.as_u64()) {
+                let e = last_turn.entry(t.to_string()).or_default();
+                if turn_val as u32 > *e {
+                    *e = turn_val as u32;
+                }
+            }
+        }
+    }
+
+    // Load intervention effectiveness scores
+    let dream_scores = crate::engines::dream::get_intervention_scores();
+
+    // Compute trust
+    let trust = crate::engines::anchor::trust::compute_trust(&state);
+    let budget = if trust > 85 {
+        1
+    } else if trust > 50 {
+        3
+    } else if trust > 25 {
+        5
+    } else {
+        15
+    };
+    let budget_label = if trust > 85 {
+        "minimal"
+    } else if trust > 50 {
+        "normal"
+    } else if trust > 25 {
+        "elevated"
+    } else {
+        "aggressive"
+    };
+
+    let phase = &state.adaptive.phase;
+    term::print_bold(
+        term::TEXT,
+        &format!(
+            "\nIntelligence diagnostics (turn {}, phase: {}, trust: {})\n\n",
+            state.turn, phase, trust
+        ),
+    );
+
+    // Table header
+    let header = format!(
+        "  {:<22} {:<8} {:<10} {:<8} {:<10} {}",
+        "Feature", "Status", "Last Turn", "Events", "Injected", "Effect."
+    );
+    eprintln!("{header}");
+    eprintln!("  {}", "─".repeat(76));
+
+    // Feature definitions: (name, enabled, event_key, is_injected)
+    // is_injected: true = competes for advisory budget, false = silent/logged only
+    let features: Vec<(&str, bool, &str, bool)> = vec![
+        ("phase_detection", true, "adaptation", true),
+        ("goal_extraction", true, "goal", true),
+        ("loop_detection", true, "loop", true),
+        ("drift_detection", tel.drift_velocity, "drift", true),
+        ("focus_scoring", true, "focus", true),
+        ("verification_debt", true, "verification", true),
+        ("compaction_forecast", tel.token_forecast, "forecast", false),
+        ("anomaly_detection", tel.anomaly_detection, "anomaly", false),
+        ("quality_score", tel.quality_predictor, "quality", false),
+        ("markov_transitions", true, "markov", false),
+        ("error_hints", tel.command_recovery, "error_hint", true),
+        (
+            "output_compression",
+            tel.smart_truncation,
+            "truncation",
+            false,
+        ),
+    ];
+
+    for (name, enabled, event_key, is_injected) in &features {
+        let status = if *enabled { "active" } else { "off" };
+        let count = event_counts.get(*event_key).copied().unwrap_or(0);
+        let last = last_turn.get(*event_key).copied();
+
+        let last_str = match last {
+            Some(t) => format!("turn {}", t),
+            None => "\u{2014}".to_string(),
+        };
+        let count_str = if count > 0 {
+            format!("{}", count)
+        } else {
+            "\u{2014}".to_string()
+        };
+        let injected_str = if !*enabled {
+            "off"
+        } else if *is_injected {
+            "yes"
+        } else {
+            "silent"
+        };
+        let effect_str = dream_scores
+            .scores
+            .get(*event_key)
+            .map(|s| format!("{:.2}", s))
+            .unwrap_or_else(|| "\u{2014}".to_string());
+
+        let status_color = if *enabled { term::SUCCESS } else { term::DIM };
+        eprint!("  {:<22} ", name);
+        term::print_colored(status_color, &format!("{:<8} ", status));
+        eprintln!(
+            "{:<10} {:<8} {:<10} {}",
+            last_str, count_str, injected_str, effect_str
+        );
+    }
+
+    // Footer
+    eprintln!();
+    eprintln!(
+        "  Advisory budget: {} ({} \u{2014} trust {})",
+        budget, budget_label, trust
+    );
+    if !state.session_goal.is_empty() {
+        eprintln!("  Session goal: \"{}\"", state.session_goal);
+    }
+    eprintln!(
+        "  Files edited: {} | Errors unresolved: {}",
+        state.files_edited.len(),
+        state.errors_unresolved
+    );
     eprintln!();
 }

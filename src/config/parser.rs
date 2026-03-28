@@ -30,6 +30,21 @@ fn default_auto() -> String {
     "auto".to_string()
 }
 
+/// Telemetry feature flags — each controls a specific runtime behavior:
+///
+/// | Flag | Runtime effect | Visible via |
+/// |------|---------------|-------------|
+/// | `anomaly_detection` | Gates Welford z-score check in userprompt_context | MCP session_status (silent) |
+/// | `quality_predictor` | Gates quality score computation every 5 turns | MCP session_status (silent) |
+/// | `cost_tracking` | Gates token/cost accounting in turn snapshots | session-notes.jsonl |
+/// | `error_prevention` | Gates error hint recovery suggestions | Injected advisory |
+/// | `token_forecast` | Gates compaction ETA prediction | session-notes.jsonl (silent) |
+/// | `smart_truncation` | Gates output compression optimization | Affects tool output directly |
+/// | `project_dna` | Gates per-project baseline updates on session end | learning.json |
+/// | `rule_effectiveness` | Gates rule firing quality correlation | rule-effectiveness.json (stub) |
+/// | `drift_velocity` | Gates goal-action divergence detection | Injected advisory |
+/// | `compaction_optimizer` | Gates snapshot-based forecast | session-notes.jsonl (silent) |
+/// | `command_recovery` | Gates PostToolUseFailure recovery hints | Injected advisory |
 #[derive(Deserialize)]
 #[serde(default)]
 pub struct TelemetryConfig {

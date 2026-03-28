@@ -240,6 +240,78 @@ fn tool_session_status() -> serde_json::Value {
         }
     }
 
+    // ─── Enriched fields ─────────────────────────────────────────────────
+
+    // Trust-based advisory budget
+    let trust = crate::engines::anchor::trust::compute_trust(&state);
+    let advisory_budget = if trust > 85 {
+        1
+    } else if trust > 50 {
+        3
+    } else if trust > 25 {
+        5
+    } else {
+        15
+    };
+    status.push_str(&format!(
+        "\nTrust: {}\nAdvisory budget: {}",
+        trust, advisory_budget
+    ));
+
+    // Session goal
+    if !state.session_goal.is_empty() {
+        status.push_str(&format!("\nSession goal: {}", state.session_goal));
+    }
+
+    // Last phase transition turn
+    if let Some(last_transition) = state.adaptive.transitions.last() {
+        status.push_str(&format!(
+            "\nLast phase transition: turn {} ({} -> {}, {})",
+            last_transition.turn, last_transition.from, last_transition.to, last_transition.reason
+        ));
+    }
+
+    // Intervention effectiveness (top 3 categories from dream scores)
+    let intervention_scores = crate::engines::dream::get_intervention_scores();
+    if !intervention_scores.scores.is_empty() {
+        let mut sorted: Vec<(&String, &f64)> = intervention_scores.scores.iter().collect();
+        sorted.sort_by(|a, b| b.1.partial_cmp(a.1).unwrap_or(std::cmp::Ordering::Equal));
+        status.push_str("\nIntervention effectiveness (top 3):");
+        for (cat, score) in sorted.iter().take(3) {
+            status.push_str(&format!("\n  {}: {:.2}", cat, score));
+        }
+    }
+
+    // Focus score (directories_touched vs subsystem_switches)
+    if !state.directories_touched.is_empty() {
+        let unique_dirs = state.directories_touched.len() as f64;
+        let focus = if unique_dirs > 0.0 {
+            (1.0 - (state.subsystem_switches as f64 / unique_dirs)).max(0.0)
+        } else {
+            1.0
+        };
+        status.push_str(&format!("\nFocus score: {:.2}", focus));
+    }
+
+    // Compaction forecast (if snapshots available)
+    if state.turn_snapshots.len() >= 3 {
+        let avg_tokens_per_turn = total_tokens / state.turn.max(1) as u64;
+        if avg_tokens_per_turn > 0 {
+            // Claude context ~ 200K tokens; estimate turns until ~80% fill
+            let target = 160_000u64;
+            if total_tokens < target {
+                let remaining = target - total_tokens;
+                let eta_turns = remaining / avg_tokens_per_turn;
+                status.push_str(&format!(
+                    "\nCompaction forecast: ~{} turns until 80% context",
+                    eta_turns
+                ));
+            } else {
+                status.push_str("\nCompaction forecast: context at/above 80%");
+            }
+        }
+    }
+
     text_result(&status)
 }
 
@@ -314,7 +386,11 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
 
     // Check if already edited this session
     if state.files_edited.contains(&path.to_string()) {
-        info.push(format!("Already edited this session: {}", path));
+        let edit_turn = state.last_edit_turn;
+        info.push(format!(
+            "Edited this session (last edit: turn {})",
+            edit_turn
+        ));
     }
 
     // Check if already read
@@ -325,12 +401,55 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
         ));
     }
 
-    // Check sensitive paths
+    // Working set membership
+    let dir = std::path::Path::new(path)
+        .parent()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if state.initial_working_set.contains(&dir) {
+        info.push("In initial working set (core focus area)".to_string());
+    } else if state.rolling_working_set.contains(&dir) {
+        info.push("In rolling working set (recently active)".to_string());
+    }
+
+    // Syntax validation coverage
+    let ext = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    match ext {
+        "json" => info.push("Syntax: JSON — full parse validation on edit".to_string()),
+        "toml" => info.push("Syntax: TOML — full parse validation on edit".to_string()),
+        "yaml" | "yml" => {
+            info.push("Syntax: YAML — lightweight structural checks on edit".to_string())
+        }
+        _ => {}
+    }
+
+    // Likely generated file heuristic
     let short = path
         .rsplit('/')
         .next()
         .or_else(|| path.rsplit('\\').next())
         .unwrap_or(path);
+    let generated = [
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "Cargo.lock",
+        "Gemfile.lock",
+        "poetry.lock",
+        "composer.lock",
+    ];
+    let generated_ext = [".min.js", ".min.css", ".map", ".d.ts"];
+    if generated.contains(&short) || generated_ext.iter().any(|e| short.ends_with(e)) {
+        info.push(format!(
+            "GENERATED: {} is likely a generated/lock file. Edits may be overwritten.",
+            short
+        ));
+    }
+
+    // Check sensitive paths
     let sensitive = [
         ".env",
         "credentials",
@@ -345,6 +464,35 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
             "SENSITIVE: {} matches a sensitive file pattern. Edit with caution.",
             short
         ));
+    }
+
+    // Recent errors mentioning this file — try redb first, fall back to JSONL
+    {
+        let events = if common::storage::is_available() {
+            common::storage::read_last_events(100)
+                .iter()
+                .filter_map(|e| String::from_utf8(e.clone()).ok())
+                .collect::<Vec<_>>()
+        } else {
+            let session_path = common::project_dir().join("session-notes.jsonl");
+            std::fs::read_to_string(&session_path)
+                .unwrap_or_default()
+                .lines()
+                .rev()
+                .take(100)
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        };
+        let error_count = events
+            .iter()
+            .filter(|line| line.contains("\"error\"") && line.contains(short))
+            .count();
+        if error_count > 0 {
+            info.push(format!(
+                "Recent errors: {} error(s) in session notes mention this file",
+                error_count
+            ));
+        }
     }
 
     // Check if file exists
@@ -363,29 +511,52 @@ fn tool_check_file(arguments: &serde_json::Value) -> serde_json::Value {
 }
 
 fn tool_session_history() -> serde_json::Value {
-    let project_dir = common::project_dir();
-    let session_path = project_dir.join("session-notes.jsonl");
-
-    let content = match std::fs::read_to_string(&session_path) {
-        Ok(c) => c,
-        Err(_) => return text_result("No session history available."),
-    };
-
-    let lines: Vec<&str> = content.lines().collect();
-    let recent = if lines.len() > 20 {
-        &lines[lines.len() - 20..]
+    // Try redb events first, fall back to session-notes.jsonl
+    let entries: Vec<serde_json::Value> = if common::storage::is_available() {
+        let raw = common::storage::read_last_events(20);
+        if !raw.is_empty() {
+            raw.iter()
+                .filter_map(|e| serde_json::from_slice(e).ok())
+                .collect()
+        } else {
+            Vec::new()
+        }
     } else {
-        &lines
+        Vec::new()
     };
+
+    let entries = if entries.is_empty() {
+        // Fallback: session-notes.jsonl
+        let session_path = common::project_dir().join("session-notes.jsonl");
+        match std::fs::read_to_string(&session_path) {
+            Ok(c) => {
+                let lines: Vec<&str> = c.lines().collect();
+                let recent = if lines.len() > 20 {
+                    &lines[lines.len() - 20..]
+                } else {
+                    &lines
+                };
+                recent
+                    .iter()
+                    .filter_map(|line| serde_json::from_str(line).ok())
+                    .collect()
+            }
+            Err(_) => return text_result("No session history available."),
+        }
+    } else {
+        entries
+    };
+
+    if entries.is_empty() {
+        return text_result("No session history available.");
+    }
 
     let mut history = String::from("Recent session events:\n");
-    for line in recent {
-        if let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) {
-            let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("?");
-            let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
-            let ts = entry.get("ts").and_then(|v| v.as_str()).unwrap_or("");
-            history.push_str(&format!("[{}] {} — {}\n", note_type, detail, ts));
-        }
+    for entry in &entries {
+        let note_type = entry.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+        let detail = entry.get("detail").and_then(|v| v.as_str()).unwrap_or("");
+        let ts = entry.get("ts").and_then(|v| v.as_str()).unwrap_or("");
+        history.push_str(&format!("[{}] {} — {}\n", note_type, detail, ts));
     }
 
     text_result(&history)

@@ -17,6 +17,8 @@ fn fire_hook(subcmd: &str, input: &str, cwd: &str) -> std::time::Duration {
         .arg(subcmd)
         .env("WARDEN_NO_DAEMON", "1")
         .env("WARDEN_TEST", "1")
+        .env_remove("CI")
+        .env_remove("GITHUB_ACTIONS")
         .current_dir(cwd)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -104,6 +106,7 @@ fn cwd_hash8(cwd: &str) -> String {
 // ─── Latency Tests ──────────────────────────────────────────────────────────
 
 #[test]
+#[ignore] // benchmark — run with: cargo test -- --ignored
 fn perf_pretool_bash_safe_command() {
     let dir = test_dir("pretool");
     let cwd = dir.path().to_string_lossy().to_string();
@@ -134,6 +137,7 @@ fn perf_pretool_bash_safe_command() {
 }
 
 #[test]
+#[ignore] // benchmark — run with: cargo test -- --ignored
 fn perf_pretool_bash_denied_command() {
     let dir = test_dir("deny");
     let cwd = dir.path().to_string_lossy().to_string();
@@ -159,6 +163,7 @@ fn perf_pretool_bash_denied_command() {
 }
 
 #[test]
+#[ignore] // benchmark — run with: cargo test -- --ignored
 fn perf_posttool_session_bash() {
     let dir = test_dir("posttool");
     let cwd = dir.path().to_string_lossy().to_string();
@@ -186,6 +191,7 @@ fn perf_posttool_session_bash() {
 }
 
 #[test]
+#[ignore] // benchmark — run with: cargo test -- --ignored
 fn perf_userprompt_context() {
     let dir = test_dir("userprompt");
     let cwd = dir.path().to_string_lossy().to_string();
@@ -210,6 +216,7 @@ fn perf_userprompt_context() {
 }
 
 #[test]
+#[ignore] // benchmark — run with: cargo test -- --ignored
 fn perf_session_state_size() {
     let dir = test_dir("statesize");
     let cwd = dir.path().to_string_lossy().to_string();

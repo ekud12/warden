@@ -38,11 +38,14 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG=v$VERSION" >> "$GITHUB_ENV"
 
-      - name: Check tag doesn't already exist
+      - name: Check tag status
+        id: tag_check
         run: |
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "::error::Tag $TAG already exists. Delete it first or use a different version."
-            exit 1
+            echo "Tag $TAG already exists — skipping tag creation"
+            echo "TAG_EXISTS=true" >> "$GITHUB_ENV"
+          else
+            echo "TAG_EXISTS=false" >> "$GITHUB_ENV"
           fi
 
       - name: Verify Cargo.toml version matches
@@ -59,12 +62,20 @@ jobs:
         run: cargo test --release
 
       - name: Create and push tag
+        if: env.TAG_EXISTS == 'false'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
           echo "::notice::Tag $TAG created and pushed. Release workflow will trigger automatically."
+
+      - name: Tag already exists — trigger release workflow manually
+        if: env.TAG_EXISTS == 'true'
+        run: |
+          echo "::notice::Tag $TAG exists. Triggering release workflow via workflow_dispatch is not supported for tag-triggered workflows."
+          echo "::notice::The release.yml workflow triggers on tag push. Since tag already exists, you may need to delete and re-push it."
+          echo "To fix: gh api repos/${{ github.repository }}/git/refs/tags/$TAG -X DELETE && gh api repos/${{ github.repository }}/git/refs -f ref=refs/tags/$TAG -f sha=$(git rev-parse HEAD)"
 
       - name: Summary
         run: |

@@ -1,6 +1,6 @@
 [package]
 name = "warden-ai"
-version = "2.9.0"
+version = "2.10.0"
 edition = "2024"
 description = "Runtime control layer for AI coding agents: policy enforcement, drift reduction, and context efficiency"
 license = "AGPL-3.0-only"
@@ -23,6 +23,7 @@ redb = "3"
 dashmap = "6"
 compact_str = { version = "0.9", features = ["serde"] }
 smallvec = { version = "1", features = ["serde"] }
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

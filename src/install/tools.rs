@@ -182,17 +182,24 @@ pub fn install_command(tool: &ToolInfo, pm: &str) -> Option<&'static str> {
     }
 }
 
-/// Install a tool using a shell command
+/// Install a tool using a shell command.
+/// Handles quoted arguments and paths with spaces via platform shell.
 pub fn install_tool(cmd: &str) -> Result<(), String> {
-    let parts: Vec<&str> = cmd.split_whitespace().collect();
-    if parts.is_empty() {
+    if cmd.trim().is_empty() {
         return Err("Empty install command".to_string());
     }
 
-    let status = Command::new(parts[0])
-        .args(&parts[1..])
-        .status()
-        .map_err(|e| format!("Failed to run '{}': {}", cmd, e))?;
+    // Run through platform shell to properly handle quoting and paths with spaces
+    let status = if cfg!(windows) {
+        Command::new("cmd")
+            .args(["/C", cmd])
+            .status()
+    } else {
+        Command::new("sh")
+            .args(["-c", cmd])
+            .status()
+    }
+    .map_err(|e| format!("Failed to run '{}': {}", cmd, e))?;
 
     if status.success() {
         Ok(())

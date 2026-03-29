@@ -1,4 +1,4 @@
-#![allow(dead_code)] // Application binary: many functions are called indirectly via handler dispatch
+#![allow(dead_code)] // Handler dispatch is indirect; serialized structs need fields for deserialization
 // ─── warden — AI Coding Session Guardian ─────────────────────────────────────
 //
 // Single-binary runtime intelligence layer for AI coding assistants.

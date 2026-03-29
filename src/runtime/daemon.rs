@@ -135,7 +135,7 @@ pub fn run_server(source_mtime: u64) {
                 }
 
                 // Handle status query
-                if request.subcmd == "daemon-status" {
+                if request.subcmd == "server-status" {
                     let response = DaemonResponse {
                         stdout: format!(
                             "{{\"pid\":{},\"mtime\":{},\"version\":\"{}\",\"started_at\":{}}}",
@@ -321,10 +321,6 @@ fn accept_connection() -> Option<ServerPipe> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-    use windows_sys::Win32::Security::{
-        InitializeSecurityDescriptor, SECURITY_ATTRIBUTES, SECURITY_DESCRIPTOR,
-        SetSecurityDescriptorDacl,
-    };
     use windows_sys::Win32::System::Pipes::{
         ConnectNamedPipe, CreateNamedPipeW, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_WAIT,
     };
@@ -335,24 +331,15 @@ fn accept_connection() -> Option<ServerPipe> {
         .chain(std::iter::once(0))
         .collect();
 
-    // Build a security descriptor with a null DACL restricted to current user.
-    // A null DACL grants full access only to the owner (the current process user).
-    // SAFETY: sd is stack-allocated and lives for the duration of CreateNamedPipeW.
-    let mut sd: SECURITY_DESCRIPTOR = unsafe { std::mem::zeroed() };
-    unsafe {
-        // SECURITY_DESCRIPTOR_REVISION = 1
-        InitializeSecurityDescriptor(&mut sd as *mut _ as *mut _, 1);
-        // Setting bDaclPresent=true with pDacl=null creates an empty DACL (deny all except owner)
-        SetSecurityDescriptorDacl(&mut sd as *mut _ as *mut _, 1, std::ptr::null(), 0);
-    }
-
-    let mut sa = SECURITY_ATTRIBUTES {
-        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: &mut sd as *mut _ as *mut _,
-        bInheritHandle: 0,
-    };
-
-    // SAFETY: wide_path is null-terminated; sa is valid for pipe lifetime; handle checked below.
+    // Use null security attributes → inherits default DACL from process token.
+    // The default DACL restricts access to the current user, SYSTEM, and Administrators.
+    // This is correct for a per-user daemon pipe.
+    //
+    // NOTE: The previous implementation used a null DACL (SetSecurityDescriptorDacl with
+    // pDacl=NULL), which grants EVERYONE full access — the opposite of the intended behavior.
+    // Passing null SA is both simpler and more secure.
+    //
+    // SAFETY: wide_path is null-terminated; handle checked below.
     unsafe {
         let handle = CreateNamedPipeW(
             wide_path.as_ptr(),
@@ -362,7 +349,7 @@ fn accept_connection() -> Option<ServerPipe> {
             4096, // out buffer
             4096, // in buffer
             100,  // default timeout ms
-            &mut sa as *mut _ as *const _,
+            std::ptr::null(),
         );
 
         if handle == INVALID_HANDLE_VALUE {

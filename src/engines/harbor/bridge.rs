@@ -63,10 +63,10 @@ pub fn fire_webhook(event_type: &str, payload: &serde_json::Value) {
     });
 }
 
-/// HTTP POST using raw TCP (no external HTTP crate needed).
-/// Best-effort: failures are logged silently.
-fn post_webhook(url: &str, auth: &str, body: &str, _timeout_ms: u64) {
-    // Parse URL to extract host and path
+/// HTTP POST via xh or curl (no external HTTP crate needed).
+/// Best-effort: failures are logged silently. Honors timeout_ms.
+fn post_webhook(url: &str, auth: &str, body: &str, timeout_ms: u64) {
+    // Parse URL to extract host and path for logging
     let url_trimmed = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))
@@ -76,11 +76,14 @@ fn post_webhook(url: &str, auth: &str, body: &str, _timeout_ms: u64) {
         None => (url_trimmed, "/"),
     };
 
+    let timeout_secs = std::cmp::max(1, timeout_ms / 1000);
+
     // Use subprocess for HTTP (xh or curl) since we don't have an HTTP crate
     let mut args = vec![
         "POST".to_string(),
         url.to_string(),
         format!("Content-Type:application/json"),
+        format!("--timeout={}", timeout_secs),
     ];
     if !auth.is_empty() {
         args.push(format!("Authorization:{}", auth));
@@ -102,21 +105,34 @@ fn post_webhook(url: &str, auth: &str, body: &str, _timeout_ms: u64) {
         });
 
     if result.is_err() {
-        // Fallback to curl
-        let _ = std::process::Command::new("curl")
-            .args([
-                "-s",
-                "-X",
-                "POST",
-                "-H",
-                "Content-Type: application/json",
-                "-d",
-                body,
-                url,
-            ])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
+        // Fallback to curl — include auth header and timeout
+        let mut curl_args = vec![
+            "-s",
+            "-X",
+            "POST",
+            "-H",
+            "Content-Type: application/json",
+            "--max-time",
+        ];
+        let timeout_str = timeout_secs.to_string();
+        curl_args.push(&timeout_str);
+        if !auth.is_empty() {
+            curl_args.push("-H");
+            let auth_header = format!("Authorization: {}", auth);
+            let _ = std::process::Command::new("curl")
+                .args(&curl_args)
+                .args(["-H", &auth_header, "-d", body, url])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        } else {
+            let _ = std::process::Command::new("curl")
+                .args(&curl_args)
+                .args(["-d", body, url])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
     }
 
     crate::common::log("bridge", &format!("Webhook fired: {} → {}", host, path));

@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.10.0] - 2026-03-28
+
+### Critical — IPC Security
+- **Fixed Windows named pipe DACL** — null DACL granted world-open access (CRITICAL). Removed DACL manipulation entirely; uses process token default (current user + SYSTEM + Admins only)
+- **Fixed server-status naming mismatch** — CLI sent "server-status" but daemon handled "daemon-status". Normalized to "server-status" everywhere
+
+### High — Supply Chain & Safety
+- **SHA-256 checksum verification** — update flow and npm postinstall now verify downloaded binaries against published checksums-sha256.txt. Fail closed on mismatch
+- **Safety-critical handlers fail closed** — pretool-bash, pretool-write, pretool-read, pretool-redirect, permission-approve now exit 1 on panic (was exit 0). Advisory handlers remain fail-open
+- **Added sha2 crate** for cryptographic hash verification
+
+### Medium — Operational Integrity
+- **Fixed package version/license drift** — all manifests (npm, brew, scoop, winget) updated to v2.9.0 + AGPL-3.0-only (were MIT at various stale versions)
+- **Narrowed privacy claim** — "100% local during hook execution" replaces misleading "zero network calls"
+- **Fixed webhook delivery** — auth header now passed in curl fallback, timeout_ms honored
+- **Subprocess stderr captured** — SubprocessResult now includes stderr field (was discarded)
+- **Storage performance** — cached DB handle via with_db() closure (no reopen per call), reverse iteration for read_last_events/diagnostics (no full table scan)
+
+### Quick Wins
+- **Tool install parsing** — uses platform shell instead of split_whitespace (handles paths with spaces)
+- **cargo audit in CI** — automated vulnerability scanning added to CI pipeline
+
 ## [2.9.0] - 2026-03-28
 
 ### Evidence Consolidation (Audit V3 — Phase 1)

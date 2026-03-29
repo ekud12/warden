@@ -81,9 +81,20 @@ fn dispatch_hook_ci(subcmd: &str, raw: &str) {
     }
 }
 
+/// Safety-critical handlers that deny dangerous operations. On panic, these fail CLOSED
+/// (exit 1 = deny) to prevent a crash from silently disabling enforcement.
+const SAFETY_CRITICAL: &[&str] = &[
+    "pretool-bash",
+    "pretool-write",
+    "pretool-read",
+    "pretool-redirect",
+    "permission-approve",
+];
+
 fn dispatch_hook(subcmd: &str, raw: &str) {
-    // Panic isolation: catch_unwind ensures a panicking handler never blocks the AI.
-    // Fail open: on panic, log error and exit 0.
+    // Panic isolation: catch_unwind ensures a panicking handler never crashes the AI process.
+    // Safety-critical handlers fail CLOSED on panic (exit 1 = deny).
+    // Advisory handlers fail OPEN on panic (exit 0 = allow).
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match subcmd {
         "pretool-bash" => handlers::pretool_bash::run(raw),
         "pretool-read" => handlers::pretool_read::run(raw),
@@ -105,12 +116,19 @@ fn dispatch_hook(subcmd: &str, raw: &str) {
         _ => {}
     }));
     if result.is_err() {
+        let is_safety = SAFETY_CRITICAL.contains(&subcmd);
+        let mode = if is_safety { "closed (deny)" } else { "open (allow)" };
         eprintln!(
-            "{}: handler '{}' panicked — failing open",
-            constants::NAME,
-            subcmd
+            "{}: handler '{}' panicked — failing {}",
+            constants::NAME, subcmd, mode
         );
         // Flight recorder: log panics for post-mortem analysis
-        common::storage::append_diagnostic("panic", &format!("handler '{}' panicked", subcmd));
+        common::storage::append_diagnostic(
+            "panic",
+            &format!("handler '{}' panicked — fail-{}", subcmd, mode),
+        );
+        if is_safety {
+            std::process::exit(1);
+        }
     }
 }

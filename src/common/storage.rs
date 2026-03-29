@@ -28,8 +28,10 @@ const RESUME_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("resume_
 /// Key: timestamp nanos. Value: JSON blob. Bounded to last 500 entries.
 const DIAGNOSTICS_TABLE: TableDefinition<u64, &[u8]> = TableDefinition::new("diagnostics");
 
-/// Global DB path (set once on open, used for lazy re-open)
-static DB_PATH: LazyLock<Mutex<Option<PathBuf>>> = LazyLock::new(|| Mutex::new(None));
+/// Cached DB handle — opened once, reused across calls.
+/// Avoids the overhead of `Database::create()` on every read/write.
+static DB_HANDLE: LazyLock<Mutex<Option<(PathBuf, Database)>>> =
+    LazyLock::new(|| Mutex::new(None));
 
 /// Open the database for a project directory. Stores path for future access.
 pub fn open_db(project_dir: &Path) -> Option<()> {
@@ -53,153 +55,144 @@ pub fn open_db(project_dir: &Path) -> Option<()> {
     }
     write_txn.commit().ok()?;
 
-    if let Ok(mut path) = DB_PATH.lock() {
-        *path = Some(db_path);
+    if let Ok(mut handle) = DB_HANDLE.lock() {
+        *handle = Some((db_path.clone(), db));
     }
     Some(())
 }
 
-/// Get an open Database handle (opens from stored path)
-fn get_db() -> Option<Database> {
-    let path = DB_PATH.lock().ok()?.clone()?;
-    Database::create(&path).ok()
+/// Execute a closure with a reference to the cached Database handle.
+/// Returns None if the DB isn't open yet.
+fn with_db<F, R>(f: F) -> Option<R>
+where
+    F: FnOnce(&Database) -> Option<R>,
+{
+    let guard = DB_HANDLE.lock().ok()?;
+    let (_, db) = guard.as_ref()?;
+    f(db)
 }
 
 /// Read a value from a named table
 pub fn read_key(table_name: &str, key: &str) -> Option<Vec<u8>> {
-    let db = get_db()?;
-    let read_txn = db.begin_read().ok()?;
     let table_def = resolve_table(table_name)?;
-    let table = read_txn.open_table(table_def).ok()?;
-    let value = table.get(key).ok()??;
-    Some(value.value().to_vec())
+    with_db(|db| {
+        let read_txn = db.begin_read().ok()?;
+        let table = read_txn.open_table(table_def).ok()?;
+        let value = table.get(key).ok()??;
+        Some(value.value().to_vec())
+    })
 }
 
 /// Write a value to a named table
 pub fn write_key(table_name: &str, key: &str, value: &[u8]) -> Option<()> {
-    let db = get_db()?;
-    let write_txn = db.begin_write().ok()?;
-    {
-        let table_def = resolve_table(table_name)?;
-        let mut table = write_txn.open_table(table_def).ok()?;
-        table.insert(key, value).ok()?;
-    }
-    write_txn.commit().ok()?;
-    Some(())
+    let table_def = resolve_table(table_name)?;
+    with_db(|db| {
+        let write_txn = db.begin_write().ok()?;
+        {
+            let mut table = write_txn.open_table(table_def).ok()?;
+            table.insert(key, value).ok()?;
+        }
+        write_txn.commit().ok()?;
+        Some(())
+    })
 }
 
 /// Append an event to the events table (keyed by timestamp nanos)
 pub fn append_event(value: &[u8]) -> Option<()> {
-    let db = get_db()?;
-    let write_txn = db.begin_write().ok()?;
-    {
-        let mut table = write_txn.open_table(EVENTS_TABLE).ok()?;
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
-        table.insert(ts, value).ok()?;
-    }
-    write_txn.commit().ok()?;
-    Some(())
+    with_db(|db| {
+        let write_txn = db.begin_write().ok()?;
+        {
+            let mut table = write_txn.open_table(EVENTS_TABLE).ok()?;
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64;
+            table.insert(ts, value).ok()?;
+        }
+        write_txn.commit().ok()?;
+        Some(())
+    })
 }
 
 /// Append a diagnostic entry to the flight recorder.
 /// Used for internal errors, unexpected states, handler timings, and mishaps.
 /// Bounded to 500 entries (old entries pruned on write).
 pub fn append_diagnostic(category: &str, detail: &str) -> Option<()> {
-    let db = get_db()?;
-    let write_txn = db.begin_write().ok()?;
-    {
-        let mut table = write_txn.open_table(DIAGNOSTICS_TABLE).ok()?;
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
-        let entry = serde_json::json!({
-            "ts": ts,
-            "cat": category,
-            "detail": detail,
-        });
-        if let Ok(bytes) = serde_json::to_vec(&entry) {
-            table.insert(ts, bytes.as_slice()).ok()?;
-        }
+    with_db(|db| {
+        let write_txn = db.begin_write().ok()?;
+        {
+            let mut table = write_txn.open_table(DIAGNOSTICS_TABLE).ok()?;
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos() as u64;
+            let entry = serde_json::json!({
+                "ts": ts,
+                "cat": category,
+                "detail": detail,
+            });
+            if let Ok(bytes) = serde_json::to_vec(&entry) {
+                table.insert(ts, bytes.as_slice()).ok()?;
+            }
 
-        // Prune: keep only last 500 entries (count via iter)
-        let count = table.iter().ok().map(|i| i.count()).unwrap_or(0);
-        if count > 500 {
-            let to_remove: Vec<u64> = table
-                .iter()
-                .ok()
-                .map(|iter| {
-                    iter.filter_map(|e| e.ok().map(|(k, _)| k.value()))
-                        .take(count - 500)
-                        .collect()
-                })
-                .unwrap_or_default();
-            for key in to_remove {
-                let _ = table.remove(key);
+            // Prune: keep only last 500 entries (count via iter)
+            let count = table.iter().ok().map(|i| i.count()).unwrap_or(0);
+            if count > 500 {
+                let to_remove: Vec<u64> = table
+                    .iter()
+                    .ok()
+                    .map(|iter| {
+                        iter.filter_map(|e| e.ok().map(|(k, _)| k.value()))
+                            .take(count - 500)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for key in to_remove {
+                    let _ = table.remove(key);
+                }
             }
         }
-    }
-    write_txn.commit().ok()?;
-    Some(())
+        write_txn.commit().ok()?;
+        Some(())
+    })
 }
 
-/// Read the last N diagnostic entries
+/// Read the last N diagnostic entries (reverse iteration — no full table scan)
 pub fn read_last_diagnostics(count: usize) -> Vec<serde_json::Value> {
-    let db = match get_db() {
-        Some(d) => d,
-        None => return Vec::new(),
-    };
-    let read_txn = match db.begin_read() {
-        Ok(t) => t,
-        Err(_) => return Vec::new(),
-    };
-    let table = match read_txn.open_table(DIAGNOSTICS_TABLE) {
-        Ok(t) => t,
-        Err(_) => return Vec::new(),
-    };
-    let mut results = Vec::with_capacity(count);
-    if let Ok(iter) = table.iter() {
-        let all: Vec<serde_json::Value> = iter
+    with_db(|db| {
+        let read_txn = db.begin_read().ok()?;
+        let table = read_txn.open_table(DIAGNOSTICS_TABLE).ok()?;
+        let iter = table.iter().ok()?;
+        let mut results: Vec<serde_json::Value> = iter
+            .rev()
+            .take(count)
             .filter_map(|entry| {
                 entry
                     .ok()
                     .and_then(|(_, v)| serde_json::from_slice(v.value()).ok())
             })
             .collect();
-        let start = all.len().saturating_sub(count);
-        results.extend_from_slice(&all[start..]);
-    }
-    results
+        results.reverse(); // restore chronological order
+        Some(results)
+    })
+    .unwrap_or_default()
 }
 
-/// Read the last N events (most recent)
+/// Read the last N events (reverse iteration — no full table scan)
 pub fn read_last_events(count: usize) -> Vec<Vec<u8>> {
-    let db = match get_db() {
-        Some(d) => d,
-        None => return Vec::new(),
-    };
-    let read_txn = match db.begin_read() {
-        Ok(t) => t,
-        Err(_) => return Vec::new(),
-    };
-    let table = match read_txn.open_table(EVENTS_TABLE) {
-        Ok(t) => t,
-        Err(_) => return Vec::new(),
-    };
-
-    // Reverse iterate to get last N
-    let mut results: Vec<Vec<u8>> = Vec::with_capacity(count);
-    if let Ok(iter) = table.iter() {
-        let all: Vec<Vec<u8>> = iter
+    with_db(|db| {
+        let read_txn = db.begin_read().ok()?;
+        let table = read_txn.open_table(EVENTS_TABLE).ok()?;
+        let iter = table.iter().ok()?;
+        let mut results: Vec<Vec<u8>> = iter
+            .rev()
+            .take(count)
             .filter_map(|entry| entry.ok().map(|(_, v)| v.value().to_vec()))
             .collect();
-        let start = all.len().saturating_sub(count);
-        results.extend_from_slice(&all[start..]);
-    }
-    results
+        results.reverse(); // restore chronological order
+        Some(results)
+    })
+    .unwrap_or_default()
 }
 
 /// Read a typed value from the DB, deserializing from JSON
@@ -216,7 +209,7 @@ pub fn write_json<T: serde::Serialize>(table: &str, key: &str, value: &T) -> Opt
 
 /// Check if the DB is open and available
 pub fn is_available() -> bool {
-    DB_PATH.lock().ok().map(|p| p.is_some()).unwrap_or(false)
+    DB_HANDLE.lock().ok().map(|h| h.is_some()).unwrap_or(false)
 }
 
 /// Get the DB file path for a project directory
@@ -226,8 +219,8 @@ pub fn db_path(project_dir: &Path) -> PathBuf {
 
 /// Close the database
 pub fn close() {
-    if let Ok(mut path) = DB_PATH.lock() {
-        *path = None;
+    if let Ok(mut handle) = DB_HANDLE.lock() {
+        *handle = None;
     }
 }
 

@@ -9,6 +9,7 @@ const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct SubprocessResult {
     pub stdout: String,
+    pub stderr: String,
     pub exit_code: i32,
 }
 
@@ -27,11 +28,16 @@ pub fn run_with_timeout(cmd: &str, args: &[&str], timeout: Duration) -> Option<S
         match child.try_wait() {
             Ok(Some(status)) => {
                 let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
                 if let Some(mut out) = child.stdout.take() {
                     let _ = std::io::Read::read_to_end(&mut out, &mut stdout);
                 }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = std::io::Read::read_to_end(&mut err, &mut stderr);
+                }
                 return Some(SubprocessResult {
                     stdout: String::from_utf8_lossy(&stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&stderr).into_owned(),
                     exit_code: status.code().unwrap_or(-1),
                 });
             }
@@ -67,7 +73,7 @@ pub fn run_with_stdin(
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .ok()?;
 
@@ -81,11 +87,16 @@ pub fn run_with_stdin(
         match child.try_wait() {
             Ok(Some(status)) => {
                 let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
                 if let Some(mut out) = child.stdout.take() {
                     let _ = std::io::Read::read_to_end(&mut out, &mut stdout);
                 }
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = std::io::Read::read_to_end(&mut err, &mut stderr);
+                }
                 return Some(SubprocessResult {
                     stdout: String::from_utf8_lossy(&stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&stderr).into_owned(),
                     exit_code: status.code().unwrap_or(-1),
                 });
             }

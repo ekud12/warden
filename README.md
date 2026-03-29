@@ -210,7 +210,7 @@ Full docs at **[bitmill.dev](https://bitmill.dev)**:
 
 ## Privacy
 
-Warden is **100% local, 100% offline**. Zero network calls. Zero telemetry. Zero data collection. Your code never leaves your machine. AGPL-3.0 licensed — free and open source.
+Warden is **100% local during hook execution**. Zero telemetry. Zero data collection. Your code never leaves your machine. The `update` and `install` commands download binaries from GitHub Releases — no background network activity, no automatic phone-home. AGPL-3.0 licensed — free and open source.
 
 ---
 

@@ -323,6 +323,37 @@ fn apply_standalone(info: &ReleaseInfo) {
 
     spinner.finish_ok("downloaded");
 
+    // Verify SHA-256 checksum against published checksums-sha256.txt
+    let checksums_url = format!(
+        "https://github.com/ekud12/warden/releases/download/{}/checksums-sha256.txt",
+        info.tag
+    );
+    match verify_checksum(&tmp, &checksums_url, &asset_name) {
+        Ok(true) => {
+            term::print_colored(term::SUCCESS, "  ✓ Checksum verified\n");
+        }
+        Ok(false) => {
+            term::print_colored(
+                term::ERROR,
+                "  ✗ Checksum mismatch — downloaded binary does not match published hash.\n",
+            );
+            term::print_colored(
+                term::ERROR,
+                "    This could indicate a corrupted download or tampered release.\n",
+            );
+            let _ = std::fs::remove_file(&tmp);
+            eprintln!();
+            return;
+        }
+        Err(msg) => {
+            // Warn but don't block — checksums file may not exist for older releases
+            term::print_colored(
+                term::WARN,
+                &format!("  ⚠ Could not verify checksum: {}\n", msg),
+            );
+        }
+    }
+
     // Swap binary with rollback guarantee
     if let Err(msg) = swap_binary(&exe, &tmp) {
         term::print_colored(term::ERROR, &format!("  {}\n", msg));
@@ -394,6 +425,68 @@ fn detect_target() -> &'static str {
     } else {
         "x86_64-unknown-linux-gnu"
     }
+}
+
+/// Verify SHA-256 checksum of a downloaded file against published checksums.
+/// Returns Ok(true) if match, Ok(false) if mismatch, Err if checksums unavailable.
+fn verify_checksum(
+    file: &std::path::Path,
+    checksums_url: &str,
+    asset_name: &str,
+) -> Result<bool, String> {
+    use sha2::{Digest, Sha256};
+
+    // Fetch checksums file
+    let checksums_output = if cfg!(windows) {
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "(Invoke-WebRequest -Uri '{}' -Headers @{{'User-Agent'='warden'}}).Content",
+                    checksums_url
+                ),
+            ])
+            .output()
+    } else {
+        std::process::Command::new("sh")
+            .args([
+                "-c",
+                &format!("curl -sL -H 'User-Agent: warden' '{}'", checksums_url),
+            ])
+            .output()
+    };
+
+    let output = checksums_output.map_err(|e| format!("fetch failed: {}", e))?;
+    if !output.status.success() {
+        return Err("checksums file not available for this release".to_string());
+    }
+
+    let checksums_text = String::from_utf8_lossy(&output.stdout);
+    if checksums_text.trim().is_empty() {
+        return Err("checksums file is empty".to_string());
+    }
+
+    // Parse checksums file (format: "hash  filename" per line)
+    let expected_hash = checksums_text
+        .lines()
+        .find_map(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 && parts[1] == asset_name {
+                Some(parts[0].to_lowercase())
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| format!("no checksum found for {}", asset_name))?;
+
+    // Compute SHA-256 of downloaded file
+    let file_bytes = std::fs::read(file).map_err(|e| format!("read failed: {}", e))?;
+    let mut hasher = Sha256::new();
+    hasher.update(&file_bytes);
+    let actual_hash = format!("{:x}", hasher.finalize());
+
+    Ok(actual_hash == expected_hash)
 }
 
 fn post_update_verify() {
@@ -621,7 +714,7 @@ fn doctor_server_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
     // Check PID file first
     let pid = crate::runtime::ipc::read_pid();
 
-    match crate::runtime::ipc::try_daemon("daemon-status", "") {
+    match crate::runtime::ipc::try_daemon("server-status", "") {
         Some(resp) if resp.exit_code == 0 => {
             // Parse the status JSON
             let status: serde_json::Value = serde_json::from_str(&resp.stdout).unwrap_or_default();
@@ -702,7 +795,7 @@ fn doctor_server_health(ok_count: &mut u32, warn_count: &mut u32, cli_version: &
                 std::thread::sleep(std::time::Duration::from_millis(500));
 
                 // Retry health check after spawn
-                match crate::runtime::ipc::try_daemon("daemon-status", "") {
+                match crate::runtime::ipc::try_daemon("server-status", "") {
                     Some(resp) if resp.exit_code == 0 => {
                         let status: serde_json::Value =
                             serde_json::from_str(&resp.stdout).unwrap_or_default();

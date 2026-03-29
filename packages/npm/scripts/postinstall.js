@@ -65,6 +65,33 @@ async function main() {
       throw new Error("Downloaded file is empty (asset may not exist in release)");
     }
 
+    // Verify SHA-256 checksum against published checksums
+    const checksumsUrl = `https://github.com/${REPO}/releases/download/v${VERSION}/checksums-sha256.txt`;
+    try {
+      const checksumsFile = path.join(binDir, "checksums-sha256.txt");
+      await download(checksumsUrl, checksumsFile);
+      const checksums = fs.readFileSync(checksumsFile, "utf8");
+      const expected = checksums.split("\n")
+        .map(line => line.trim().split(/\s+/))
+        .find(parts => parts.length >= 2 && parts[1] === binary);
+      if (expected) {
+        const crypto = require("crypto");
+        const fileBuffer = fs.readFileSync(dest);
+        const actual = crypto.createHash("sha256").update(fileBuffer).digest("hex");
+        if (actual !== expected[0].toLowerCase()) {
+          fs.unlinkSync(dest);
+          throw new Error(`Checksum mismatch for ${binary}: expected ${expected[0]}, got ${actual}`);
+        }
+        console.log("✓ Checksum verified");
+      } else {
+        console.warn(`⚠ No checksum found for ${binary} in checksums file`);
+      }
+      fs.unlinkSync(checksumsFile);
+    } catch (checksumErr) {
+      if (checksumErr.message.includes("Checksum mismatch")) throw checksumErr;
+      console.warn(`⚠ Could not verify checksum: ${checksumErr.message}`);
+    }
+
     if (os.platform() === "win32") {
       try { fs.unlinkSync(dest + ":Zone.Identifier"); } catch (e) {}
     } else {

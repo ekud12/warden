@@ -1,13 +1,13 @@
 PackageIdentifier: ekud12.warden
-PackageVersion: 1.0.0
+PackageVersion: 2.10.0
 PackageName: Warden
 Publisher: Liel Kaysari
-License: MIT
+License: AGPL-3.0-only
 ShortDescription: AI Coding Session Guardian
 PackageUrl: https://github.com/ekud12/warden
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/ekud12/warden/releases/download/v1.0.0/warden-x86_64-pc-windows-msvc.exe
+    InstallerUrl: https://github.com/ekud12/warden/releases/download/v2.10.0/warden-x86_64-pc-windows-msvc.exe
     InstallerType: portable
     InstallerSha256: PLACEHOLDER
 ManifestType: singleton

@@ -1,10 +1,10 @@
 {
   "name": "@bitmilldev/warden",
-  "version": "2.1.0",
+  "version": "2.10.0",
   "description": "AI Coding Session Guardian — runtime intelligence layer for Claude Code, Gemini CLI, and more",
   "keywords": ["ai", "coding", "hooks", "claude", "gemini", "guardian", "session"],
   "author": "Liel Kaysari (ekud12)",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/ekud12/warden"

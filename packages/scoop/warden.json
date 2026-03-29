@@ -1,11 +1,11 @@
 {
-  "version": "2.0.0",
+  "version": "2.10.0",
   "description": "Runtime control layer for AI coding agents",
   "homepage": "https://github.com/ekud12/warden",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/ekud12/warden/releases/download/v2.0.0/warden-x86_64-pc-windows-msvc.exe",
+      "url": "https://github.com/ekud12/warden/releases/download/v2.10.0/warden-x86_64-pc-windows-msvc.exe",
       "hash": "PLACEHOLDER"
     }
   },

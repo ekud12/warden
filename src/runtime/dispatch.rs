@@ -117,10 +117,16 @@ fn dispatch_hook(subcmd: &str, raw: &str) {
     }));
     if result.is_err() {
         let is_safety = SAFETY_CRITICAL.contains(&subcmd);
-        let mode = if is_safety { "closed (deny)" } else { "open (allow)" };
+        let mode = if is_safety {
+            "closed (deny)"
+        } else {
+            "open (allow)"
+        };
         eprintln!(
             "{}: handler '{}' panicked — failing {}",
-            constants::NAME, subcmd, mode
+            constants::NAME,
+            subcmd,
+            mode
         );
         // Flight recorder: log panics for post-mortem analysis
         common::storage::append_diagnostic(

@@ -191,13 +191,9 @@ pub fn install_tool(cmd: &str) -> Result<(), String> {
 
     // Run through platform shell to properly handle quoting and paths with spaces
     let status = if cfg!(windows) {
-        Command::new("cmd")
-            .args(["/C", cmd])
-            .status()
+        Command::new("cmd").args(["/C", cmd]).status()
     } else {
-        Command::new("sh")
-            .args(["-c", cmd])
-            .status()
+        Command::new("sh").args(["-c", cmd]).status()
     }
     .map_err(|e| format!("Failed to run '{}': {}", cmd, e))?;
 

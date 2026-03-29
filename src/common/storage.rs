@@ -30,8 +30,7 @@ const DIAGNOSTICS_TABLE: TableDefinition<u64, &[u8]> = TableDefinition::new("dia
 
 /// Cached DB handle — opened once, reused across calls.
 /// Avoids the overhead of `Database::create()` on every read/write.
-static DB_HANDLE: LazyLock<Mutex<Option<(PathBuf, Database)>>> =
-    LazyLock::new(|| Mutex::new(None));
+static DB_HANDLE: LazyLock<Mutex<Option<(PathBuf, Database)>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Open the database for a project directory. Stores path for future access.
 pub fn open_db(project_dir: &Path) -> Option<()> {
